@@ -29,4 +29,4 @@ jobs:
           npm install
       - name: Running tests
         run: |
-          npm test '3439|6806e8faf10643e2bde903920bbcb1ff'
+          npm test "3439|6806e8faf10643e2bde903920bbcb1ff"
