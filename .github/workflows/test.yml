@@ -16,7 +16,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
     name: Test on ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -30,3 +30,18 @@ jobs:
       - name: Running tests
         run: |
           npm test "3439|6806e8faf10643e2bde903920bbcb1ff"
+  windows-test:
+    runs-on: windows-latest
+    name: Test on windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up NodeJS
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16
+      - name: Install requirements
+        run: |
+          npm install
+      - name: Running tests
+        run: |
+          npm test '"3439|6806e8faf10643e2bde903920bbcb1ff"'
