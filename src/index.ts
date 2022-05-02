@@ -5,6 +5,13 @@ const protoLoader = require("@grpc/proto-loader");
 import { Schema, tableFromIPC } from "apache-arrow"
 
 function main() {
+	const args = process.argv.slice(2);
+	if(args.length === 0){
+		console.error("API key required as argument");
+		return
+	}
+	const api_key = args[0];
+
 	const PROTO_PATH = "./proto/Flight.proto";
 	let packageDefinition = protoLoader.loadSync(
 		PROTO_PATH,
@@ -19,7 +26,7 @@ function main() {
 
 	const creds = grpc.credentials.createSsl();
 	const meta = new grpc.Metadata();
-	meta.add('authorization', 'Basic ' + Buffer.from(":3031|abcd", "utf8").toString("base64"));
+	meta.add('authorization', 'Basic ' + Buffer.from(":" + api_key, "utf8").toString("base64"));
 	const metaCallback = (_params: any, callback: any) => {
 		callback(null, meta);
 	}
