@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "main": "index.ts",
   "repository": "git@github.com:spicehq/spice-js.git",
-  "author": "corentin <corentin@spice.ai>",
+  "author": "Spice AI, Inc. <webmaster@spice.ai>",
   "license": "MIT",
   "dependencies": {
     "@grpc/grpc-js": "^1.6.7",
     "@grpc/proto-loader": "^0.6.9",
-    "apache-arrow": "^7.0.0"
+    "apache-arrow": "^8.0.0"
   },
   "scripts": {
     "build": "npx tsc",

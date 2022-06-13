@@ -1,4 +1,4 @@
-name: Test code base
+name: test
 
 on:
   pull_request:
@@ -26,22 +26,7 @@ jobs:
           node-version: 16
       - name: Install requirements
         run: |
-          npm install
+          yarn install
       - name: Running tests
         run: |
-          npm test "3439|6806e8faf10643e2bde903920bbcb1ff"
-  windows-test:
-    runs-on: windows-latest
-    name: Test on windows-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up NodeJS
-        uses: actions/setup-node@v3
-        with:
-          node-version: 16
-      - name: Install requirements
-        run: |
-          npm install
-      - name: Running tests
-        run: |
-          npm test '"3439|6806e8faf10643e2bde903920bbcb1ff"'
+          yarn test "3439|6806e8faf10643e2bde903920bbcb1ff"
