@@ -1,16 +1,16 @@
-const grpc = require('@grpc/grpc-js');
-const protoLoader = require('@grpc/proto-loader');
-import { Schema, tableFromIPC } from 'apache-arrow';
+const grpc = require("@grpc/grpc-js");
+const protoLoader = require("@grpc/proto-loader");
+import { Schema, tableFromIPC } from "apache-arrow";
 
 function main() {
   const args = process.argv.slice(2);
   if (args.length === 0) {
-    console.error('API key required as argument');
+    console.error("API key required as argument");
     return;
   }
   const api_key = args[0];
 
-  const PROTO_PATH = './proto/Flight.proto';
+  const PROTO_PATH = "./proto/Flight.proto";
   let packageDefinition = protoLoader.loadSync(PROTO_PATH, {
     keepCase: true,
     longs: String,
@@ -24,8 +24,8 @@ function main() {
   const creds = grpc.credentials.createSsl();
   const meta = new grpc.Metadata();
   meta.add(
-    'authorization',
-    'Basic ' + Buffer.from(':' + api_key, 'utf8').toString('base64')
+    "authorization",
+    "Basic " + Buffer.from(":" + api_key, "utf8").toString("base64")
   );
   const metaCallback = (_params: any, callback: any) => {
     callback(null, meta);
@@ -36,7 +36,7 @@ function main() {
     callCreds
   );
   const client = new flight_proto.FlightService(
-    'flight.spiceai.io:443',
+    "flight.spiceai.io:443",
     combCreds
   );
 
@@ -49,23 +49,26 @@ function main() {
     // 	console.log("end");
     // 	resolve(metadata);
     // });
-    handshake.on('status', (result: any) => {
-      resolve(result.metadata.get('authorization')[0]);
+    handshake.on("status", (result: any) => {
+      resolve(result.metadata.get("authorization")[0]);
     });
     handshake.end();
   })
     .then((token) => {
       // Updating header to include recieved token (needed for subsequent calls)
-      meta.set('authorization', token);
+      meta.set("authorization", token);
 
       let queryBuff = Buffer.from(
         'SELECT number, "hash" FROM eth.recent_blocks LIMIT 3;',
-        'utf8'
+        "utf8"
       );
 
       // GetSchema is a simple calls that retrieve the data directly (no stream)
       client.GetSchema({ type: 2, cmd: queryBuff }, (err: any, result: any) => {
-        console.log('GetSchema');
+        console.log("GetSchema");
+        if (!result) {
+          return;
+        }
         let table = tableFromIPC(result.schema);
         console.log(table.schema.fields);
       });
@@ -75,26 +78,26 @@ function main() {
       client.GetFlightInfo(
         { type: 2, cmd: queryBuff },
         (err: any, result: any) => {
-          console.log('GetFlightInfo');
+          console.log("GetFlightInfo");
           if (err === null) {
-            console.log('Starting DoGet');
+            console.log("Starting DoGet");
             let chunks: any[] = [];
 
             // DoGet return a stream of FlightData
             const do_get = client.DoGet(result.endpoint[0].ticket);
-            do_get.on('status', (response: any) => {
-              console.log('status');
+            do_get.on("status", (response: any) => {
+              console.log("status");
               console.log(response);
               client.close();
             });
-            do_get.on('data', (response: any) => {
-              console.log('data');
+            do_get.on("data", (response: any) => {
+              console.log("data");
               console.log(response);
               let header_size_buff = Buffer.alloc(4);
               header_size_buff.writeUInt32LE(response.data_header.length, 0);
 
               if (schema === null) {
-                console.log('Reading schema');
+                console.log("Reading schema");
                 let buff = Buffer.concat([
                   header_size_buff,
                   response.data_header,
@@ -117,7 +120,7 @@ function main() {
       );
     })
     .catch((error) => {
-      console.error('error while GetFlightInfo');
+      console.error("error while GetFlightInfo");
       console.log(error);
       throw error;
     });

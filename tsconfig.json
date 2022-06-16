@@ -1,14 +1,12 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "node",
-    "isolatedModules": true,
-    "noEmit": true,
+    "strict": true,
+    "module": "commonjs",
+    "target": "ES2017",
     "esModuleInterop": true,
-    "baseUrl": "./",
-    "rootDir": "./",
-    "strict": true
+    "moduleResolution": "node",
+    "jsx": "react",
+    "outDir": "dist"
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  "include": ["src/**/*.ts"]
 }

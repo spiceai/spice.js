@@ -11,10 +11,11 @@
     "apache-arrow": "^8.0.0"
   },
   "scripts": {
-    "build": "npx tsc",
+    "clean": "rm -rf dist",
+    "build": "yarn clean && tsc",
     "run": "node dist/index.js",
-    "test": "npx ts-node src/index.ts",
-    "dev": "npx nodemon --exec ts-node ./src/index.ts --watch src --ext .ts"
+    "test": "npx ts-node src/test/index.ts",
+    "dev": "npx nodemon --exec ts-node ./test/index.ts --watch test --ext .ts"
   },
   "devDependencies": {
     "@types/node": "^17.0.25",
