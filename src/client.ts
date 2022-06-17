@@ -59,31 +59,23 @@ class Client {
     // DoGet return a stream of FlightData
     const do_get = client.DoGet(flightTicket);
 
-    let data_buffers: Buffer;
+    let chunks: Buffer[] = [];
     do_get.on("data", (response: any) => {
       let header_size_buff = Buffer.alloc(4);
       header_size_buff.writeUInt32LE(response.data_header.length, 0);
 
-      if (!data_buffers || data_buffers.byteLength === 0) {
-        data_buffers = Buffer.concat([
+      chunks.push(
+        Buffer.concat([
           header_size_buff,
           response.data_header,
           response.data_body,
-        ]);
-      } else {
-        data_buffers = Buffer.concat([
-          data_buffers,
-          Buffer.from("FFFFFFFF", "hex"), // Continuation token
-          header_size_buff,
-          response.data_header,
-          response.data_body,
-        ]);
-      }
+        ])
+      );
     });
 
     return new Promise((resolve, reject) => {
       do_get.on("status", (response: any) => {
-        const table = tableFromIPC(data_buffers);
+        const table = tableFromIPC(chunks);
         client.close();
         resolve(table);
       });
