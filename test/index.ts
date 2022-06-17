@@ -10,7 +10,7 @@ async function main() {
 
   const client = new Client(api_key);
   const result = await client.query(
-    'SELECT number, "timestamp", base_fee_per_gas, base_fee_per_gas / 1e9 AS base_fee_per_gas_gwei FROM eth.recent_blocks limit 3'
+    'SELECT number, "timestamp", base_fee_per_gas, base_fee_per_gas / 1e9 AS base_fee_per_gas_gwei FROM eth.recent_blocks limit 5'
   );
   console.table(result.toArray());
 
