@@ -5,6 +5,7 @@
     "target": "ES2017",
     "esModuleInterop": true,
     "moduleResolution": "node",
+    "sourceMap": true,
     "jsx": "react",
     "outDir": "dist"
   },
