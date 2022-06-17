@@ -1,7 +1,7 @@
 {
   "name": "spice-js",
   "version": "0.1.0",
-  "main": "index.ts",
+  "main": "src/index.ts",
   "repository": "git@github.com:spicehq/spice-js.git",
   "author": "Spice AI, Inc. <webmaster@spice.ai>",
   "license": "MIT",
@@ -14,7 +14,7 @@
     "clean": "rm -rf dist",
     "build": "yarn clean && tsc",
     "run": "node dist/index.js",
-    "test": "npx ts-node src/test/index.ts",
+    "test": "npx ts-node ./test/index.ts",
     "dev": "npx nodemon --exec ts-node ./test/index.ts --watch test --ext .ts"
   },
   "devDependencies": {

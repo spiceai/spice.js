@@ -1,6 +1,6 @@
 const grpc = require("@grpc/grpc-js");
 const protoLoader = require("@grpc/proto-loader");
-import { Schema, tableFromIPC } from "apache-arrow";
+import { Table, tableFromIPC } from "apache-arrow";
 import { resolve } from "path";
 
 const PROTO_PATH = "./proto/Flight.proto";
@@ -38,7 +38,7 @@ class Client {
     return new flight_proto.FlightService("flight.spiceai.io:443", combCreds);
   }
 
-  public async query(queryText: string): Promise<any> {
+  public async query(queryText: string): Promise<Table> {
     const meta = new grpc.Metadata();
     const client = this.createClient(meta);
     return new Promise((resolve, reject) => {
