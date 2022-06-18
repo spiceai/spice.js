@@ -1,6 +1,17 @@
 const grpc = require("@grpc/grpc-js");
 const protoLoader = require("@grpc/proto-loader");
+import { EventEmitter } from "stream";
 import { Table, tableFromIPC } from "apache-arrow";
+import { StreamingQuery } from "./streaming_query";
+import {
+  FlightClient,
+  FlightData,
+  FlightStatus,
+  FlightInfo,
+  DescriptorType,
+  Ticket,
+  getIpcMessage,
+} from "./flight";
 
 const PROTO_PATH = "./proto/Flight.proto";
 let packageDefinition = protoLoader.loadSync(PROTO_PATH, {
@@ -35,18 +46,21 @@ class Client {
     return new flight_proto.FlightService(this._url, combCreds);
   }
 
-  public async query(queryText: string): Promise<Table> {
+  private async getResultStream(
+    queryText: string,
+    getFlightClient: ((client: FlightClient) => void) | undefined = undefined
+  ): Promise<EventEmitter> {
     const meta = new grpc.Metadata();
-    const client = this.createClient(meta);
+    const client: FlightClient = this.createClient(meta);
     meta.set("authorization", "Bearer " + this._apiKey);
 
     let queryBuff = Buffer.from(queryText, "utf8");
 
-    let flightTicket = await new Promise((resolve, reject) => {
+    let flightTicket = await new Promise<Ticket>((resolve, reject) => {
       // GetFlightInfo returns FlightInfo that have endpoints with ticket to call DoGet with
       client.GetFlightInfo(
-        { type: 2, cmd: queryBuff },
-        (err: any, result: any) => {
+        { type: DescriptorType.CMD, cmd: queryBuff },
+        (err: any, result: FlightInfo) => {
           if (err) {
             reject(err);
             return;
@@ -56,25 +70,39 @@ class Client {
       );
     });
 
+    if (getFlightClient) {
+      getFlightClient(client);
+    }
     // DoGet return a stream of FlightData
-    const do_get = client.DoGet(flightTicket);
+    return client.DoGet(flightTicket);
+  }
+
+  public async streaming_query(queryText: string): Promise<StreamingQuery> {
+    let client: FlightClient;
+    const do_get = await this.getResultStream(queryText, (c: FlightClient) => {
+      client = c;
+    });
+
+    do_get.on("status", (response: FlightStatus) => {
+      client.close();
+    });
+
+    return new StreamingQuery(do_get);
+  }
+
+  public async query(queryText: string): Promise<Table> {
+    let client: FlightClient;
+    const do_get = await this.getResultStream(queryText, (c: FlightClient) => {
+      client = c;
+    });
 
     let chunks: Buffer[] = [];
-    do_get.on("data", (response: any) => {
-      let header_size_buff = Buffer.alloc(4);
-      header_size_buff.writeUInt32LE(response.data_header.length, 0);
-
-      chunks.push(
-        Buffer.concat([
-          header_size_buff,
-          response.data_header,
-          response.data_body,
-        ])
-      );
+    do_get.on("data", (response: FlightData) => {
+      chunks.push(getIpcMessage(response));
     });
 
     return new Promise((resolve, reject) => {
-      do_get.on("status", (response: any) => {
+      do_get.on("status", (response: FlightStatus) => {
         const table = tableFromIPC(chunks);
         client.close();
         resolve(table);

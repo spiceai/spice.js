@@ -9,7 +9,7 @@
       "request": "launch",
       "name": "Launch Program",
       "skipFiles": ["<node_internals>/**"],
-      "program": "${workspaceFolder}/src/test/index.ts",
+      "program": "${workspaceFolder}/test/index.ts",
       "args": ["3439|6806e8faf10643e2bde903920bbcb1ff"],
       "preLaunchTask": "tsc: build - tsconfig.json",
       "sourceMaps": true,
