@@ -14,6 +14,7 @@ export class StreamingQuery {
     this._doGetEmitter.on("data", (response: FlightData) => {
       let ipcMessage = getIpcMessage(response);
 
+      // First message is always the schema
       if (!this._schema) {
         this._schema = ipcMessage;
       } else {
