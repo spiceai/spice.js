@@ -5,7 +5,7 @@
   "files": [
     "dist"
   ],
-  "repository": "git@github.com:spicehq/spice-js.git",
+  "repository": "git@github.com:spiceai/spice.js.git",
   "author": "Spice AI, Inc. <webmaster@spice.ai>",
   "license": "MIT",
   "dependencies": {
@@ -20,16 +20,20 @@
     "postbuild": "copyfiles proto/* dist",
     "run": "node dist/index.js",
     "pretest": "yarn build",
-    "test": "npx ts-node ./test/index.ts",
+    "test": "jest",
     "dev": "npx nodemon --exec ts-node ./test/index.ts --watch test --ext .ts",
     "preversion": "yarn build"
   },
   "devDependencies": {
+    "@types/jest": "^28.1.2",
     "@types/node": "^17.0.25",
     "copyfiles": "^2.4.1",
+    "dotenv": "^16.0.1",
+    "jest": "^28.1.1",
     "nodemon": "^2.0.15",
     "rimraf": "^3.0.2",
+    "ts-jest": "^28.0.5",
     "ts-node": "^10.7.0",
-    "typescript": "^4.6.3"
+    "typescript": "^4.7.4"
   }
 }
