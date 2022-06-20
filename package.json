@@ -1,5 +1,5 @@
 {
-  "name": "spice-js",
+  "name": "@spicehq/spice-js",
   "version": "0.1.0",
   "main": "src/index.ts",
   "repository": "git@github.com:spicehq/spice-js.git",

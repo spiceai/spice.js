@@ -1,3 +1,4 @@
+import { Table } from "apache-arrow";
 import { Client, StreamingQuery } from "../";
 
 async function main() {
@@ -13,7 +14,7 @@ async function main() {
     'SELECT number, "timestamp", base_fee_per_gas, base_fee_per_gas / 1e9 AS base_fee_per_gas_gwei FROM eth.blocks limit 2000'
   );
 
-  streamingResult.onData((table: any) => {
+  streamingResult.onData((table: Table) => {
     console.table(table.toArray());
 
     let baseFeeGwei = table.getChild("base_fee_per_gas_gwei");
