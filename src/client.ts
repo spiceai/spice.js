@@ -3,7 +3,6 @@ const protoLoader = require("@grpc/proto-loader");
 const path = require("path");
 import { EventEmitter } from "stream";
 import { Table, tableFromIPC } from "apache-arrow";
-import { StreamingQuery } from "./streaming_query";
 import {
   FlightClient,
   FlightData,
@@ -26,7 +25,7 @@ let packageDefinition = protoLoader.loadSync(fullProtoPath, {
 let flight_proto =
   grpc.loadPackageDefinition(packageDefinition).arrow.flight.protocol;
 
-class Client {
+class SpiceClient {
   private _apiKey: string;
   private _url: string;
   public constructor(apiKey: string, url: string = "flight.spiceai.io:443") {
@@ -79,28 +78,25 @@ class Client {
     return client.DoGet(flightTicket);
   }
 
-  public async streaming_query(queryText: string): Promise<StreamingQuery> {
+  public async query(
+    queryText: string,
+    onData: ((data: Table) => void) | undefined = undefined
+  ): Promise<Table> {
     let client: FlightClient;
     const do_get = await this.getResultStream(queryText, (c: FlightClient) => {
       client = c;
     });
 
-    do_get.on("status", (response: FlightStatus) => {
-      client.close();
-    });
-
-    return new StreamingQuery(do_get);
-  }
-
-  public async query(queryText: string): Promise<Table> {
-    let client: FlightClient;
-    const do_get = await this.getResultStream(queryText, (c: FlightClient) => {
-      client = c;
-    });
-
+    let schema: Buffer | undefined;
     let chunks: Buffer[] = [];
     do_get.on("data", (response: FlightData) => {
-      chunks.push(getIpcMessage(response));
+      let ipcMessage = getIpcMessage(response);
+      chunks.push(ipcMessage);
+      if (!schema) {
+        schema = ipcMessage;
+      } else if (onData) {
+        onData(tableFromIPC([schema, ipcMessage]));
+      }
     });
 
     return new Promise((resolve, reject) => {
@@ -113,4 +109,4 @@ class Client {
   }
 }
 
-export { Client };
+export { SpiceClient };
