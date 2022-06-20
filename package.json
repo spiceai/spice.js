@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "main": "dist/index.js",
   "files": [
-    "dist"
+    "dist",
+    "proto"
   ],
   "repository": "git@github.com:spicehq/spice-js.git",
   "author": "Spice AI, Inc. <webmaster@spice.ai>",
