@@ -1,8 +1,8 @@
-const grpc = require("@grpc/grpc-js");
-const protoLoader = require("@grpc/proto-loader");
-const path = require("path");
+import grpc from "@grpc/grpc-js";
+import protoLoader from "@grpc/proto-loader";
+import path from "path";
 import { EventEmitter } from "stream";
-import { Table, tableFromIPC } from "apache-arrow";
+import { Table, tableFromIPC } from "@apache-arrow/esnext-esm";
 import {
   FlightClient,
   FlightData,
@@ -11,9 +11,12 @@ import {
   DescriptorType,
   Ticket,
   getIpcMessage,
-} from "./flight";
+} from "./flight.js";
+import { fileURLToPath } from "url";
 
 const PROTO_PATH = "./proto/Flight.proto";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const fullProtoPath = path.join(__dirname, PROTO_PATH);
 let packageDefinition = protoLoader.loadSync(fullProtoPath, {
   keepCase: true,
@@ -22,8 +25,8 @@ let packageDefinition = protoLoader.loadSync(fullProtoPath, {
   defaults: true,
   oneofs: true,
 });
-let flight_proto =
-  grpc.loadPackageDefinition(packageDefinition).arrow.flight.protocol;
+let flight_proto = (grpc.loadPackageDefinition(packageDefinition) as any).arrow
+  .flight.protocol;
 
 class SpiceClient {
   private _apiKey: string;

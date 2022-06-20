@@ -1,14 +1,16 @@
 {
   "compilerOptions": {
     "strict": true,
-    "module": "commonjs",
-    "target": "ES2017",
+    "module": "node16",
+    "target": "esnext",
     "esModuleInterop": true,
-    "moduleResolution": "node",
+    "moduleResolution": "node16",
     "declaration": true, // generate .d.ts files
     "sourceMap": true,
     "jsx": "react",
-    "outDir": "dist"
+    "outDir": "dist",
+    "resolveJsonModule": false,
+    "skipLibCheck": true
   },
   "include": ["src/**/*.ts"]
 }

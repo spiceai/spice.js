@@ -1,6 +1,5 @@
-import { SpiceClient } from "../";
+import { SpiceClient } from "../dist";
 import "dotenv/config";
-import { Vector } from "apache-arrow";
 
 const api_key = process.env.API_KEY;
 if (!api_key) {
@@ -17,7 +16,6 @@ test("streaming works", async () => {
 
       let baseFeeGwei = table.getChild("base_fee_per_gas_gwei");
       expect(baseFeeGwei).toBeTruthy();
-      baseFeeGwei = baseFeeGwei as Vector;
       expect(baseFeeGwei.length).toBeLessThan(2000);
       numChunks++;
     }

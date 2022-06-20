@@ -1,3 +1,3 @@
-import { SpiceClient } from "./client";
+import { SpiceClient } from "./client.js";
 
 export { SpiceClient };
