@@ -4,13 +4,7 @@
 name: npm-publish-github-packages
 
 on:
-  pull_request:
-    branches:
-      - trunk
   push:
-    branches:
-      - trunk
-      - release-*
     tags:
       - v*
 
