@@ -17,6 +17,8 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
+    env:
+      API_KEY: ${{ secrets.API_KEY }}
     name: Test on ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -30,4 +32,4 @@ jobs:
           yarn build
       - name: Running tests
         run: |
-          yarn test "3439|6806e8faf10643e2bde903920bbcb1ff"
+          yarn test $API_KEY
