@@ -1,5 +1,5 @@
 {
-  "name": "@spicehq/spice-js",
+  "name": "@spiceai/spice",
   "version": "0.1.0",
   "main": "dist/index.js",
   "files": [
@@ -19,6 +19,7 @@
     "build": "tsc",
     "postbuild": "copyfiles proto/* dist",
     "run": "node dist/index.js",
+    "pretest": "yarn build",
     "test": "npx ts-node ./test/index.ts",
     "dev": "npx nodemon --exec ts-node ./test/index.ts --watch test --ext .ts",
     "preversion": "yarn build"

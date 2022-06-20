@@ -1,4 +1,3 @@
-import { Client } from "./client";
-import { StreamingQuery } from "./streaming_query";
+import { SpiceClient } from "./client";
 
-export { Client, StreamingQuery };
+export { SpiceClient };
