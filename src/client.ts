@@ -1,5 +1,6 @@
 const grpc = require("@grpc/grpc-js");
 const protoLoader = require("@grpc/proto-loader");
+const path = require("path");
 import { EventEmitter } from "stream";
 import { Table, tableFromIPC } from "apache-arrow";
 import { StreamingQuery } from "./streaming_query";
@@ -14,7 +15,8 @@ import {
 } from "./flight";
 
 const PROTO_PATH = "./proto/Flight.proto";
-let packageDefinition = protoLoader.loadSync(PROTO_PATH, {
+const fullProtoPath = path.join(__dirname, PROTO_PATH);
+let packageDefinition = protoLoader.loadSync(fullProtoPath, {
   keepCase: true,
   longs: String,
   enums: String,
