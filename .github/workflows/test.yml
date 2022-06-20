@@ -30,6 +30,9 @@ jobs:
         run: |
           yarn install
           yarn build
+      - name: Add API_KEY to .env
+        run: |
+          echo $API_KEY > .env
       - name: Running tests
         run: |
-          yarn test $API_KEY
+          yarn test
