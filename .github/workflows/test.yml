@@ -1,4 +1,4 @@
-name: Test code base
+name: test
 
 on:
   pull_request:
@@ -17,6 +17,8 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
+    env:
+      API_KEY: ${{ secrets.API_KEY }}
     name: Test on ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -26,22 +28,8 @@ jobs:
           node-version: 16
       - name: Install requirements
         run: |
-          npm install
+          yarn install
+          yarn build
       - name: Running tests
         run: |
-          npm test "3439|6806e8faf10643e2bde903920bbcb1ff"
-  windows-test:
-    runs-on: windows-latest
-    name: Test on windows-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up NodeJS
-        uses: actions/setup-node@v3
-        with:
-          node-version: 16
-      - name: Install requirements
-        run: |
-          npm install
-      - name: Running tests
-        run: |
-          npm test '"3439|6806e8faf10643e2bde903920bbcb1ff"'
+          yarn test $API_KEY
