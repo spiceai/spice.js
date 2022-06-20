@@ -27,6 +27,7 @@ jobs:
       - name: Install requirements
         run: |
           yarn install
+          yarn build
       - name: Running tests
         run: |
           yarn test "3439|6806e8faf10643e2bde903920bbcb1ff"
