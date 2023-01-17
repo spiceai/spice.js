@@ -1,8 +1,8 @@
-const grpc = require("@grpc/grpc-js");
-const protoLoader = require("@grpc/proto-loader");
-const path = require("path");
-import { EventEmitter } from "stream";
-import { Table, tableFromIPC } from "apache-arrow";
+import path from 'path';
+import * as grpc from '@grpc/grpc-js';
+import * as protoLoader from '@grpc/proto-loader';
+import { EventEmitter } from 'stream';
+import { Table, tableFromIPC } from 'apache-arrow';
 import {
   FlightClient,
   FlightData,
@@ -11,24 +11,34 @@ import {
   DescriptorType,
   Ticket,
   getIpcMessage,
-} from "./flight";
+} from './flight';
+import {
+  AsyncQueryRequest,
+  AsyncQueryResponse,
+  QueryCompleteNotification,
+  QueryResultsResponse,
+} from './interfaces';
 
-const PROTO_PATH = "./proto/Flight.proto";
+const HTTP_DATA_PATH = 'https://data.spiceai.io/v0.1/sql';
+const FLIGHT_PATH = 'flight.spiceai.io:443';
+
+const PROTO_PATH = './proto/Flight.proto';
 const fullProtoPath = path.join(__dirname, PROTO_PATH);
-let packageDefinition = protoLoader.loadSync(fullProtoPath, {
+
+const packageDefinition = protoLoader.loadSync(fullProtoPath, {
   keepCase: true,
   longs: String,
   enums: String,
   defaults: true,
   oneofs: true,
 });
-let flight_proto =
-  grpc.loadPackageDefinition(packageDefinition).arrow.flight.protocol;
+const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
+const flight_proto = arrow.flight.protocol;
 
 class SpiceClient {
   private _apiKey: string;
   private _url: string;
-  public constructor(apiKey: string, url: string = "flight.spiceai.io:443") {
+  public constructor(apiKey: string, url: string = FLIGHT_PATH) {
     this._apiKey = apiKey;
     this._url = url;
   }
@@ -53,9 +63,9 @@ class SpiceClient {
   ): Promise<EventEmitter> {
     const meta = new grpc.Metadata();
     const client: FlightClient = this.createClient(meta);
-    meta.set("authorization", "Bearer " + this._apiKey);
+    meta.set('authorization', 'Bearer ' + this._apiKey);
 
-    let queryBuff = Buffer.from(queryText, "utf8");
+    let queryBuff = Buffer.from(queryText, 'utf8');
 
     let flightTicket = await new Promise<Ticket>((resolve, reject) => {
       // GetFlightInfo returns FlightInfo that have endpoints with ticket to call DoGet with
@@ -89,7 +99,7 @@ class SpiceClient {
 
     let schema: Buffer | undefined;
     let chunks: Buffer[] = [];
-    do_get.on("data", (response: FlightData) => {
+    do_get.on('data', (response: FlightData) => {
       let ipcMessage = getIpcMessage(response);
       chunks.push(ipcMessage);
       if (!schema) {
@@ -100,12 +110,93 @@ class SpiceClient {
     });
 
     return new Promise((resolve, reject) => {
-      do_get.on("status", (response: FlightStatus) => {
+      do_get.on('status', (response: FlightStatus) => {
         const table = tableFromIPC(chunks);
         client.close();
         resolve(table);
       });
     });
+  }
+
+  public async queryAsync(
+    queryName: string,
+    queryText: string,
+    webhookUri: string
+  ): Promise<AsyncQueryResponse> {
+    if (!queryName) {
+      throw new Error('queryName is required');
+    }
+
+    if (!queryText) {
+      throw new Error('queryText is required');
+    }
+
+    if (!webhookUri) {
+      throw new Error('webhookUri is required');
+    }
+
+    const asyncQueryRequest: AsyncQueryRequest = {
+      sql: queryText,
+      notifications: [{ name: queryName, type: 'webhook', uri: webhookUri }],
+    };
+
+    const resp = await fetch(HTTP_DATA_PATH, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': this._apiKey,
+      },
+      body: JSON.stringify(asyncQueryRequest),
+    });
+
+    if (!resp.ok) {
+      throw new Error(
+        `Failed to execute query: ${resp.status} ${resp.statusText}`
+      );
+    }
+
+    return resp.json();
+  }
+
+  public async getAsyncQueryResults(
+    queryId: string
+  ): Promise<QueryResultsResponse> {
+    if (!queryId) {
+      throw new Error('queryId is required');
+    }
+
+    const resp = await fetch(`${HTTP_DATA_PATH}/${queryId}`, {
+      method: 'GET',
+      headers: {
+        'Accept-Encoding': 'br, gzip, deflate',
+        'X-API-Key': this._apiKey,
+      },
+    });
+
+    if (!resp.ok) {
+      throw new Error(
+        `Failed to get query results: ${resp.status} ${resp.statusText}`
+      );
+    }
+
+    return resp.json();
+  }
+
+  public async handleQueryCompletionNotification(
+    notificationBody: string
+  ): Promise<QueryResultsResponse> {
+    if (!notificationBody) {
+      throw new Error('notificationBody is required');
+    }
+
+    const notification: QueryCompleteNotification =
+      JSON.parse(notificationBody);
+
+    if (!notification.queryId || notification.queryId.length != 36) {
+      throw new Error('Invalid notification. queryId is missing or invalid.');
+    }
+
+    return await this.getAsyncQueryResults(notification.queryId);
   }
 }
 
