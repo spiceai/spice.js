@@ -151,7 +151,9 @@ class SpiceClient {
 
     if (!resp.ok) {
       throw new Error(
-        `Failed to execute query: ${resp.status} ${resp.statusText}`
+        `Failed to execute query: ${resp.status} ${
+          resp.statusText
+        } ${await resp.text()}`
       );
     }
 
@@ -175,7 +177,9 @@ class SpiceClient {
 
     if (!resp.ok) {
       throw new Error(
-        `Failed to get query results: ${resp.status} ${resp.statusText}`
+        `Failed to get query results: ${resp.status} ${
+          resp.statusText
+        } ${await resp.text()}`
       );
     }
 
