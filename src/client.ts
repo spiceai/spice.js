@@ -182,7 +182,7 @@ class SpiceClient {
     return resp.json();
   }
 
-  public async handleQueryCompletionNotification(
+  public async getResultsFromQueryCompleteNotification(
     notificationBody: string
   ): Promise<QueryResultsResponse> {
     if (!notificationBody) {

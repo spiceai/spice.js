@@ -7,7 +7,7 @@ const apiSecret = process.env.RELAY_SECRET;
 
 const listenForWebhookMessage = (
   buckets: string[],
-  onMessage: (body: string) => void
+  onMessage: (body: string) => Promise<void>
 ): WebSocket => {
   const ws = new WebSocket(server);
   ws.on('open', function () {

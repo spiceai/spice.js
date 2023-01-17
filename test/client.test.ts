@@ -53,7 +53,7 @@ test.only('async query works', async () => {
   let ws: WebSocket;
 
   const webhook = new Promise<void>((resolve) => {
-    ws = listenForWebhookMessage([], (body: string) => {
+    ws = listenForWebhookMessage([], async (body: string) => {
       const notification = JSON.parse(body) as QueryCompleteNotification;
 
       expect(notification.appId).toEqual(102);
@@ -65,6 +65,13 @@ test.only('async query works', async () => {
       expect(notification.rowCount).toEqual(3);
 
       ws.close();
+
+      const results = await client.getResultsFromQueryCompleteNotification(
+        body
+      );
+
+      console.log('results', results);
+
       resolve();
     });
   });
