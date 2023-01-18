@@ -8,13 +8,14 @@ import {
   QueryCompleteNotification,
 } from '../src/interfaces';
 
+const RELAY_BUCKETS = ['spice.js'];
+const RELAY_URL = 'https://o4skc7qyx7mrl8x7wdtgmc.hooks.webhookrelay.com';
+
 const api_key = process.env.API_KEY;
 if (!api_key) {
   throw 'API_KEY environment variable not set';
 }
 const client = new SpiceClient(api_key);
-
-jest.setTimeout(10000);
 
 test('streaming works', async () => {
   let numChunks = 0;
@@ -44,7 +45,7 @@ test('full result works', async () => {
   expect(baseFeeGwei?.length).toEqual(3);
 });
 
-test('async query works', async () => {
+test('async query first page works', async () => {
   const queryName = 'recent_eth_blocks';
   const queryText =
     'SELECT number, "timestamp", base_fee_per_gas, base_fee_per_gas / 1e9 AS base_fee_per_gas_gwei FROM eth.recent_blocks limit 3';
@@ -53,8 +54,9 @@ test('async query works', async () => {
   let ws: WebSocket;
 
   const webhook = new Promise<void>((resolve) => {
-    ws = listenForWebhookMessage([], async (body: string) => {
+    ws = listenForWebhookMessage(RELAY_BUCKETS, async (body: string) => {
       const notification = JSON.parse(body) as QueryCompleteNotification;
+      if (notification.sql !== queryText) return;
 
       expect(notification.appId).toEqual(49);
       expect(notification.queryId).toHaveLength(36);
@@ -85,11 +87,43 @@ test('async query works', async () => {
     });
   });
 
-  queryResp = await client.queryAsync(
-    queryName,
-    queryText,
-    'https://o4skc7qyx7mrl8x7wdtgmc.hooks.webhookrelay.com'
-  );
+  queryResp = await client.queryAsync(queryName, queryText, RELAY_URL);
+
+  expect(queryResp).toBeTruthy();
+  expect(queryResp.queryId).toHaveLength(36);
+
+  await webhook;
+});
+
+test('async query all pages works', async () => {
+  const rowLimit = 1250;
+  const queryName = 'recent_eth_transactions_paged';
+  const queryText = `SELECT block_number, transaction_index, "value" FROM eth.recent_transactions limit ${rowLimit}`;
+
+  let queryResp: AsyncQueryResponse;
+  let ws: WebSocket;
+
+  const webhook = new Promise<void>((resolve) => {
+    ws = listenForWebhookMessage(RELAY_BUCKETS, async (body: string) => {
+      const notification = JSON.parse(body) as QueryCompleteNotification;
+      if (notification.sql !== queryText) return;
+      ws.close();
+
+      expect(notification.appId).toEqual(49);
+      expect(notification.queryId).toHaveLength(36);
+      expect(notification.state).toEqual('completed');
+      expect(notification.rowCount).toEqual(rowLimit);
+
+      const results = await client.getQueryResultsFromNotification(body);
+
+      expect(results.rowCount).toEqual(rowLimit);
+      expect(results.rows).toHaveLength(rowLimit);
+
+      resolve();
+    });
+  });
+
+  queryResp = await client.queryAsync(queryName, queryText, RELAY_URL);
 
   expect(queryResp).toBeTruthy();
   expect(queryResp.queryId).toHaveLength(36);

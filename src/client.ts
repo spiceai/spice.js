@@ -17,7 +17,6 @@ import {
   AsyncQueryResponse,
   QueryCompleteNotification,
   QueryResultsResponse,
-  QueryResultsResponse as QueryStatusResponse,
 } from './interfaces';
 
 const HTTP_DATA_PATH = 'https://data.spiceai.io/v0.1/sql';
@@ -161,12 +160,34 @@ class SpiceClient {
     return resp.json();
   }
 
-  public async getQueryResults(queryId: string): Promise<QueryResultsResponse> {
+  public async getQueryResults(
+    queryId: string,
+    offset?: number,
+    limit?: number
+  ): Promise<QueryResultsResponse> {
     if (!queryId) {
       throw new Error('queryId is required');
     }
+    if (offset && offset < 0) {
+      throw new Error('offset must be greater than or equal to 0');
+    }
+    if (limit && (limit < 0 || limit > 500)) {
+      throw new Error(
+        'limit must be greater than or equal to 0 and less than or equal to 500'
+      );
+    }
 
-    const resp = await fetch(`${HTTP_DATA_PATH}/${queryId}`, {
+    let url = `${HTTP_DATA_PATH}/${queryId}`;
+    if (offset || limit) {
+      if (offset) {
+        url += `?offset=${offset}`;
+      }
+      if (limit) {
+        url += `${offset ? '&' : '?'}limit=${limit}`;
+      }
+    }
+
+    const resp = await fetch(url, {
       method: 'GET',
       headers: {
         'Accept-Encoding': 'br, gzip, deflate',
@@ -185,8 +206,41 @@ class SpiceClient {
     return resp.json();
   }
 
+  /*
+   * Get query results.
+   * @param queryId The query ID.
+   * @param allPages If true, get all pages of results. If false, get only the first page.
+   * @returns The query results.
+   */
+  public async getQueryResultsAll(
+    queryId: string
+  ): Promise<QueryResultsResponse> {
+    let offset = 0;
+    let limit = 500;
+    const queryResponse = await this.getQueryResults(queryId, offset, limit);
+
+    for (let page = 0; page < 1000; page++) {
+      if (queryResponse.rowCount <= limit || queryResponse.rowCount <= offset) {
+        break;
+      }
+
+      offset += limit;
+      const resp = await this.getQueryResults(queryId, offset, limit);
+      queryResponse.rows.push(...resp.rows);
+    }
+
+    return queryResponse;
+  }
+
+  /*
+   * Get query results from a notification body.
+   * @param notificationBody The notification body.
+   * @param allPages If true, get all pages of results. If false, get only the first page.
+   * @returns The query results.
+   */
   public async getQueryResultsFromNotification(
-    notificationBody: string
+    notificationBody: string,
+    allPages: boolean = false
   ): Promise<QueryResultsResponse> {
     if (!notificationBody) {
       throw new Error('notificationBody is required');
@@ -199,7 +253,7 @@ class SpiceClient {
       throw new Error('Invalid notification. queryId is missing or invalid.');
     }
 
-    return this.getQueryResults(notification.queryId);
+    return await this.getQueryResultsAll(notification.queryId);
   }
 }
 
