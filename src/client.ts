@@ -200,7 +200,7 @@ class SpiceClient {
       throw new Error('Invalid notification. queryId is missing or invalid.');
     }
 
-    return await this.getAsyncQueryResults(notification.queryId);
+    return this.getAsyncQueryResults(notification.queryId);
   }
 }
 

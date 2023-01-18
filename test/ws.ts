@@ -16,9 +16,11 @@ const listenForWebhookMessage = (
   });
 
   ws.on('message', function (data: string) {
-    var msg = JSON.parse(data);
+    const msg = JSON.parse(data);
     if (msg.type === 'status') {
-      if (msg.status === 'authenticated') {
+      if (msg.status === 'unauthorized') {
+        throw 'web socket unauthorized. Set RELAY_KEY and RELAY_SECRET environment variables.';
+      } else if (msg.status === 'authenticated') {
         ws.send(JSON.stringify({ action: 'subscribe', buckets: buckets }));
       }
     } else if (msg.type === 'webhook') {

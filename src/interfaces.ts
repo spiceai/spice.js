@@ -23,4 +23,8 @@ export interface QueryCompleteNotification {
   rowCount: 3;
 }
 
-export interface QueryResultsResponse {}
+export interface QueryResultsResponse {
+  rowCount: number;
+  schema: { name: 'string'; type: string }[];
+  rows: any[];
+}
