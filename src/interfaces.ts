@@ -25,6 +25,6 @@ export interface QueryCompleteNotification {
 
 export interface QueryResultsResponse {
   rowCount: number;
-  schema: { name: 'string'; type: string }[];
+  schema: { name: 'string'; type: { name: string } }[];
   rows: any[];
 }

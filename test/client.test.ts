@@ -73,13 +73,13 @@ test('async query works', async () => {
       expect(results.rowCount).toEqual(3);
       expect(results.schema).toHaveLength(4);
       expect(results.schema[0].name).toEqual('number');
-      expect(results.schema[0].type).toEqual('int64');
+      expect(results.schema[0].type).toEqual({ name: 'BIGINT' });
       expect(results.schema[1].name).toEqual('timestamp');
-      expect(results.schema[1].type).toEqual('timestamp');
+      expect(results.schema[1].type).toEqual({ name: 'BIGINT' });
       expect(results.schema[2].name).toEqual('base_fee_per_gas');
-      expect(results.schema[2].type).toEqual('int64');
+      expect(results.schema[2].type).toEqual({ name: 'BIGINT' });
       expect(results.schema[3].name).toEqual('base_fee_per_gas_gwei');
-      expect(results.schema[3].type).toEqual('float64');
+      expect(results.schema[3].type).toEqual({ name: 'DOUBLE' });
 
       expect(results.rows).toHaveLength(3);
 
