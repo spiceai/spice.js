@@ -66,9 +66,7 @@ test('async query works', async () => {
 
       ws.close();
 
-      const results = await client.getResultsFromQueryCompleteNotification(
-        body
-      );
+      const results = await client.getQueryResultsFromNotification(body);
 
       expect(results.rowCount).toEqual(3);
       expect(results.schema).toHaveLength(4);

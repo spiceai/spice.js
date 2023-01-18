@@ -17,6 +17,7 @@ import {
   AsyncQueryResponse,
   QueryCompleteNotification,
   QueryResultsResponse,
+  QueryResultsResponse as QueryStatusResponse,
 } from './interfaces';
 
 const HTTP_DATA_PATH = 'https://data.spiceai.io/v0.1/sql';
@@ -160,9 +161,7 @@ class SpiceClient {
     return resp.json();
   }
 
-  public async getAsyncQueryResults(
-    queryId: string
-  ): Promise<QueryResultsResponse> {
+  public async getQueryResults(queryId: string): Promise<QueryResultsResponse> {
     if (!queryId) {
       throw new Error('queryId is required');
     }
@@ -186,7 +185,7 @@ class SpiceClient {
     return resp.json();
   }
 
-  public async getResultsFromQueryCompleteNotification(
+  public async getQueryResultsFromNotification(
     notificationBody: string
   ): Promise<QueryResultsResponse> {
     if (!notificationBody) {
@@ -200,7 +199,7 @@ class SpiceClient {
       throw new Error('Invalid notification. queryId is missing or invalid.');
     }
 
-    return this.getAsyncQueryResults(notification.queryId);
+    return this.getQueryResults(notification.queryId);
   }
 }
 
