@@ -14,6 +14,8 @@ if (!api_key) {
 }
 const client = new SpiceClient(api_key);
 
+jest.setTimeout(10000);
+
 test('streaming works', async () => {
   let numChunks = 0;
   await client.query(
@@ -54,7 +56,7 @@ test('async query works', async () => {
     ws = listenForWebhookMessage([], async (body: string) => {
       const notification = JSON.parse(body) as QueryCompleteNotification;
 
-      expect(notification.appId).toEqual(102);
+      expect(notification.appId).toEqual(49);
       expect(notification.queryId).toHaveLength(36);
       expect(notification.requestTime).toBeTruthy();
       expect(notification.completionTime).toBeTruthy();

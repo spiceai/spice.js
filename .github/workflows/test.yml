@@ -35,6 +35,8 @@ jobs:
       - name: Add secrets to .env
         run: |
           echo $API_KEY > .env
+          echo $RELAY_KEY >> .env
+          echo $RELAY_SECRET >> .env
       - name: Running tests
         run: |
           yarn test
