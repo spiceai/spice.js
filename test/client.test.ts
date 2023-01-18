@@ -6,7 +6,6 @@ import listenForWebhookMessage from './ws';
 import {
   AsyncQueryResponse,
   QueryCompleteNotification,
-  QueryResultsResponse,
 } from '../src/interfaces';
 
 const api_key = process.env.API_KEY;
@@ -14,8 +13,6 @@ if (!api_key) {
   throw 'API_KEY environment variable not set';
 }
 const client = new SpiceClient(api_key);
-
-jest.setTimeout(15000);
 
 test('streaming works', async () => {
   let numChunks = 0;
@@ -45,7 +42,7 @@ test('full result works', async () => {
   expect(baseFeeGwei?.length).toEqual(3);
 });
 
-test.only('async query works', async () => {
+test('async query works', async () => {
   const queryName = 'recent_eth_blocks';
   const queryText =
     'SELECT number, "timestamp", base_fee_per_gas, base_fee_per_gas / 1e9 AS base_fee_per_gas_gwei FROM eth.recent_blocks limit 3';

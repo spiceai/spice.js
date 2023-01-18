@@ -3,7 +3,13 @@ import { WebSocket } from 'ws';
 const server = 'wss://my.webhookrelay.com/v1/socket';
 
 const apiKey = process.env.RELAY_KEY;
+if (!apiKey) {
+  throw 'RELAY_KEY environment variable not set';
+}
 const apiSecret = process.env.RELAY_SECRET;
+if (!apiSecret) {
+  throw 'RELAY_SECRET environment variable not set';
+}
 
 const listenForWebhookMessage = (
   buckets: string[],

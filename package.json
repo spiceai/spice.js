@@ -1,7 +1,12 @@
 {
   "name": "@spiceai/spice",
+  "description": "Spice.js Node.js SDK",
   "version": "0.2.0",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "files": [
     "dist"
   ],
