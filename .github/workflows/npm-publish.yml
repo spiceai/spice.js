@@ -16,19 +16,19 @@ jobs:
           node-version: 18
       - run: yarn install
       - run: yarn build
-      - name: Add secrets to .env
-        run: |
+      - run: |
           echo $API_KEY > .env
           echo $RELAY_KEY >> .env
           echo $RELAY_SECRET >> .env
+          yarn test
         env:
           API_KEY: ${{ secrets.API_KEY }}
           RELAY_KEY: ${{ secrets.RELAY_KEY }}
           RELAY_SECRET: ${{ secrets.RELAY_SECRET }}
-      - run: yarn test
 
   publish-npm:
     needs: build
+    environment: npm
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
