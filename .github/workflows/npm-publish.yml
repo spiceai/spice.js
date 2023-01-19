@@ -4,6 +4,8 @@ on:
   release:
     types: [created]
 
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -14,11 +16,15 @@ jobs:
           node-version: 18
       - run: yarn install
       - run: yarn build
-      - name: Add API_KEY to .env
+      - name: Add secrets to .env
         run: |
           echo $API_KEY > .env
+          echo $RELAY_KEY >> .env
+          echo $RELAY_SECRET >> .env
         env:
           API_KEY: ${{ secrets.API_KEY }}
+          RELAY_KEY: ${{ secrets.RELAY_KEY }}
+          RELAY_SECRET: ${{ secrets.RELAY_SECRET }}
       - run: yarn test
 
   publish-npm:
