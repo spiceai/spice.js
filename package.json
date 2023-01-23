@@ -30,7 +30,7 @@
     "preversion": "yarn build"
   },
   "devDependencies": {
-    "@types/jest": "^29.2.5",
+    "@types/jest": "^29.2.6",
     "@types/node": "^18.11.18",
     "@types/ws": "^8.5.4",
     "copyfiles": "^2.4.1",
