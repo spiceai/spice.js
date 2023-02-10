@@ -15,11 +15,12 @@ import {
 import {
   AsyncQueryRequest,
   AsyncQueryResponse,
+  Prices,
   QueryCompleteNotification,
   QueryResultsResponse,
 } from './interfaces';
 
-const HTTP_DATA_PATH = 'https://data.spiceai.io/v0.1/sql';
+const HTTP_DATA_PATH = 'https://data.spiceai.io/';
 const FLIGHT_PATH = 'flight.spiceai.io:443';
 
 const PROTO_PATH = './proto/Flight.proto';
@@ -86,6 +87,40 @@ class SpiceClient {
     }
     // DoGet return a stream of FlightData
     return client.DoGet(flightTicket);
+  }
+
+  public async getPrices(
+    pair: string,
+    startTime?: number,
+    endTime?: number,
+    granularity?: string
+  ): Promise<Prices> {
+    if (!pair) {
+      throw new Error('Pair is required');
+    }
+
+    const params: { [key: string]: string } = {
+      preview: 'true',
+    };
+
+    if (startTime) {
+      params.start = startTime.toString();
+    }
+    if (endTime) {
+      params.end = endTime.toString();
+    }
+    if (granularity) {
+      params.granularity = granularity;
+    }
+
+    const resp = await this.fetch(`/v0.1/prices/${pair}`, params);
+    if (!resp.ok) {
+      throw new Error(
+        `Failed to get prices: ${resp.statusText} (${await resp.text()})`
+      );
+    }
+
+    return resp.json();
   }
 
   public async query(
@@ -177,7 +212,7 @@ class SpiceClient {
       );
     }
 
-    let url = `${HTTP_DATA_PATH}/${queryId}`;
+    let url = `${HTTP_DATA_PATH}/v0.1/sql/${queryId}`;
     if (offset || limit) {
       if (offset) {
         url += `?offset=${offset}`;
@@ -187,14 +222,7 @@ class SpiceClient {
       }
     }
 
-    const resp = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept-Encoding': 'br, gzip, deflate',
-        'X-API-Key': this._apiKey,
-      },
-    });
-
+    const resp = await this.fetch(url);
     if (!resp.ok) {
       throw new Error(
         `Failed to get query results: ${resp.status} ${
@@ -255,6 +283,26 @@ class SpiceClient {
 
     return await this.getQueryResultsAll(notification.queryId);
   }
+
+  private fetch = async (path: string, params?: { [key: string]: string }) => {
+    let url;
+    if (params && Object.keys(params).length) {
+      url = `${HTTP_DATA_PATH}/${path}?${new URLSearchParams(params)}`;
+    } else {
+      url = `${HTTP_DATA_PATH}/${path}`;
+    }
+
+    console.log('params', params);
+    console.log(`Fetching ${url}...`);
+
+    return await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept-Encoding': 'br, gzip, deflate',
+        'X-API-Key': this._apiKey,
+      },
+    });
+  };
 }
 
 export { SpiceClient };

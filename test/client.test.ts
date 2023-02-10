@@ -130,3 +130,20 @@ test('async query all pages works', async () => {
 
   await webhook;
 });
+
+test('test prices works', async () => {
+  const prices = await client.getPrices(
+    'BTC-USD',
+    new Date('2023-01-01').getTime(),
+    new Date('2023-01-02').getTime(),
+    '1h'
+  );
+
+  expect(prices).toBeTruthy();
+  expect(prices.pair).toEqual('BTC-USD');
+  expect(prices.prices.length).toEqual(24);
+  expect(prices.prices[0].timestamp).toEqual('2023-01-01T00:59:00Z');
+  expect(prices.prices[0].price).toEqual(16539.396678151857);
+  expect(prices.prices[23].timestamp).toEqual('2023-01-01T23:59:00Z');
+  expect(prices.prices[23].price).toEqual(16625.08055070908);
+});

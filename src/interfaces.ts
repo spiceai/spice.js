@@ -28,3 +28,11 @@ export interface QueryResultsResponse {
   schema: { name: 'string'; type: { name: string } }[];
   rows: any[];
 }
+
+export interface Prices {
+  pair: string;
+  prices: {
+    timestamp: string;
+    price: number;
+  }[];
+}
