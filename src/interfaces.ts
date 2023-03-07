@@ -29,10 +29,17 @@ export interface QueryResultsResponse {
   rows: any[];
 }
 
-export interface Prices {
+export interface HistoricalPrices {
   pair: string;
   prices: {
     timestamp: string;
     price: number;
   }[];
+}
+
+export interface LatestPrice {
+  pair: string;
+  minPrice: string;
+  maxPrice: string;
+  avePrice: string;
 }

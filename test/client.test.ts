@@ -7,6 +7,7 @@ import {
   AsyncQueryResponse,
   QueryCompleteNotification,
 } from '../src/interfaces';
+import { LatestPrice } from '../dist/interfaces';
 
 const RELAY_BUCKETS = ['spice.js'];
 const RELAY_URL = 'https://o4skc7qyx7mrl8x7wdtgmc.hooks.webhookrelay.com';
@@ -131,7 +132,29 @@ test('async query all pages works', async () => {
   await webhook;
 });
 
-test('test prices works', async () => {
+test('test latest prices (USD) works', async () => {
+  const price = await client.getPrice('BTC');
+  const latestPrice = price as LatestPrice;
+
+  expect(latestPrice).toBeTruthy();
+  expect(latestPrice.pair).toEqual('BTC-USD');
+  expect(latestPrice.minPrice).toBeTruthy();
+  expect(latestPrice.maxPrice).toBeTruthy();
+  expect(latestPrice.avePrice).toBeTruthy();
+});
+
+test('test latest prices (other currency) works', async () => {
+  const price = await client.getPrice('BTC-AUD');
+  const latestPrice = price as LatestPrice;
+
+  expect(latestPrice).toBeTruthy();
+  expect(latestPrice.pair).toEqual('BTC-AUD');
+  expect(latestPrice.minPrice).toBeTruthy();
+  expect(latestPrice.maxPrice).toBeTruthy();
+  expect(latestPrice.avePrice).toBeTruthy();
+});
+
+test('test historical prices works', async () => {
   const prices = await client.getPrices(
     'BTC-USD',
     new Date('2023-01-01').getTime(),

@@ -15,7 +15,8 @@ import {
 import {
   AsyncQueryRequest,
   AsyncQueryResponse,
-  Prices,
+  HistoricalPrices,
+  LatestPrice,
   QueryCompleteNotification,
   QueryResultsResponse,
 } from './interfaces';
@@ -89,12 +90,27 @@ class SpiceClient {
     return client.DoGet(flightTicket);
   }
 
+  public async getPrice(pair: string): Promise<LatestPrice> {
+    if (!pair) {
+      throw new Error('Pair is required');
+    }
+
+    const resp = await this.fetch(`/v0.1/prices/${pair}`);
+    if (!resp.ok) {
+      throw new Error(
+        `Failed to get latest price: ${resp.statusText} (${await resp.text()})`
+      );
+    }
+
+    return resp.json();
+  }
+
   public async getPrices(
     pair: string,
     startTime?: number,
     endTime?: number,
     granularity?: string
-  ): Promise<Prices> {
+  ): Promise<HistoricalPrices> {
     if (!pair) {
       throw new Error('Pair is required');
     }
@@ -291,9 +307,6 @@ class SpiceClient {
     } else {
       url = `${HTTP_DATA_PATH}/${path}`;
     }
-
-    console.log('params', params);
-    console.log(`Fetching ${url}...`);
 
     return await fetch(url, {
       headers: {
