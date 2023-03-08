@@ -191,7 +191,7 @@ class SpiceClient {
       notifications: [{ name: queryName, type: 'webhook', uri: webhookUri }],
     };
 
-    const resp = await fetch(HTTP_DATA_PATH, {
+    const resp = await fetch(`${HTTP_DATA_PATH}/v0.1/sql`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

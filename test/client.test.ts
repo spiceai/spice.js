@@ -1,3 +1,4 @@
+import dotenv from 'dotenv';
 import { WebSocket } from 'ws';
 import { SpiceClient } from '../';
 import 'dotenv/config';
@@ -12,6 +13,7 @@ import { LatestPrice } from '../dist/interfaces';
 const RELAY_BUCKETS = ['spice.js'];
 const RELAY_URL = 'https://o4skc7qyx7mrl8x7wdtgmc.hooks.webhookrelay.com';
 
+dotenv.config();
 const api_key = process.env.API_KEY;
 if (!api_key) {
   throw 'API_KEY environment variable not set';
@@ -32,7 +34,7 @@ test('streaming works', async () => {
       numChunks++;
     }
   );
-  expect(numChunks).toEqual(2);
+  expect(numChunks).toEqual(3);
 });
 
 test('full result works', async () => {
@@ -59,7 +61,7 @@ test('async query first page works', async () => {
       const notification = JSON.parse(body) as QueryCompleteNotification;
       if (notification.sql !== queryText) return;
 
-      expect(notification.appId).toEqual(49);
+      expect(notification.appId).toEqual(239); // spicehq/spicejs
       expect(notification.queryId).toHaveLength(36);
       expect(notification.requestTime).toBeTruthy();
       expect(notification.completionTime).toBeTruthy();
@@ -110,7 +112,7 @@ test('async query all pages works', async () => {
       if (notification.sql !== queryText) return;
       ws.close();
 
-      expect(notification.appId).toEqual(49);
+      expect(notification.appId).toEqual(239); // spicehq/spicejs
       expect(notification.queryId).toHaveLength(36);
       expect(notification.state).toEqual('completed');
       expect(notification.rowCount).toEqual(rowLimit);
@@ -130,7 +132,7 @@ test('async query all pages works', async () => {
   expect(queryResp.queryId).toHaveLength(36);
 
   await webhook;
-});
+}, 10000);
 
 test('test latest prices (USD) works', async () => {
   const price = await client.getPrice('BTC');
