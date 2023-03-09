@@ -58,6 +58,8 @@ test('async query first page works', async () => {
 
   const webhook = new Promise<void>((resolve) => {
     ws = listenForWebhookMessage(RELAY_BUCKETS, async (body: string) => {
+      ws.close();
+
       const notification = JSON.parse(body) as QueryCompleteNotification;
       if (notification.sql !== queryText) return;
 
@@ -68,8 +70,6 @@ test('async query first page works', async () => {
       expect(notification.state).toEqual('completed');
       expect(notification.sql).toEqual(queryText);
       expect(notification.rowCount).toEqual(3);
-
-      ws.close();
 
       const results = await client.getQueryResultsFromNotification(body);
 
@@ -96,7 +96,7 @@ test('async query first page works', async () => {
   expect(queryResp.queryId).toHaveLength(36);
 
   await webhook;
-});
+}, 30000);
 
 test('async query all pages works', async () => {
   const rowLimit = 1250;
@@ -108,9 +108,10 @@ test('async query all pages works', async () => {
 
   const webhook = new Promise<void>((resolve) => {
     ws = listenForWebhookMessage(RELAY_BUCKETS, async (body: string) => {
+      ws.close();
+
       const notification = JSON.parse(body) as QueryCompleteNotification;
       if (notification.sql !== queryText) return;
-      ws.close();
 
       expect(notification.appId).toEqual(239); // spicehq/spicejs
       expect(notification.queryId).toHaveLength(36);
@@ -132,7 +133,7 @@ test('async query all pages works', async () => {
   expect(queryResp.queryId).toHaveLength(36);
 
   await webhook;
-}, 10000);
+}, 30000);
 
 test('test latest prices (USD) works', async () => {
   const price = await client.getPrice('BTC');

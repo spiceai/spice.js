@@ -228,17 +228,18 @@ class SpiceClient {
       );
     }
 
-    let url = `${HTTP_DATA_PATH}/v0.1/sql/${queryId}`;
+    const params: { [key: string]: string } = {};
+
     if (offset || limit) {
       if (offset) {
-        url += `?offset=${offset}`;
+        params.offset = String(offset);
       }
       if (limit) {
-        url += `${offset ? '&' : '?'}limit=${limit}`;
+        params.limit = String(limit);
       }
     }
 
-    const resp = await this.fetch(url);
+    const resp = await this.fetch(`/v0.1/sql/${queryId}`, params);
     if (!resp.ok) {
       throw new Error(
         `Failed to get query results: ${resp.status} ${

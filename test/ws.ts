@@ -31,10 +31,18 @@ const listenForWebhookMessage = (
     switch (msg.type) {
       case 'status': {
         console.log('[info] web socket status message received', msg);
-        if (msg.status === 'unauthorized') {
-          throw 'web socket unauthorized. Set RELAY_KEY and RELAY_SECRET environment variables.';
-        } else if (msg.status === 'authenticated') {
-          ws.send(JSON.stringify({ action: 'subscribe', buckets: buckets }));
+        switch (msg.status) {
+          case 'unauthorized': {
+            throw 'web socket unauthorized. Set RELAY_KEY and RELAY_SECRET environment variables.';
+          }
+          case 'authenticated': {
+            ws.send(JSON.stringify({ action: 'subscribe', buckets: buckets }));
+            break;
+          }
+          case 'ping': {
+            ws.pong();
+            break;
+          }
         }
         break;
       }
@@ -50,6 +58,10 @@ const listenForWebhookMessage = (
 
   ws.on('error', function (e) {
     console.error('web socket error', e);
+  });
+
+  ws.on('close', function (e) {
+    console.log('web socket closed', e);
   });
 
   return ws;
