@@ -20,6 +20,8 @@ if (!api_key) {
 }
 const client = new SpiceClient(api_key);
 
+const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+
 test('streaming works', async () => {
   let numChunks = 0;
   await client.query(
@@ -60,6 +62,7 @@ test('async query first page works', async () => {
   const webhook = new Promise<void>((resolve) => {
     ws = listenForWebhookMessage(RELAY_BUCKETS, async (body: string) => {
       ws.close();
+      await wait(500);
 
       const notification = JSON.parse(body) as QueryCompleteNotification;
       if (notification.sql !== queryText) return;
@@ -110,6 +113,7 @@ test('async query all pages works', async () => {
   const webhook = new Promise<void>((resolve) => {
     ws = listenForWebhookMessage(RELAY_BUCKETS, async (body: string) => {
       ws.close();
+      await wait(500);
 
       const notification = JSON.parse(body) as QueryCompleteNotification;
       if (notification.sql !== queryText) return;
