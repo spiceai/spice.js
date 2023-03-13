@@ -20,7 +20,7 @@ if (!api_key) {
 }
 const client = new SpiceClient(api_key);
 
-const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
 test('streaming works', async () => {
   let numChunks = 0;
