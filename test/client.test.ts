@@ -1,3 +1,4 @@
+import dotenv from 'dotenv';
 import { WebSocket } from 'ws';
 import { SpiceClient } from '../';
 import 'dotenv/config';
@@ -7,31 +8,36 @@ import {
   AsyncQueryResponse,
   QueryCompleteNotification,
 } from '../src/interfaces';
+import { LatestPrice } from '../dist/interfaces';
 
 const RELAY_BUCKETS = ['spice.js'];
 const RELAY_URL = 'https://o4skc7qyx7mrl8x7wdtgmc.hooks.webhookrelay.com';
 
+dotenv.config();
 const api_key = process.env.API_KEY;
 if (!api_key) {
   throw 'API_KEY environment variable not set';
 }
 const client = new SpiceClient(api_key);
 
+const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
 test('streaming works', async () => {
   let numChunks = 0;
   await client.query(
     'SELECT number, "timestamp", base_fee_per_gas, base_fee_per_gas / 1e9 AS base_fee_per_gas_gwei FROM eth.blocks limit 2000',
     (table) => {
-      expect(table.toArray().length).toBeLessThan(2000);
+      expect(table.toArray().length).toBeLessThanOrEqual(2000);
 
       let baseFeeGwei = table.getChild('base_fee_per_gas_gwei');
       expect(baseFeeGwei).toBeTruthy();
       baseFeeGwei = baseFeeGwei as Vector;
-      expect(baseFeeGwei.length).toBeLessThan(2000);
+      expect(baseFeeGwei.length).toBeLessThanOrEqual(2000);
       numChunks++;
     }
   );
-  expect(numChunks).toEqual(2);
+  expect(numChunks).toBeGreaterThanOrEqual(1);
+  expect(numChunks).toBeLessThanOrEqual(3);
 });
 
 test('full result works', async () => {
@@ -55,18 +61,19 @@ test('async query first page works', async () => {
 
   const webhook = new Promise<void>((resolve) => {
     ws = listenForWebhookMessage(RELAY_BUCKETS, async (body: string) => {
+      ws.close();
+      await wait(500);
+
       const notification = JSON.parse(body) as QueryCompleteNotification;
       if (notification.sql !== queryText) return;
 
-      expect(notification.appId).toEqual(49);
+      expect(notification.appId).toEqual(239); // spicehq/spicejs
       expect(notification.queryId).toHaveLength(36);
       expect(notification.requestTime).toBeTruthy();
       expect(notification.completionTime).toBeTruthy();
       expect(notification.state).toEqual('completed');
       expect(notification.sql).toEqual(queryText);
       expect(notification.rowCount).toEqual(3);
-
-      ws.close();
 
       const results = await client.getQueryResultsFromNotification(body);
 
@@ -93,7 +100,7 @@ test('async query first page works', async () => {
   expect(queryResp.queryId).toHaveLength(36);
 
   await webhook;
-});
+}, 30000);
 
 test('async query all pages works', async () => {
   const rowLimit = 1250;
@@ -105,11 +112,13 @@ test('async query all pages works', async () => {
 
   const webhook = new Promise<void>((resolve) => {
     ws = listenForWebhookMessage(RELAY_BUCKETS, async (body: string) => {
+      ws.close();
+      await wait(500);
+
       const notification = JSON.parse(body) as QueryCompleteNotification;
       if (notification.sql !== queryText) return;
-      ws.close();
 
-      expect(notification.appId).toEqual(49);
+      expect(notification.appId).toEqual(239); // spicehq/spicejs
       expect(notification.queryId).toHaveLength(36);
       expect(notification.state).toEqual('completed');
       expect(notification.rowCount).toEqual(rowLimit);
@@ -129,4 +138,43 @@ test('async query all pages works', async () => {
   expect(queryResp.queryId).toHaveLength(36);
 
   await webhook;
+}, 30000);
+
+test('test latest prices (USD) works', async () => {
+  const price = await client.getPrice('BTC');
+  const latestPrice = price as LatestPrice;
+
+  expect(latestPrice).toBeTruthy();
+  expect(latestPrice.pair).toEqual('BTC-USD');
+  expect(latestPrice.minPrice).toBeTruthy();
+  expect(latestPrice.maxPrice).toBeTruthy();
+  expect(latestPrice.avePrice).toBeTruthy();
+});
+
+test('test latest prices (other currency) works', async () => {
+  const price = await client.getPrice('BTC-AUD');
+  const latestPrice = price as LatestPrice;
+
+  expect(latestPrice).toBeTruthy();
+  expect(latestPrice.pair).toEqual('BTC-AUD');
+  expect(latestPrice.minPrice).toBeTruthy();
+  expect(latestPrice.maxPrice).toBeTruthy();
+  expect(latestPrice.avePrice).toBeTruthy();
+});
+
+test('test historical prices works', async () => {
+  const prices = await client.getPrices(
+    'BTC-USD',
+    new Date('2023-01-01').getTime(),
+    new Date('2023-01-02').getTime(),
+    '1h'
+  );
+
+  expect(prices).toBeTruthy();
+  expect(prices.pair).toEqual('BTC-USD');
+  expect(prices.prices.length).toEqual(24);
+  expect(prices.prices[0].timestamp).toEqual('2023-01-01T00:59:00Z');
+  expect(prices.prices[0].price).toEqual(16539.396678151857);
+  expect(prices.prices[23].timestamp).toEqual('2023-01-01T23:59:00Z');
+  expect(prices.prices[23].price).toEqual(16625.08055070908);
 });

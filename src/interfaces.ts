@@ -28,3 +28,18 @@ export interface QueryResultsResponse {
   schema: { name: 'string'; type: { name: string } }[];
   rows: any[];
 }
+
+export interface HistoricalPrices {
+  pair: string;
+  prices: {
+    timestamp: string;
+    price: number;
+  }[];
+}
+
+export interface LatestPrice {
+  pair: string;
+  minPrice: string;
+  maxPrice: string;
+  avePrice: string;
+}
