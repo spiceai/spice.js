@@ -17,10 +17,6 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-    env:
-      API_KEY: ${{ secrets.API_KEY }}
-      RELAY_KEY: ${{ secrets.RELAY_KEY }}
-      RELAY_SECRET: ${{ secrets.RELAY_SECRET }}
     name: Test on ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -32,11 +28,10 @@ jobs:
         run: |
           yarn install
           yarn build
-      - name: Add secrets to .env
-        run: |
-          echo $API_KEY > .env
-          echo $RELAY_KEY >> .env
-          echo $RELAY_SECRET >> .env
       - name: Running tests
         run: |
           yarn test
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
+          RELAY_KEY: ${{ secrets.RELAY_KEY }}
+          RELAY_SECRET: ${{ secrets.RELAY_SECRET }}
