@@ -1,7 +1,7 @@
 {
   "name": "@spiceai/spice",
   "description": "Spice.js Node.js SDK",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "engines": {
     "node": ">=18.0.0"
   },
@@ -14,9 +14,9 @@
   "author": "Spice AI, Inc. <webmaster@spice.ai>",
   "license": "MIT",
   "dependencies": {
-    "@grpc/grpc-js": "^1.8.4",
-    "@grpc/proto-loader": "^0.7.4",
-    "apache-arrow": "^10.0.1"
+    "@grpc/grpc-js": "^1.8.12",
+    "@grpc/proto-loader": "^0.7.5",
+    "apache-arrow": "^11.0.0"
   },
   "scripts": {
     "clean": "rimraf dist",

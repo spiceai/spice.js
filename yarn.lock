@@ -305,18 +305,29 @@
   dependencies:
     "@jridgewell/trace-mapping" "0.3.9"
 
-"@grpc/grpc-js@^1.8.4":
-  version "1.8.4"
-  resolved "https://registry.npmjs.org/@grpc/grpc-js/-/grpc-js-1.8.4.tgz"
-  integrity sha512-oaETBotls7FTBpySg5dhyUCyXSxSeCMmkBBXHXG1iw57MiNoB6D7VRhkrXYbwyHM3Q3Afjp4KlsBX0Zb+ELZXw==
+"@grpc/grpc-js@^1.8.12":
+  version "1.8.12"
+  resolved "https://registry.yarnpkg.com/@grpc/grpc-js/-/grpc-js-1.8.12.tgz#bc0120859e8b153db764b473cc019ddf6bb2b414"
+  integrity sha512-MbUMvpVvakeKhdYux6gbSIPJaFMLNSY8jw4PqLI+FFztGrQRrYYAnHlR94+ncBQQewkpXQaW449m3tpH/B/ZnQ==
   dependencies:
     "@grpc/proto-loader" "^0.7.0"
     "@types/node" ">=12.12.47"
 
-"@grpc/proto-loader@^0.7.0", "@grpc/proto-loader@^0.7.4":
+"@grpc/proto-loader@^0.7.0":
   version "0.7.4"
   resolved "https://registry.npmjs.org/@grpc/proto-loader/-/proto-loader-0.7.4.tgz"
   integrity sha512-MnWjkGwqQ3W8fx94/c1CwqLsNmHHv2t0CFn+9++6+cDphC1lolpg9M2OU0iebIjK//pBNX9e94ho+gjx6vz39w==
+  dependencies:
+    "@types/long" "^4.0.1"
+    lodash.camelcase "^4.3.0"
+    long "^4.0.0"
+    protobufjs "^7.0.0"
+    yargs "^16.2.0"
+
+"@grpc/proto-loader@^0.7.5":
+  version "0.7.5"
+  resolved "https://registry.yarnpkg.com/@grpc/proto-loader/-/proto-loader-0.7.5.tgz#ee9e7488fa585dc6b0f7fe88cd39723a3e64c906"
+  integrity sha512-mfcTuMbFowq1wh/Rn5KQl6qb95M21Prej3bewD9dUQMurYGVckGO/Pbe2Ocwto6sD05b/mxZLspvqwx60xO2Rg==
   dependencies:
     "@types/long" "^4.0.1"
     lodash.camelcase "^4.3.0"
@@ -857,10 +868,10 @@ anymatch@^3.0.3, anymatch@~3.1.2:
     normalize-path "^3.0.0"
     picomatch "^2.0.4"
 
-apache-arrow@^10.0.1:
-  version "10.0.1"
-  resolved "https://registry.npmjs.org/apache-arrow/-/apache-arrow-10.0.1.tgz"
-  integrity sha512-6QrfmyNsmNjZQszYzVLHSXIejZiRa3jFqeD3nTCjU3WqvoUxaC/0etjcErwnlLR3++3uc+faWw0OlM6IgY6xIQ==
+apache-arrow@^11.0.0:
+  version "11.0.0"
+  resolved "https://registry.yarnpkg.com/apache-arrow/-/apache-arrow-11.0.0.tgz#b48cdb81afb502bcafdc2912b50d0f2c58ebc783"
+  integrity sha512-M8J4y+DimIyS44w2KOmVfzNHbTroR1oDpBKK6BYnlu8xVB41lxTz0yLmapo8/WJVAt5XcinAxMm14M771dm/rA==
   dependencies:
     "@types/command-line-args" "5.2.0"
     "@types/command-line-usage" "5.0.2"
@@ -1242,7 +1253,7 @@ diff@^4.0.1:
 
 dotenv@^16.0.3:
   version "16.0.3"
-  resolved "https://registry.npmjs.org/dotenv/-/dotenv-16.0.3.tgz"
+  resolved "https://registry.yarnpkg.com/dotenv/-/dotenv-16.0.3.tgz#115aec42bac5053db3c456db30cc243a5a836a07"
   integrity sha512-7GO6HghkA5fYG9TYnNxi14/7K9f5occMlp3zXAuSxn7CKCxt9xbNWG7yF8hTCSUchlfWSe3uLmlPfigevRItzQ==
 
 electron-to-chromium@^1.4.251:
