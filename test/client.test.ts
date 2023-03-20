@@ -162,7 +162,7 @@ test('test latest prices (other currency) works', async () => {
   expect(latestPrice.avePrice).toBeTruthy();
 });
 
-test.only('test historical prices works', async () => {
+test('test historical prices works', async () => {
   const prices = await client.getPrices(
     'BTC-USD',
     new Date('2023-01-01').getTime() / 1000,
@@ -173,7 +173,7 @@ test.only('test historical prices works', async () => {
   expect(prices).toBeTruthy();
   expect(prices.pair).toEqual('BTC-USD');
   expect(prices.prices.length).toEqual(24);
-  expect(prices.prices[0].timestamp).toEqual('2023-01-01T01:00:00Z');
+  expect(prices.prices[0].timestamp).toEqual('2023-01-01T00:00:00Z');
   expect(prices.prices[0].price).toEqual(16539.396678151857);
   expect(prices.prices[23].timestamp).toEqual('2023-01-01T23:59:00Z');
   expect(prices.prices[23].price).toEqual(16625.08055070908);
