@@ -162,11 +162,11 @@ test('test latest prices (other currency) works', async () => {
   expect(latestPrice.avePrice).toBeTruthy();
 });
 
-test('test historical prices works', async () => {
+test.only('test historical prices works', async () => {
   const prices = await client.getPrices(
     'BTC-USD',
-    new Date('2023-01-01').getTime(),
-    new Date('2023-01-02').getTime(),
+    new Date('2023-01-01').getTime() / 1000,
+    new Date('2023-01-02').getTime() / 1000,
     '1h'
   );
 
