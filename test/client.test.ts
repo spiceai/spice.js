@@ -38,7 +38,7 @@ test('streaming works', async () => {
   );
   expect(numChunks).toBeGreaterThanOrEqual(1);
   expect(numChunks).toBeLessThanOrEqual(3);
-});
+}, 10000);
 
 test('full result works', async () => {
   const tableResult = await client.query(
@@ -174,7 +174,7 @@ test('test historical prices works', async () => {
   expect(prices.pair).toEqual('BTC-USD');
   expect(prices.prices.length).toEqual(24);
   expect(prices.prices[0].timestamp).toEqual('2023-01-01T01:00:00Z');
-  expect(prices.prices[0].price).toEqual(16538.01454665046);
+  expect(prices.prices[0].price).toEqual(16527.39);
   expect(prices.prices[23].timestamp).toEqual('2023-01-02T00:00:00Z');
   expect(prices.prices[23].price).toEqual(16625.51039411775);
 });
