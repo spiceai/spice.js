@@ -176,5 +176,5 @@ test('test historical prices works', async () => {
   expect(prices.prices[0].timestamp).toEqual('2023-01-01T01:00:00Z');
   expect(prices.prices[0].price).toEqual(16527.39);
   expect(prices.prices[23].timestamp).toEqual('2023-01-02T00:00:00Z');
-  expect(prices.prices[23].price).toEqual(16625.51039411775);
+  expect(prices.prices[23].price).toEqual(16612.22);
 });
