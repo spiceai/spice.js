@@ -21,6 +21,8 @@ import {
   QueryResultsResponse,
 } from './interfaces';
 
+const fetch = require('node-fetch');
+
 const HTTP_DATA_PATH = 'https://data.spiceai.io/';
 const FLIGHT_PATH = 'flight.spiceai.io:443';
 
@@ -102,7 +104,7 @@ class SpiceClient {
       );
     }
 
-    return resp.json();
+    return resp.json() as Promise<LatestPrice>;
   }
 
   public async getPrices(
@@ -136,7 +138,7 @@ class SpiceClient {
       );
     }
 
-    return resp.json();
+    return resp.json() as Promise<HistoricalPrices>;
   }
 
   public async query(
@@ -208,7 +210,7 @@ class SpiceClient {
       );
     }
 
-    return resp.json();
+    return resp.json() as Promise<AsyncQueryResponse>;
   }
 
   public async getQueryResults(
@@ -248,7 +250,7 @@ class SpiceClient {
       );
     }
 
-    return resp.json();
+    return resp.json() as Promise<QueryResultsResponse>;
   }
 
   /*
