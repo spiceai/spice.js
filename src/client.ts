@@ -1,6 +1,4 @@
 import path from 'path';
-import fetch from 'node-fetch';
-
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import { EventEmitter } from 'stream';
@@ -22,6 +20,8 @@ import {
   QueryCompleteNotification,
   QueryResultsResponse,
 } from './interfaces';
+
+const fetch = require('node-fetch');
 
 const HTTP_DATA_PATH = 'https://data.spiceai.io/';
 const FLIGHT_PATH = 'flight.spiceai.io:443';
