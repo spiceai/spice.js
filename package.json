@@ -16,7 +16,8 @@
   "dependencies": {
     "@grpc/grpc-js": "^1.8.12",
     "@grpc/proto-loader": "^0.7.5",
-    "apache-arrow": "^11.0.0"
+    "apache-arrow": "^11.0.0",
+    "node-fetch": "^3.3.1"
   },
   "scripts": {
     "clean": "rimraf dist",

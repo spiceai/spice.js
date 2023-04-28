@@ -1,4 +1,6 @@
 import path from 'path';
+import fetch from 'node-fetch';
+
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import { EventEmitter } from 'stream';
@@ -102,7 +104,7 @@ class SpiceClient {
       );
     }
 
-    return resp.json();
+    return resp.json() as Promise<LatestPrice>;
   }
 
   public async getPrices(
@@ -136,7 +138,7 @@ class SpiceClient {
       );
     }
 
-    return resp.json();
+    return resp.json() as Promise<HistoricalPrices>;
   }
 
   public async query(
@@ -208,7 +210,7 @@ class SpiceClient {
       );
     }
 
-    return resp.json();
+    return resp.json() as Promise<AsyncQueryResponse>;
   }
 
   public async getQueryResults(
@@ -248,7 +250,7 @@ class SpiceClient {
       );
     }
 
-    return resp.json();
+    return resp.json() as Promise<QueryResultsResponse>;
   }
 
   /*
