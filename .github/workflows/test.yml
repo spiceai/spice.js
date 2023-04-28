@@ -17,13 +17,14 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-    name: Test on ${{ matrix.os }}
+        nodever: [16, 18]
+    name: Test on ${{ matrix.os }} Node.js ${{ matrix.nodever }}
     steps:
       - uses: actions/checkout@v3
       - name: Set up NodeJS
         uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: ${{ matrix.nodever }}
       - name: Install requirements
         run: |
           yarn install
