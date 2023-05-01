@@ -17,7 +17,7 @@
     "@grpc/grpc-js": "^1.8.14",
     "@grpc/proto-loader": "^0.7.6",
     "apache-arrow": "^11.0.0",
-    "node-fetch": "^2.6.9"
+    "node-fetch": "^3.3.1"
   },
   "scripts": {
     "clean": "rimraf dist",
