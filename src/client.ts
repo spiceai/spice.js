@@ -23,7 +23,7 @@ import {
 
 const fetch = require('node-fetch');
 
-const HTTP_DATA_PATH = 'https://data.spiceai.io/';
+const HTTP_DATA_PATH = 'https://data.spiceai.io';
 const FLIGHT_PATH = 'flight.spiceai.io:443';
 
 const PROTO_PATH = './proto/Flight.proto';
@@ -306,9 +306,9 @@ class SpiceClient {
   private fetch = async (path: string, params?: { [key: string]: string }) => {
     let url;
     if (params && Object.keys(params).length) {
-      url = `${HTTP_DATA_PATH}/${path}?${new URLSearchParams(params)}`;
+      url = `${HTTP_DATA_PATH}${path}?${new URLSearchParams(params)}`;
     } else {
-      url = `${HTTP_DATA_PATH}/${path}`;
+      url = `${HTTP_DATA_PATH}${path}`;
     }
 
     return await fetch(url, {
