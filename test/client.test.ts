@@ -8,7 +8,7 @@ import {
   AsyncQueryResponse,
   QueryCompleteNotification,
 } from '../src/interfaces';
-import { LatestPrice } from '../dist/interfaces';
+import { LatestPrice } from '../src/interfaces';
 
 const RELAY_BUCKETS = ['spice.js'];
 const RELAY_URL = 'https://o4skc7qyx7mrl8x7wdtgmc.hooks.webhookrelay.com';
@@ -177,4 +177,22 @@ test('test historical prices works', async () => {
   expect(prices.prices[0].price).toEqual(16527.39);
   expect(prices.prices[23].timestamp).toEqual('2023-01-02T00:00:00Z');
   expect(prices.prices[23].price).toEqual(16612.22);
+});
+
+
+test.only('test latest prices works', async () => {
+  const multiplePrices = await client.getMultiplePrices(
+    'AUD',
+    ["ETH", "BTC"]
+  );
+
+  expect(multiplePrices).toBeTruthy();
+  expect(multiplePrices[0].pair).toEqual("ETH-AUD");
+  expect(multiplePrices[0].minPrice).toBeTruthy;
+  expect(multiplePrices[0].maxPrice).toBeTruthy;
+  expect(multiplePrices[0].avePrice).toBeTruthy;
+  expect(multiplePrices[1].pair).toEqual("BTC-AUD");
+  expect(multiplePrices[1].minPrice).toBeTruthy;
+  expect(multiplePrices[1].maxPrice).toBeTruthy;
+  expect(multiplePrices[1].avePrice).toBeTruthy;
 });

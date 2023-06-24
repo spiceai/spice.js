@@ -141,6 +141,36 @@ class SpiceClient {
     return resp.json() as Promise<HistoricalPrices>;
   }
 
+  public async getMultiplePrices(
+    convert: string,
+    symbols: string[]
+    ): Promise<LatestPrice[]> {
+      if (!symbols) {
+        throw new Error('At least 1 symbol is required');
+      }
+
+      // Defaults to USD if no conversion symbol provided
+      if (!convert) {
+        convert = 'USD';
+      }
+
+      const prices = new Array(symbols.length);
+
+      // Iterate through all items in symbol
+      for (let i = 0; i < symbols.length; i++) {
+        var pair = symbols[i].concat('-', convert);
+        var price = await this.fetch(`/v0.1/prices/${pair}`);
+        if (!price.ok) {
+          throw new Error(
+            `Failed to get price for ${symbols[i]}: ${price.statusText} (${await price.text()})`
+          );
+        }
+        prices[i] = await price.json();
+      }
+
+      return new Promise((resolve, reject) => resolve(prices)) as Promise<LatestPrice[]>;
+    }
+
   public async query(
     queryText: string,
     onData: ((data: Table) => void) | undefined = undefined
