@@ -180,7 +180,7 @@ test('test historical prices works', async () => {
 });
 
 
-test.only('test latest prices works', async () => {
+test('test latest prices works', async () => {
   const multiplePrices = await client.getMultiplePrices(
     'AUD',
     ["ETH", "BTC"]
