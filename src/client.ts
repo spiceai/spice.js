@@ -154,21 +154,25 @@ class SpiceClient {
         convert = 'USD';
       }
 
-      const prices = new Array(symbols.length);
+      const priceRequest = {
+        symbols: symbols,
+        convert: convert
+      };
 
-      // Iterate through all items in symbol
-      for (let i = 0; i < symbols.length; i++) {
-        var pair = symbols[i].concat('-', convert);
-        var price = await this.fetch(`/v0.1/prices/${pair}`);
-        if (!price.ok) {
-          throw new Error(
-            `Failed to get price for ${symbols[i]}: ${price.statusText} (${await price.text()})`
-          );
-        }
-        prices[i] = await price.json();
+      const prices = await fetch(`${HTTP_DATA_PATH}/v0.1/prices`, {
+        method: 'POST',
+        body: priceRequest,
+      });
+
+      if (!prices.ok) {
+        throw new Error(
+          `Failed to get prices: ${prices.status} ${
+            prices.statusText
+          } ${await prices.text()}`
+        );
       }
 
-      return new Promise((resolve, reject) => resolve(prices)) as Promise<LatestPrice[]>;
+      return prices as Promise<LatestPrice[]>;
     }
 
   public async query(
