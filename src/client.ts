@@ -146,7 +146,7 @@ class SpiceClient {
     convertText: string,
     symbolsText: string[]
     ): Promise<LatestPrice[]> {
-      if (!symbolsText) {
+      if (symbolsText?.length < 1) {
         throw new Error('At least 1 symbol is required');
       }
 
