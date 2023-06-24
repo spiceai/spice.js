@@ -180,7 +180,7 @@ test('test historical prices works', async () => {
 });
 
 
-test('test get multiple prices works, test1', async () => {
+test('test get multiple prices works, when convert is provided and symbols array is not empty', async () => {
   var symbolsText = ["cbETH", "stETH", "rETH"];
   const multiplePrices1 = await client.getMultiplePrices(
     'AUD',
@@ -199,7 +199,7 @@ test('test get multiple prices works, test1', async () => {
   expect(multiplePrices1.length).toEqual(symbolsText.length);
 });
 
-test('test get multiple prices works, test2', async () => {
+test('test get multiple prices works, when convert is not provided and symbols array is not empty', async () => {
   var symbolsText = ["cbETH", "stETH", "rETH"];
   const multiplePrices2 = await client.getMultiplePrices(
     '',
@@ -218,7 +218,7 @@ test('test get multiple prices works, test2', async () => {
   expect(multiplePrices2.length).toEqual(symbolsText.length);
 });
 
-test('test get multiple prices works, test3', async () => {
+test('test get multiple prices works, when symbols is an empty array', async () => {
   expect(async() => {
     await client.getMultiplePrices('', [])
   }).rejects.toThrow('At least 1 symbol is required')
