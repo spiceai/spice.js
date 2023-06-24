@@ -8,7 +8,7 @@ import {
   AsyncQueryResponse,
   QueryCompleteNotification,
 } from '../src/interfaces';
-import { LatestPrice } from '../dist/interfaces';
+import { LatestPrice } from '../src/interfaces';
 
 const RELAY_BUCKETS = ['spice.js'];
 const RELAY_URL = 'https://o4skc7qyx7mrl8x7wdtgmc.hooks.webhookrelay.com';
@@ -177,4 +177,49 @@ test('test historical prices works', async () => {
   expect(prices.prices[0].price).toEqual(16527.39);
   expect(prices.prices[23].timestamp).toEqual('2023-01-02T00:00:00Z');
   expect(prices.prices[23].price).toEqual(16612.22);
+});
+
+
+test('test get multiple prices works, when convert is provided and symbols array is not empty', async () => {
+  var symbolsText = ["cbETH", "stETH", "rETH"];
+  const multiplePrices1 = await client.getMultiplePrices(
+    'AUD',
+    symbolsText
+  );
+
+  expect(multiplePrices1).toBeTruthy();
+  expect(multiplePrices1[0].pair).toEqual("CBETH-AUD");
+  expect(multiplePrices1[0].minPrice).toBeTruthy;
+  expect(multiplePrices1[0].maxPrice).toBeTruthy;
+  expect(multiplePrices1[0].avePrice).toBeTruthy;
+  expect(multiplePrices1[1].pair).toEqual("STETH-AUD");
+  expect(multiplePrices1[1].minPrice).toBeTruthy;
+  expect(multiplePrices1[1].maxPrice).toBeTruthy;
+  expect(multiplePrices1[1].avePrice).toBeTruthy;
+  expect(multiplePrices1.length).toEqual(symbolsText.length);
+});
+
+test('test get multiple prices works, when convert is not provided and symbols array is not empty', async () => {
+  var symbolsText = ["cbETH", "stETH", "rETH"];
+  const multiplePrices2 = await client.getMultiplePrices(
+    '',
+    symbolsText
+  );
+
+  expect(multiplePrices2).toBeTruthy();
+  expect(multiplePrices2[0].pair).toEqual("CBETH-USD");
+  expect(multiplePrices2[0].minPrice).toBeTruthy;
+  expect(multiplePrices2[0].maxPrice).toBeTruthy;
+  expect(multiplePrices2[0].avePrice).toBeTruthy;
+  expect(multiplePrices2[1].pair).toEqual("STETH-USD");
+  expect(multiplePrices2[1].minPrice).toBeTruthy;
+  expect(multiplePrices2[1].maxPrice).toBeTruthy;
+  expect(multiplePrices2[1].avePrice).toBeTruthy;
+  expect(multiplePrices2.length).toEqual(symbolsText.length);
+});
+
+test('test get multiple prices works, when symbols is an empty array', async () => {
+  expect(async() => {
+    await client.getMultiplePrices('', [])
+  }).rejects.toThrow('At least 1 symbol is required')
 });
