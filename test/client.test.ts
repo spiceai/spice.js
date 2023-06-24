@@ -180,19 +180,46 @@ test('test historical prices works', async () => {
 });
 
 
-test('test latest prices works', async () => {
-  const multiplePrices = await client.getMultiplePrices(
+test('test get multiple prices works, test1', async () => {
+  var symbolsText = ["cbETH", "stETH", "rETH"];
+  const multiplePrices1 = await client.getMultiplePrices(
     'AUD',
-    ["ETH", "BTC"]
+    symbolsText
   );
 
-  expect(multiplePrices).toBeTruthy();
-  expect(multiplePrices[0].pair).toEqual("ETH-AUD");
-  expect(multiplePrices[0].minPrice).toBeTruthy;
-  expect(multiplePrices[0].maxPrice).toBeTruthy;
-  expect(multiplePrices[0].avePrice).toBeTruthy;
-  expect(multiplePrices[1].pair).toEqual("BTC-AUD");
-  expect(multiplePrices[1].minPrice).toBeTruthy;
-  expect(multiplePrices[1].maxPrice).toBeTruthy;
-  expect(multiplePrices[1].avePrice).toBeTruthy;
+  expect(multiplePrices1).toBeTruthy();
+  expect(multiplePrices1[0].pair).toEqual("CBETH-AUD");
+  expect(multiplePrices1[0].minPrice).toBeTruthy;
+  expect(multiplePrices1[0].maxPrice).toBeTruthy;
+  expect(multiplePrices1[0].avePrice).toBeTruthy;
+  expect(multiplePrices1[1].pair).toEqual("STETH-AUD");
+  expect(multiplePrices1[1].minPrice).toBeTruthy;
+  expect(multiplePrices1[1].maxPrice).toBeTruthy;
+  expect(multiplePrices1[1].avePrice).toBeTruthy;
+  expect(multiplePrices1.length).toEqual(symbolsText.length);
+});
+
+test('test get multiple prices works, test2', async () => {
+  var symbolsText = ["cbETH", "stETH", "rETH"];
+  const multiplePrices2 = await client.getMultiplePrices(
+    '',
+    symbolsText
+  );
+
+  expect(multiplePrices2).toBeTruthy();
+  expect(multiplePrices2[0].pair).toEqual("CBETH-USD");
+  expect(multiplePrices2[0].minPrice).toBeTruthy;
+  expect(multiplePrices2[0].maxPrice).toBeTruthy;
+  expect(multiplePrices2[0].avePrice).toBeTruthy;
+  expect(multiplePrices2[1].pair).toEqual("STETH-USD");
+  expect(multiplePrices2[1].minPrice).toBeTruthy;
+  expect(multiplePrices2[1].maxPrice).toBeTruthy;
+  expect(multiplePrices2[1].avePrice).toBeTruthy;
+  expect(multiplePrices2.length).toEqual(symbolsText.length);
+});
+
+test('test get multiple prices works, test3', async () => {
+  expect(async() => {
+    await client.getMultiplePrices('', [])
+  }).rejects.toThrow('At least 1 symbol is required')
 });

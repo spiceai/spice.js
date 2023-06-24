@@ -15,7 +15,7 @@ import {
 import {
   AsyncQueryRequest,
   AsyncQueryResponse,
-  AsyncPriceRequest,
+  AsyncMultiplePricesRequest,
   HistoricalPrices,
   LatestPrice,
   QueryCompleteNotification,
@@ -143,21 +143,21 @@ class SpiceClient {
   }
 
   public async getMultiplePrices(
-    convertText: string,
-    symbolsText: string[]
+    convert: string,
+    symbols: string[]
     ): Promise<LatestPrice[]> {
-      if (symbolsText?.length < 1) {
+      if (symbols?.length < 1) {
         throw new Error('At least 1 symbol is required');
       }
 
       // Defaults to USD if no conversion symbol provided
-      if (!convertText) {
-        convertText = 'USD';
+      if (!convert) {
+        convert = 'USD';
       }
 
-      const asyncPriceRequest : AsyncPriceRequest = {
-        symbols: symbolsText,
-        convert: convertText
+      const asyncMultiplePricesRequest : AsyncMultiplePricesRequest = {
+        symbols: symbols,
+        convert: convert
       };
 
       const prices = await fetch(`${HTTP_DATA_PATH}/v0.1/prices`, {
@@ -167,7 +167,7 @@ class SpiceClient {
           'Accept-Encoding': 'br, gzip, deflate',
           'X-API-Key': this._apiKey,
         },
-        body: JSON.stringify(asyncPriceRequest),
+        body: JSON.stringify(asyncMultiplePricesRequest),
       });
 
       if (!prices.ok) {

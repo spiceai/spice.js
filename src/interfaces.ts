@@ -13,7 +13,7 @@ export interface AsyncQueryResponse {
   queryId: string;
 }
 
-export interface AsyncPriceRequest {
+export interface AsyncMultiplePricesRequest {
   symbols: string[];
   convert: string;
 }
