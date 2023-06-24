@@ -13,6 +13,11 @@ export interface AsyncQueryResponse {
   queryId: string;
 }
 
+export interface AsyncMultiplePricesRequest {
+  symbols: string[];
+  convert: string;
+}
+
 export interface QueryCompleteNotification {
   appId: number;
   queryId: string;
