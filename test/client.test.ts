@@ -188,7 +188,7 @@ test('test get multiple prices works, when convert is provided and symbols array
   expect(multiplePrices1[0].minPrice).toBeTruthy;
   expect(multiplePrices1[0].maxPrice).toBeTruthy;
   expect(multiplePrices1[0].avePrice).toBeTruthy;
-  expect(multiplePrices1[1].pair).toEqual('ETH-LTC');
+  expect(multiplePrices1[1].pair).toEqual('LTC-ETH');
   expect(multiplePrices1[1].minPrice).toBeTruthy;
   expect(multiplePrices1[1].maxPrice).toBeTruthy;
   expect(multiplePrices1[1].avePrice).toBeTruthy;
