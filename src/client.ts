@@ -15,6 +15,7 @@ import {
 import {
   AsyncQueryRequest,
   AsyncQueryResponse,
+  AsyncMultiplePricesRequest,
   HistoricalPrices,
   LatestPrice,
   QueryCompleteNotification,
@@ -23,7 +24,7 @@ import {
 
 const fetch = require('node-fetch');
 
-const HTTP_DATA_PATH = 'https://data.spiceai.io/';
+const HTTP_DATA_PATH = 'https://data.spiceai.io';
 const FLIGHT_PATH = 'flight.spiceai.io:443';
 
 const PROTO_PATH = './proto/Flight.proto';
@@ -140,6 +141,45 @@ class SpiceClient {
 
     return resp.json() as Promise<HistoricalPrices>;
   }
+
+  public async getMultiplePrices(
+    convert: string,
+    symbols: string[]
+    ): Promise<LatestPrice[]> {
+      if (symbols?.length < 1) {
+        throw new Error('At least 1 symbol is required');
+      }
+
+      // Defaults to USD if no conversion symbol provided
+      if (!convert) {
+        convert = 'USD';
+      }
+
+      const asyncMultiplePricesRequest : AsyncMultiplePricesRequest = {
+        symbols: symbols,
+        convert: convert
+      };
+
+      const prices = await fetch(`${HTTP_DATA_PATH}/v0.1/prices`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept-Encoding': 'br, gzip, deflate',
+          'X-API-Key': this._apiKey,
+        },
+        body: JSON.stringify(asyncMultiplePricesRequest),
+      });
+
+      if (!prices.ok) {
+        throw new Error(
+          `Failed to get prices: ${prices.status} ${
+            prices.statusText
+          } ${await prices.text()}`
+        );
+      }
+
+      return prices.json() as Promise<LatestPrice[]>;
+    }
 
   public async query(
     queryText: string,
@@ -306,9 +346,9 @@ class SpiceClient {
   private fetch = async (path: string, params?: { [key: string]: string }) => {
     let url;
     if (params && Object.keys(params).length) {
-      url = `${HTTP_DATA_PATH}/${path}?${new URLSearchParams(params)}`;
+      url = `${HTTP_DATA_PATH}${path}?${new URLSearchParams(params)}`;
     } else {
-      url = `${HTTP_DATA_PATH}/${path}`;
+      url = `${HTTP_DATA_PATH}${path}`;
     }
 
     return await fetch(url, {
