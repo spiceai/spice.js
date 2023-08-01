@@ -30,26 +30,24 @@ const HTTP_DATA_PATH = 'https://data.spiceai.io';
 const FLIGHT_PATH = 'flight.spiceai.io:443';
 
 const PROTO_PATH = './proto/Flight.proto';
+const fullProtoPath = path.join(__dirname, PROTO_PATH);
+
+const packageDefinition = protoLoader.loadSync(fullProtoPath, {
+  keepCase: true,
+  longs: String,
+  enums: String,
+  defaults: true,
+  oneofs: true,
+});
+const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
+const flight_proto = arrow.flight.protocol;
 
 class SpiceClient {
   private _apiKey: string;
   private _url: string;
-  private _flight_proto: any;
-
-  public constructor(apiKey: string, url: string = FLIGHT_PATH, protoPath: string = PROTO_PATH) {
+  public constructor(apiKey: string, url: string = FLIGHT_PATH) {
     this._apiKey = apiKey;
     this._url = url;
-
-    const fullProtoPath = path.join(__dirname, protoPath);
-    const packageDefinition = protoLoader.loadSync(fullProtoPath, {
-      keepCase: true,
-      longs: String,
-      enums: String,
-      defaults: true,
-      oneofs: true,
-    });
-    const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
-    this._flight_proto = arrow.flight.protocol;
   }
 
   private createClient(meta: any): any {
@@ -63,7 +61,7 @@ class SpiceClient {
       creds,
       callCreds
     );
-    return new this._flight_proto.FlightService(this._url, combCreds);
+    return new flight_proto.FlightService(this._url, combCreds);
   }
 
   private async getResultStream(
