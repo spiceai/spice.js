@@ -40,7 +40,7 @@ class SpiceClient {
     this._apiKey = apiKey;
     this._url = url;
 
-    const fullProtoPath = path.join(__dirname, protoPath);
+    const fullProtoPath = path.resolve(__dirname, protoPath);
     const packageDefinition = protoLoader.loadSync(fullProtoPath, {
       keepCase: true,
       longs: String,
