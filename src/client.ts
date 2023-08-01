@@ -2,6 +2,7 @@ import path from 'path';
 import * as https from 'https';
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
+import * as protobufjs from 'protobufjs';
 import { EventEmitter } from 'stream';
 import { Table, tableFromIPC } from 'apache-arrow';
 import {
@@ -32,13 +33,89 @@ const FLIGHT_PATH = 'flight.spiceai.io:443';
 const PROTO_PATH = './proto/Flight.proto';
 const fullProtoPath = path.join(__dirname, PROTO_PATH);
 
-const packageDefinition = protoLoader.loadSync(fullProtoPath, {
-  keepCase: true,
-  longs: String,
-  enums: String,
-  defaults: true,
-  oneofs: true,
-});
+const packageDefinition = protoLoader.fromJSON(protobufjs.parse(`syntax = "proto3";
+option java_package = "org.apache.arrow.flight.impl";
+option go_package = "github.com/apache/arrow/go/flight;flight";
+option csharp_namespace = "Apache.Arrow.Flight.Protocol";
+package arrow.flight.protocol;
+service FlightService {
+  rpc Handshake(stream HandshakeRequest) returns (stream HandshakeResponse) {}
+  rpc ListFlights(Criteria) returns (stream FlightInfo) {}
+  rpc GetFlightInfo(FlightDescriptor) returns (FlightInfo) {}
+  rpc GetSchema(FlightDescriptor) returns (SchemaResult) {}
+  rpc DoGet(Ticket) returns (stream FlightData) {}
+  rpc DoPut(stream FlightData) returns (stream PutResult) {}
+  rpc DoExchange(stream FlightData) returns (stream FlightData) {}
+  rpc DoAction(Action) returns (stream Result) {}
+  rpc ListActions(Empty) returns (stream ActionType) {}
+}
+message HandshakeRequest {
+  uint64 protocol_version = 1;
+  bytes payload = 2;
+}
+message HandshakeResponse {
+  uint64 protocol_version = 1;
+  bytes payload = 2;
+}
+message BasicAuth {
+  string username = 2;
+  string password = 3;
+}
+message Empty {}
+message ActionType {
+  string type = 1;
+  string description = 2;
+}
+message Criteria {
+  bytes expression = 1;
+}
+message Action {
+  string type = 1;
+  bytes body = 2;
+}
+message Result {
+  bytes body = 1;
+}
+message SchemaResult {
+  bytes schema = 1;
+}
+message FlightDescriptor {
+  enum DescriptorType {
+    UNKNOWN = 0;
+    PATH = 1;
+    CMD = 2;
+  }
+  DescriptorType type = 1;
+  bytes cmd = 2;
+  repeated string path = 3;
+}
+message FlightInfo {
+  bytes schema = 1;
+  FlightDescriptor flight_descriptor = 2;
+  repeated FlightEndpoint endpoint = 3;
+  int64 total_records = 4;
+  int64 total_bytes = 5;
+}
+message FlightEndpoint {
+  Ticket ticket = 1;
+  repeated Location location = 2;
+}
+message Location {
+  string uri = 1;
+}
+message Ticket {
+  bytes ticket = 1;
+}
+message FlightData {
+  FlightDescriptor flight_descriptor = 1;
+  bytes data_header = 2;
+  bytes app_metadata = 3;
+  bytes data_body = 1000;
+}
+message PutResult {
+  bytes app_metadata = 1;
+}`).root)
+
 const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
 const flight_proto = arrow.flight.protocol;
 
