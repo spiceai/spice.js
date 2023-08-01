@@ -30,9 +30,6 @@ const httpsAgent = new https.Agent({ keepAlive: true });
 const HTTP_DATA_PATH = 'https://data.spiceai.io';
 const FLIGHT_PATH = 'flight.spiceai.io:443';
 
-const PROTO_PATH = './proto/Flight.proto';
-const fullProtoPath = path.join(__dirname, PROTO_PATH);
-
 const packageDefinition = protoLoader.fromJSON(protobufjs.parse(`syntax = "proto3";
 option java_package = "org.apache.arrow.flight.impl";
 option go_package = "github.com/apache/arrow/go/flight;flight";
@@ -114,7 +111,13 @@ message FlightData {
 }
 message PutResult {
   bytes app_metadata = 1;
-}`).root)
+}`).root, {
+  keepCase: true,
+  longs: String,
+  enums: String,
+  defaults: true,
+  oneofs: true,
+})
 
 const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
 const flight_proto = arrow.flight.protocol;
