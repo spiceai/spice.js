@@ -118,8 +118,7 @@ message PutResult {
   enums: String,
   defaults: true,
   oneofs: true,
-})
-
+});
 const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
 const flight_proto = arrow.flight.protocol;
 
