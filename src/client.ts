@@ -39,7 +39,7 @@ service FlightService {
   rpc Handshake(stream HandshakeRequest) returns (stream HandshakeResponse) {}
   rpc ListFlights(Criteria) returns (stream FlightInfo) {}
   rpc GetFlightInfo(FlightDescriptor) returns (FlightInfo) {}
-  rpc GetSchema(FlightDescriptor) returns (SchemaResult) {}
+   rpc GetSchema(FlightDescriptor) returns (SchemaResult) {}
   rpc DoGet(Ticket) returns (stream FlightData) {}
   rpc DoPut(stream FlightData) returns (stream PutResult) {}
   rpc DoExchange(stream FlightData) returns (stream FlightData) {}
@@ -111,7 +111,8 @@ message FlightData {
 }
 message PutResult {
   bytes app_metadata = 1;
-}`).root, {
+}
+`).root, {
   keepCase: true,
   longs: String,
   enums: String,
