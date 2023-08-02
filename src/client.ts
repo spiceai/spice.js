@@ -30,7 +30,11 @@ const HTTP_DATA_PATH = 'https://data.spiceai.io';
 const FLIGHT_PATH = 'flight.spiceai.io:443';
 
 const PROTO_PATH = './proto/Flight.proto';
-const fullProtoPath = path.join(__dirname, PROTO_PATH);
+// If we're running in a Next.js environment, we need to adjust the path to the proto file
+const PACKAGE_PATH = __dirname.includes('/.next/server/app')
+  ? __dirname.replace(/\/\.next\/.*$/, "/node_modules/@spiceai/spice/dist")
+  : __dirname;
+const fullProtoPath = path.join(PACKAGE_PATH, PROTO_PATH);
 
 const packageDefinition = protoLoader.loadSync(fullProtoPath, {
   keepCase: true,
