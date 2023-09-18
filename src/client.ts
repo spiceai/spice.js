@@ -21,6 +21,8 @@ import {
   LatestPrice,
   QueryCompleteNotification,
   QueryResultsResponse,
+  LatestPrices,
+  PriceResponseV1,
 } from './interfaces';
 
 const fetch = require('node-fetch');
@@ -98,6 +100,47 @@ class SpiceClient {
     // DoGet return a stream of FlightData
     return client.DoGet(flightTicket);
   }
+
+  public async getLatestPrices(pairs: string[]): Promise<LatestPrices> {
+    if (!pairs || pairs.length === 0) {
+        throw new Error('At least one pair is required');
+    }
+
+    const resp = await this.fetchInternal(`/v1/prices/latest?pair=` + pairs.join(","));
+    if (!resp.ok) {
+        throw new Error(
+            `Failed to get latest prices V1: ${resp.statusText} (${await resp.text()})`
+        );
+    }
+
+    let data = await resp.json();
+    return data as LatestPrices;
+}
+
+public async getV1Prices(pair: string[], startTime?: number, endTime?: number, granularity?: string): Promise<PriceResponseV1> {
+    if (!pair || pair.length == 0) {
+        throw new Error('Pair is required');
+    }
+    var url = `/v1/prices?pair=${pair.join(",")}`
+    if (startTime) {
+      url += `&start=${startTime}`
+    }
+    if (endTime) {
+      url += `&end=${endTime}`
+    }
+    if (granularity) {
+      url += `&granularity=${granularity}`
+    }
+    const resp = await this.fetchInternal(url);
+    if (!resp.ok) {
+        throw new Error(
+            `Failed to get V1 prices: ${resp.statusText} (${await resp.text()})`
+        );
+    }
+
+    return resp.json() as Promise<PriceResponseV1>;
+}
+
 
   public async getPrice(pair: string): Promise<LatestPrice> {
     if (!pair) {
