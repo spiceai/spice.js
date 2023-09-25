@@ -117,7 +117,7 @@ class SpiceClient {
     return data as LatestPrices;
 }
 
-public async getV1Prices(pair: string[], startTime?: number, endTime?: number, granularity?: string): Promise<PriceResponseV1> {
+public async getPrices(pair: string[], startTime?: number, endTime?: number, granularity?: string): Promise<PriceResponseV1> {
     if (!pair || pair.length == 0) {
         throw new Error('Pair is required');
     }
@@ -140,96 +140,6 @@ public async getV1Prices(pair: string[], startTime?: number, endTime?: number, g
 
     return resp.json() as Promise<PriceResponseV1>;
 }
-
-
-  public async getPrice(pair: string): Promise<LatestPrice> {
-    if (!pair) {
-      throw new Error('Pair is required');
-    }
-
-    const resp = await this.fetchInternal(`/v0.1/prices/${pair}`);
-    if (!resp.ok) {
-      throw new Error(
-        `Failed to get latest price: ${resp.statusText} (${await resp.text()})`
-      );
-    }
-
-    return resp.json() as Promise<LatestPrice>;
-  }
-
-  public async getPrices(
-    pair: string,
-    startTime?: number,
-    endTime?: number,
-    granularity?: string
-  ): Promise<HistoricalPrices> {
-    if (!pair) {
-      throw new Error('Pair is required');
-    }
-
-    const params: { [key: string]: string } = {
-      preview: 'true',
-    };
-
-    if (startTime) {
-      params.start = startTime.toString();
-    }
-    if (endTime) {
-      params.end = endTime.toString();
-    }
-    if (granularity) {
-      params.granularity = granularity;
-    }
-
-    const resp = await this.fetchInternal(`/v0.1/prices/${pair}`, params);
-    if (!resp.ok) {
-      throw new Error(
-        `Failed to get prices: ${resp.statusText} (${await resp.text()})`
-      );
-    }
-
-    return resp.json() as Promise<HistoricalPrices>;
-  }
-
-  public async getMultiplePrices(
-    convert: string,
-    symbols: string[]
-  ): Promise<LatestPrice[]> {
-    if (symbols?.length < 1) {
-      throw new Error('At least 1 symbol is required');
-    }
-
-    // Defaults to USD if no conversion symbol provided
-    if (!convert) {
-      convert = 'USD';
-    }
-
-    const asyncMultiplePricesRequest: AsyncMultiplePricesRequest = {
-      symbols: symbols,
-      convert: convert,
-    };
-
-    const prices = await fetch(`${HTTP_DATA_PATH}/v0.1/prices`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept-Encoding': 'br, gzip, deflate',
-        'X-API-Key': this._apiKey,
-      },
-      body: JSON.stringify(asyncMultiplePricesRequest),
-      agent: httpsAgent,
-    });
-
-    if (!prices.ok) {
-      throw new Error(
-        `Failed to get prices: ${prices.status} ${
-          prices.statusText
-        } ${await prices.text()}`
-      );
-    }
-
-    return prices.json() as Promise<LatestPrice[]>;
-  }
 
   public async query(
     queryText: string,
