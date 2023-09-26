@@ -184,8 +184,9 @@ test('test historical prices works', async () => {
         expect(new Date(price.timestamp).getTime()).toEqual(unixMilli);
         unixMilli += 3600 * 1000
     });
-    expect(prices[v][0].price).toEqual(16612.22);
-    expect(prices[v][23].price).toEqual(16527.39);
+
+    expect(prices[v][0].price).toEqual(16527.39);
+    expect(prices[v][23].price).toEqual(16612.22);
   })
 });
 
