@@ -34,11 +34,6 @@ export interface QueryResultsResponse {
   rows: any[];
 }
 
-export interface HistoricalPrices {
-  pair: string;
-  prices: HLOCPrice[];
-}
-
 export interface HLOCPrice {
   timestamp: string;
   price: number;
@@ -46,13 +41,6 @@ export interface HLOCPrice {
   low?: number;
   open?: number;
   close?: number;
-}
-
-export interface LatestPrice {
-  pair: string;
-  minPrice: string;
-  maxPrice: string;
-  avePrice: string;
 }
 
 interface LatestExchangePrices {
@@ -66,6 +54,6 @@ export interface LatestPrices {
   [key: string]: LatestExchangePrices;
 }
 
-export interface PriceResponseV1 {
+export interface HistoricalPrices {
   [key: string]: HLOCPrice[];
 }

@@ -17,12 +17,10 @@ import {
   AsyncQueryRequest,
   AsyncQueryResponse,
   AsyncMultiplePricesRequest,
-  HistoricalPrices,
-  LatestPrice,
   QueryCompleteNotification,
   QueryResultsResponse,
+  HistoricalPrices,
   LatestPrices,
-  PriceResponseV1,
 } from './interfaces';
 
 const fetch = require('node-fetch');
@@ -117,7 +115,7 @@ class SpiceClient {
     return data as LatestPrices;
 }
 
-public async getPrices(pair: string[], startTime?: number, endTime?: number, granularity?: string): Promise<PriceResponseV1> {
+public async getPrices(pair: string[], startTime?: number, endTime?: number, granularity?: string): Promise<HistoricalPrices> {
     if (!pair || pair.length == 0) {
         throw new Error('Pair is required');
     }
@@ -138,7 +136,7 @@ public async getPrices(pair: string[], startTime?: number, endTime?: number, gra
         );
     }
 
-    return resp.json() as Promise<PriceResponseV1>;
+    return resp.json() as Promise<HistoricalPrices>;
 }
 
   public async query(
