@@ -26,9 +26,6 @@ import {
 const fetch = require('node-fetch');
 const httpsAgent = new https.Agent({ keepAlive: true });
 
-const HTTP_DATA_PATH = 'https://data.spiceai.io';
-const FLIGHT_PATH = 'flight.spiceai.io:443';
-
 const PROTO_PATH = './proto/Flight.proto';
 // If we're running in a Next.js environment, we need to adjust the path to the proto file
 const PACKAGE_PATH = __dirname.includes('/.next/server/app')
@@ -48,10 +45,13 @@ const flight_proto = arrow.flight.protocol;
 
 class SpiceClient {
   private _apiKey: string;
-  private _url: string;
-  public constructor(apiKey: string, url: string = FLIGHT_PATH) {
+  private _flight_url: string;
+  private _http_url: string;
+
+  public constructor(apiKey: string, http_url: string = 'https://data.spiceai.io', flight_url: string = 'flight.spiceai.io:443') {
     this._apiKey = apiKey;
-    this._url = url;
+    this._http_url = http_url;
+    this._flight_url = flight_url;
   }
 
   private createClient(meta: any): any {
@@ -65,7 +65,7 @@ class SpiceClient {
       creds,
       callCreds
     );
-    return new flight_proto.FlightService(this._url, combCreds);
+    return new flight_proto.FlightService(this._flight_url, combCreds);
   }
 
   private async getResultStream(
@@ -191,7 +191,7 @@ public async getPrices(pair: string[], startTime?: number, endTime?: number, gra
       notifications: [{ name: queryName, type: 'webhook', uri: webhookUri }],
     };
 
-    const resp = await fetch(`${HTTP_DATA_PATH}/v0.1/sql`, {
+    const resp = await fetch(`${this._http_url}/v0.1/sql`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -308,9 +308,9 @@ public async getPrices(pair: string[], startTime?: number, endTime?: number, gra
   ) => {
     let url;
     if (params && Object.keys(params).length) {
-      url = `${HTTP_DATA_PATH}${path}?${new URLSearchParams(params)}`;
+      url = `${this._http_url}${path}?${new URLSearchParams(params)}`;
     } else {
-      url = `${HTTP_DATA_PATH}${path}`;
+      url = `${this._http_url}${path}`;
     }
 
     return await fetch(url, {

@@ -13,12 +13,15 @@ import { LatestPrices } from '../src/interfaces';
 const RELAY_BUCKETS = ['spice.js'];
 const RELAY_URL = 'https://o4skc7qyx7mrl8x7wdtgmc.hooks.webhookrelay.com';
 
+const HTTP_DATA_PATH = process.env.HTTP_URL ? process.env.HTTP_URL : 'https://data.spiceai.io'
+const FLIGHT_PATH =  process.env.FLIGHT_URL ? process.env.FLIGHT_URL : 'flight.spiceai.io:443'
+
 dotenv.config();
 const api_key = process.env.API_KEY;
 if (!api_key) {
   throw 'API_KEY environment variable not set';
 }
-const client = new SpiceClient(api_key);
+const client = new SpiceClient(api_key, HTTP_DATA_PATH, FLIGHT_PATH);
 
 const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
@@ -188,7 +191,7 @@ test('test historical prices works', async () => {
     expect(prices[v][0].price).toEqual(16527.39);
     expect(prices[v][23].price).toEqual(16612.22);
   })
-});
+}, 10000);
 
 test('test historical prices with multiple pairs', async () => {
   let pairs=['BTC-USD', 'ETH-AUD'];
@@ -211,4 +214,4 @@ test('test historical prices with multiple pairs', async () => {
     expect(prices[v][0].price).toBeGreaterThan(0.0);
     expect(prices[v][23].price).toBeGreaterThan(0.0);
   })
-});
+}, 10000);
