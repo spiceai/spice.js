@@ -191,7 +191,7 @@ test('test historical prices works', async () => {
     expect(prices[v][0].price).toEqual(16527.39);
     expect(prices[v][23].price).toEqual(16612.22);
   })
-});
+}, 10000);
 
 test('test historical prices with multiple pairs', async () => {
   let pairs=['BTC-USD', 'ETH-AUD'];
@@ -214,4 +214,4 @@ test('test historical prices with multiple pairs', async () => {
     expect(prices[v][0].price).toBeGreaterThan(0.0);
     expect(prices[v][23].price).toBeGreaterThan(0.0);
   })
-});
+}, 10000);
