@@ -131,9 +131,9 @@ public async getPrices(pair: string[], startTime?: number, endTime?: number, gra
     }
     const resp = await this.fetchInternal(url);
     if (!resp.ok) {
-        throw new Error(
-            `Failed to get V1 prices: ${resp.statusText} (${await resp.text()})`
-        );
+      throw new Error(
+        `Failed to get V1 prices: ${resp.statusText} (${await resp.text()})`
+      );
     }
 
     return resp.json() as Promise<HistoricalPrices>;
