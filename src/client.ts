@@ -17,10 +17,10 @@ import {
   AsyncQueryRequest,
   AsyncQueryResponse,
   AsyncMultiplePricesRequest,
-  HistoricalPrices,
-  LatestPrice,
   QueryCompleteNotification,
   QueryResultsResponse,
+  HistoricalPrices,
+  LatestPrices,
 } from './interfaces';
 
 const fetch = require('node-fetch');
@@ -99,94 +99,45 @@ class SpiceClient {
     return client.DoGet(flightTicket);
   }
 
-  public async getPrice(pair: string): Promise<LatestPrice> {
-    if (!pair) {
-      throw new Error('Pair is required');
+  public async getLatestPrices(pairs: string[]): Promise<LatestPrices> {
+    if (!pairs || pairs.length === 0) {
+      throw new Error('At least one pair is required');
     }
 
-    const resp = await this.fetchInternal(`/v0.1/prices/${pair}`);
+    const resp = await this.fetchInternal(`/v1/prices/latest?pair=` + pairs.join(","));
     if (!resp.ok) {
       throw new Error(
-        `Failed to get latest price: ${resp.statusText} (${await resp.text()})`
+        `Failed to get latest prices V1: ${resp.statusText} (${await resp.text()})`
       );
     }
 
-    return resp.json() as Promise<LatestPrice>;
-  }
+    let data = await resp.json();
+    return data as LatestPrices;
+}
 
-  public async getPrices(
-    pair: string,
-    startTime?: number,
-    endTime?: number,
-    granularity?: string
-  ): Promise<HistoricalPrices> {
-    if (!pair) {
+public async getPrices(pair: string[], startTime?: number, endTime?: number, granularity?: string): Promise<HistoricalPrices> {
+    if (!pair || pair.length == 0) {
       throw new Error('Pair is required');
     }
-
-    const params: { [key: string]: string } = {
-      preview: 'true',
-    };
-
+    var url = `/v1/prices?pair=${pair.join(",")}`
     if (startTime) {
-      params.start = startTime.toString();
+      url += `&start=${startTime}`
     }
     if (endTime) {
-      params.end = endTime.toString();
+      url += `&end=${endTime}`
     }
     if (granularity) {
-      params.granularity = granularity;
+      url += `&granularity=${granularity}`
     }
-
-    const resp = await this.fetchInternal(`/v0.1/prices/${pair}`, params);
+    const resp = await this.fetchInternal(url);
     if (!resp.ok) {
       throw new Error(
-        `Failed to get prices: ${resp.statusText} (${await resp.text()})`
+        `Failed to get V1 prices: ${resp.statusText} (${await resp.text()})`
       );
     }
 
     return resp.json() as Promise<HistoricalPrices>;
-  }
-
-  public async getMultiplePrices(
-    convert: string,
-    symbols: string[]
-  ): Promise<LatestPrice[]> {
-    if (symbols?.length < 1) {
-      throw new Error('At least 1 symbol is required');
-    }
-
-    // Defaults to USD if no conversion symbol provided
-    if (!convert) {
-      convert = 'USD';
-    }
-
-    const asyncMultiplePricesRequest: AsyncMultiplePricesRequest = {
-      symbols: symbols,
-      convert: convert,
-    };
-
-    const prices = await fetch(`${HTTP_DATA_PATH}/v0.1/prices`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept-Encoding': 'br, gzip, deflate',
-        'X-API-Key': this._apiKey,
-      },
-      body: JSON.stringify(asyncMultiplePricesRequest),
-      agent: httpsAgent,
-    });
-
-    if (!prices.ok) {
-      throw new Error(
-        `Failed to get prices: ${prices.status} ${
-          prices.statusText
-        } ${await prices.text()}`
-      );
-    }
-
-    return prices.json() as Promise<LatestPrice[]>;
-  }
+}
 
   public async query(
     queryText: string,
