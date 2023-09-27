@@ -13,12 +13,15 @@ import { LatestPrices } from '../src/interfaces';
 const RELAY_BUCKETS = ['spice.js'];
 const RELAY_URL = 'https://o4skc7qyx7mrl8x7wdtgmc.hooks.webhookrelay.com';
 
+const HTTP_DATA_PATH = process.env.HTTP_URL ? process.env.HTTP_URL : 'https://data.spiceai.io'
+const FLIGHT_PATH =  process.env.FLIGHT_URL ? process.env.FLIGHT_URL : 'flight.spiceai.io:443'
+
 dotenv.config();
 const api_key = process.env.API_KEY;
 if (!api_key) {
   throw 'API_KEY environment variable not set';
 }
-const client = new SpiceClient(api_key);
+const client = new SpiceClient(api_key, HTTP_DATA_PATH, FLIGHT_PATH);
 
 const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
