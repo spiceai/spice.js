@@ -101,14 +101,14 @@ class SpiceClient {
 
   public async getLatestPrices(pairs: string[]): Promise<LatestPrices> {
     if (!pairs || pairs.length === 0) {
-        throw new Error('At least one pair is required');
+      throw new Error('At least one pair is required');
     }
 
     const resp = await this.fetchInternal(`/v1/prices/latest?pair=` + pairs.join(","));
     if (!resp.ok) {
-        throw new Error(
-            `Failed to get latest prices V1: ${resp.statusText} (${await resp.text()})`
-        );
+      throw new Error(
+        `Failed to get latest prices V1: ${resp.statusText} (${await resp.text()})`
+      );
     }
 
     let data = await resp.json();
@@ -117,7 +117,7 @@ class SpiceClient {
 
 public async getPrices(pair: string[], startTime?: number, endTime?: number, granularity?: string): Promise<HistoricalPrices> {
     if (!pair || pair.length == 0) {
-        throw new Error('Pair is required');
+      throw new Error('Pair is required');
     }
     var url = `/v1/prices?pair=${pair.join(",")}`
     if (startTime) {
