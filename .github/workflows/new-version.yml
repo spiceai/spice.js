@@ -24,17 +24,17 @@ jobs:
         run: |
           VERSION=$(jq -r .version package.json)
           echo "Extracted version is $VERSION"
-          echo "::set-output name=version::$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           
       - name: Check if tag exists
         id: check-tag
         run: |
-          if git tag | grep -q "v${{ steps.get-version.outputs.version }}"; then
+          if git tag | grep -q "${{ steps.get-version.outputs.version }}"; then
             echo "Tag exists"
-            echo "::set-output name=exists::1"
+            echo "exists=1" >> "$GITHUB_OUTPUT"
           else
             echo "Tag does not exist"
-            echo "::set-output name=exists::0"
+            echo "exists=0" >> "$GITHUB_OUTPUT"
           fi
 
   create-tag-and-release:
