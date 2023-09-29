@@ -148,7 +148,7 @@ test('async query all pages works', async () => {
   expect(queryResp.queryId).toHaveLength(36);
 
   await webhook;
-}, 60000);
+}, 30000);
 
 test('test latest prices (USD) works', async () => {
   let pair='BTC-USD';
