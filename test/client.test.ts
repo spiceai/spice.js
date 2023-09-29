@@ -59,7 +59,7 @@ test('full result works', async () => {
 
   let baseFeeGwei = tableResult.getChild('base_fee_per_gas_gwei');
   expect(baseFeeGwei?.length).toEqual(3);
-});
+}, 30000);
 
 test('async query first page works', async () => {
   const queryName = 'recent_eth_blocks';
