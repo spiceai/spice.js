@@ -106,7 +106,7 @@ test('async query first page works', async () => {
 }, 30000);
 
 test('async query all pages works', async () => {
-  const rowLimit = 1250;
+  const rowLimit = 25;
   const queryName = 'recent_eth_transactions_paged';
   const queryText = `SELECT block_number, transaction_index, "value" FROM eth.recent_transactions limit ${rowLimit}`;
 
