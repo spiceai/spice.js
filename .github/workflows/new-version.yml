@@ -32,10 +32,10 @@ jobs:
         run: |
           if git tag | grep -q "${{ steps.get-version.outputs.version }}"; then
             echo "Tag exists"
-            echo "exists=1" >> "$GITHUB_OUTPUT"
+            echo "tag-exists=1" >> "$GITHUB_OUTPUT"
           else
             echo "Tag does not exist"
-            echo "exists=0" >> "$GITHUB_OUTPUT"
+            echo "tag-exists=0" >> "$GITHUB_OUTPUT"
           fi
 
   create-tag-and-release:
