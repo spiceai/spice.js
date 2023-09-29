@@ -22,6 +22,7 @@ if (!api_key) {
   throw 'API_KEY environment variable not set';
 }
 const client = new SpiceClient(api_key, HTTP_DATA_PATH, FLIGHT_PATH);
+await client.queryAsync('recent_eth_transactions_paged', `SELECT block_number, transaction_index, "value" FROM eth.recent_transactions limit 1250`, RELAY_URL);
 
 const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
@@ -106,7 +107,7 @@ test('async query first page works', async () => {
 }, 30000);
 
 test('async query all pages works', async () => {
-  const rowLimit = 25;
+  const rowLimit = 1250;
   const queryName = 'recent_eth_transactions_paged';
   const queryText = `SELECT block_number, transaction_index, "value" FROM eth.recent_transactions limit ${rowLimit}`;
 
