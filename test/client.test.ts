@@ -174,7 +174,7 @@ test('test latest prices (other currency) works', async () => {
   expect(latestPrice[pair].minPrice).toBeTruthy();
   expect(latestPrice[pair].maxPrice).toBeTruthy();
   expect(latestPrice[pair].avePrice).toBeTruthy();
-});
+}, 10000);
 
 test('test historical prices works', async () => {
   let pairs=['BTC-USD'];
