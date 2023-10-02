@@ -22,6 +22,13 @@ if (!api_key) {
   throw 'API_KEY environment variable not set';
 }
 const client = new SpiceClient(api_key, HTTP_DATA_PATH, FLIGHT_PATH);
+beforeAll(async () => {
+  let p1 = client.queryAsync('recent_eth_blocks',   'SELECT number, "timestamp", base_fee_per_gas, base_fee_per_gas / 1e9 AS base_fee_per_gas_gwei FROM eth.recent_blocks limit 3', RELAY_URL);
+  let p2 = client.queryAsync('recent_eth_transactions_paged', `SELECT block_number, transaction_index, "value" FROM eth.recent_transactions limit 1250`, RELAY_URL);
+  await p1
+  await p2
+}, 30000);
+
 
 const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
@@ -52,7 +59,7 @@ test('full result works', async () => {
 
   let baseFeeGwei = tableResult.getChild('base_fee_per_gas_gwei');
   expect(baseFeeGwei?.length).toEqual(3);
-});
+}, 30000);
 
 test('async query first page works', async () => {
   const queryName = 'recent_eth_blocks';
@@ -167,7 +174,7 @@ test('test latest prices (other currency) works', async () => {
   expect(latestPrice[pair].minPrice).toBeTruthy();
   expect(latestPrice[pair].maxPrice).toBeTruthy();
   expect(latestPrice[pair].avePrice).toBeTruthy();
-});
+}, 10000);
 
 test('test historical prices works', async () => {
   let pairs=['BTC-USD'];
