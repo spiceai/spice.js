@@ -104,7 +104,7 @@ class SpiceClient {
       throw new Error('At least one pair is required');
     }
 
-    const resp = await this.fetchInternal(`/v1/prices/latest?pair=` + pairs.join(","));
+    const resp = await this.fetchInternal(`/v1/prices?pair=` + pairs.join(","));
     if (!resp.ok) {
       throw new Error(
         `Failed to get latest prices V1: ${resp.statusText} (${await resp.text()})`
@@ -119,7 +119,7 @@ public async getPrices(pair: string[], startTime?: number, endTime?: number, gra
     if (!pair || pair.length == 0) {
       throw new Error('Pair is required');
     }
-    var url = `/v1/prices?pair=${pair.join(",")}`
+    var url = `/v1/prices/historical?pair=${pair.join(",")}`
     if (startTime) {
       url += `&start=${startTime}`
     }
