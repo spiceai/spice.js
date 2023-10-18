@@ -119,6 +119,7 @@ public async getPrices(pair: string[], startTime?: number, endTime?: number, gra
     if (!pair || pair.length == 0) {
       throw new Error('Pair is required');
     }
+
     var url = `/v1/prices/historical?pairs=${pair.join(",")}`
     if (startTime) {
       url += `&start=${startTime}`
