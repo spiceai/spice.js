@@ -1,8 +1,8 @@
 # spice.js
 
-Spice.xyz client library for Node.JS
+Spice.ai client library for Node.JS
 
-See full documentation at [docs.spice.xyz](https://docs.spice.xyz/sdks/node.js-sdk).
+See full documentation at [docs.spice.ai](https://docs.spice.ai/sdks/node.js-sdk).
 
 ## Installation
 
@@ -31,7 +31,7 @@ Querying data is done through a `SpiceClient` object that initializes the connec
 - `apiKey` (string, required): API key to authenticate with the endpoint.
 - `url` (string, optional): URL of the endpoint to use (default: flight.spiceai.io:443)
 
-Read more about the Spice.xyz Apache Arrow Flight API at [docs.spice.xyz](https://docs.spice.xyz/api/sql-query-api/apache-arrow-flight-api).
+Read more about the Spice.ai Apache Arrow Flight API at [docs.spice.ai](https://docs.spice.ai/api/sql-query-api/apache-arrow-flight-api).
 
 ### Async Query
 
@@ -61,8 +61,8 @@ const main = async () => {
 main();
 ```
 
-Read more about the Spice.xyz Async HTTP API at [docs.spice.xyz](https://docs.spice.xyz/api/sql-query-api/http-api-1).
+Read more about the Spice.ai Async HTTP API at [docs.spice.ai](https://docs.spice.ai/api/sql-query-api/http-api-1).
 
 ## Documentation
 
-Check out our [API documentation](https://docs.spice.xyz/sdks/node.js-sdk) to learn more about how to use the Node.js SDK.
+Check out our [API documentation](https://docs.spice.ai/sdks/node.js-sdk) to learn more about how to use the Node.js SDK.
