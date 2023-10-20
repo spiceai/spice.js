@@ -29,10 +29,10 @@ To develop locally:
    yarn install
    ```
 
-5. To run the tests, create a `.env` file with your [Spice.xyz](https://spice.xyz) API Key:
+5. To run the tests, create a `.env` file with your [Spice.ai](https://spice.ai) API Key:
 
    ```
-   API_KEY=<Spice.xyz API Key>
+   API_KEY=<Spice.ai API Key>
    ```
 
 6. Run the tests with:
