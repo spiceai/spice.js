@@ -17,17 +17,14 @@ import {
   AsyncQueryRequest,
   AsyncQueryResponse,
   AsyncMultiplePricesRequest,
-  HistoricalPrices,
-  LatestPrice,
   QueryCompleteNotification,
   QueryResultsResponse,
+  HistoricalPrices,
+  LatestPrices,
 } from './interfaces';
 
 const fetch = require('node-fetch');
 const httpsAgent = new https.Agent({ keepAlive: true });
-
-const HTTP_DATA_PATH = 'https://data.spiceai.io';
-const FLIGHT_PATH = 'flight.spiceai.io:443';
 
 const PROTO_PATH = './proto/Flight.proto';
 // If we're running in a Next.js environment, we need to adjust the path to the proto file
@@ -48,10 +45,13 @@ const flight_proto = arrow.flight.protocol;
 
 class SpiceClient {
   private _apiKey: string;
-  private _url: string;
-  public constructor(apiKey: string, url: string = FLIGHT_PATH) {
+  private _flight_url: string;
+  private _http_url: string;
+
+  public constructor(apiKey: string, http_url: string = 'https://data.spiceai.io', flight_url: string = 'flight.spiceai.io:443') {
     this._apiKey = apiKey;
-    this._url = url;
+    this._http_url = http_url;
+    this._flight_url = flight_url;
   }
 
   private createClient(meta: any): any {
@@ -65,7 +65,7 @@ class SpiceClient {
       creds,
       callCreds
     );
-    return new flight_proto.FlightService(this._url, combCreds);
+    return new flight_proto.FlightService(this._flight_url, combCreds);
   }
 
   private async getResultStream(
@@ -99,94 +99,46 @@ class SpiceClient {
     return client.DoGet(flightTicket);
   }
 
-  public async getPrice(pair: string): Promise<LatestPrice> {
-    if (!pair) {
-      throw new Error('Pair is required');
+  public async getLatestPrices(pairs: string[]): Promise<LatestPrices> {
+    if (!pairs || pairs.length === 0) {
+      throw new Error('At least one pair is required');
     }
 
-    const resp = await this.fetchInternal(`/v0.1/prices/${pair}`);
+    const resp = await this.fetchInternal(`/v1/prices?pairs=` + pairs.join(","));
     if (!resp.ok) {
       throw new Error(
-        `Failed to get latest price: ${resp.statusText} (${await resp.text()})`
+        `Failed to get latest prices V1: ${resp.statusText} (${await resp.text()})`
       );
     }
 
-    return resp.json() as Promise<LatestPrice>;
-  }
+    let data = await resp.json();
+    return data as LatestPrices;
+}
 
-  public async getPrices(
-    pair: string,
-    startTime?: number,
-    endTime?: number,
-    granularity?: string
-  ): Promise<HistoricalPrices> {
-    if (!pair) {
+public async getPrices(pair: string[], startTime?: number, endTime?: number, granularity?: string): Promise<HistoricalPrices> {
+    if (!pair || pair.length == 0) {
       throw new Error('Pair is required');
     }
 
-    const params: { [key: string]: string } = {
-      preview: 'true',
-    };
-
+    var url = `/v1/prices/historical?pairs=${pair.join(",")}`
     if (startTime) {
-      params.start = startTime.toString();
+      url += `&start=${startTime}`
     }
     if (endTime) {
-      params.end = endTime.toString();
+      url += `&end=${endTime}`
     }
     if (granularity) {
-      params.granularity = granularity;
+      url += `&granularity=${granularity}`
     }
-
-    const resp = await this.fetchInternal(`/v0.1/prices/${pair}`, params);
+    const resp = await this.fetchInternal(url);
     if (!resp.ok) {
       throw new Error(
-        `Failed to get prices: ${resp.statusText} (${await resp.text()})`
+        `Failed to get V1 prices: ${resp.statusText} (${await resp.text()})`
       );
     }
 
     return resp.json() as Promise<HistoricalPrices>;
-  }
-
-  public async getMultiplePrices(
-    convert: string,
-    symbols: string[]
-  ): Promise<LatestPrice[]> {
-    if (symbols?.length < 1) {
-      throw new Error('At least 1 symbol is required');
-    }
-
-    // Defaults to USD if no conversion symbol provided
-    if (!convert) {
-      convert = 'USD';
-    }
-
-    const asyncMultiplePricesRequest: AsyncMultiplePricesRequest = {
-      symbols: symbols,
-      convert: convert,
-    };
-
-    const prices = await fetch(`${HTTP_DATA_PATH}/v0.1/prices`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept-Encoding': 'br, gzip, deflate',
-        'X-API-Key': this._apiKey,
-      },
-      body: JSON.stringify(asyncMultiplePricesRequest),
-      agent: httpsAgent,
-    });
-
-    if (!prices.ok) {
-      throw new Error(
-        `Failed to get prices: ${prices.status} ${
-          prices.statusText
-        } ${await prices.text()}`
-      );
-    }
-
-    return prices.json() as Promise<LatestPrice[]>;
-  }
+}
 
   public async query(
     queryText: string,
@@ -240,7 +192,7 @@ class SpiceClient {
       notifications: [{ name: queryName, type: 'webhook', uri: webhookUri }],
     };
 
-    const resp = await fetch(`${HTTP_DATA_PATH}/v0.1/sql`, {
+    const resp = await fetch(`${this._http_url}/v0.1/sql`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -357,9 +309,9 @@ class SpiceClient {
   ) => {
     let url;
     if (params && Object.keys(params).length) {
-      url = `${HTTP_DATA_PATH}${path}?${new URLSearchParams(params)}`;
+      url = `${this._http_url}${path}?${new URLSearchParams(params)}`;
     } else {
-      url = `${HTTP_DATA_PATH}${path}`;
+      url = `${this._http_url}${path}`;
     }
 
     return await fetch(url, {
