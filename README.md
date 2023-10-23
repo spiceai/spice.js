@@ -43,10 +43,11 @@ const main = async () => {
     'recent_blocks',
     'SELECT number, "timestamp", gas_used FROM eth.recent_blocks LIMIT 10',
     'https://o4skc7qyx7mrl8x7wdtgmc.hooks.webhookrelay.com'
-  );
+  ).catch((reason) => {
+    console.error('Query failed.', reason)    
+  });
 
-  if (!queryResp.ok) {
-    console.error('Query failed.', queryResp.status);
+  if !queryResp {
     return;
   }
 
