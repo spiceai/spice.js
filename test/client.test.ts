@@ -11,10 +11,17 @@ import {
 import { LatestPrices } from '../src/interfaces';
 
 const RELAY_BUCKETS = ['spice.js'];
-const RELAY_URL = 'https://o4skc7qyx7mrl8x7wdtgmc.hooks.webhookrelay.com';
+const RELAY_URL = process.env.RELAY_URL;
+if (!RELAY_URL) {
+  throw 'RELAY_URL environment variable not set';
+}
 
-const HTTP_DATA_PATH = process.env.HTTP_URL ? process.env.HTTP_URL : 'https://data.spiceai.io'
-const FLIGHT_PATH =  process.env.FLIGHT_URL ? process.env.FLIGHT_URL : 'flight.spiceai.io:443'
+const HTTP_DATA_PATH = process.env.HTTP_URL
+  ? process.env.HTTP_URL
+  : 'https://data.spiceai.io';
+const FLIGHT_PATH = process.env.FLIGHT_URL
+  ? process.env.FLIGHT_URL
+  : 'flight.spiceai.io:443';
 
 dotenv.config();
 const api_key = process.env.API_KEY;
@@ -23,12 +30,19 @@ if (!api_key) {
 }
 const client = new SpiceClient(api_key, HTTP_DATA_PATH, FLIGHT_PATH);
 beforeAll(async () => {
-  let p1 = client.queryAsync('recent_eth_blocks',   'SELECT number, "timestamp", base_fee_per_gas, base_fee_per_gas / 1e9 AS base_fee_per_gas_gwei FROM eth.recent_blocks limit 3', RELAY_URL);
-  let p2 = client.queryAsync('recent_eth_transactions_paged', `SELECT block_number, transaction_index, "value" FROM eth.recent_transactions limit 1250`, RELAY_URL);
-  await p1
-  await p2
+  let p1 = client.queryAsync(
+    'recent_eth_blocks',
+    'SELECT number, "timestamp", base_fee_per_gas, base_fee_per_gas / 1e9 AS base_fee_per_gas_gwei FROM eth.recent_blocks limit 3',
+    RELAY_URL
+  );
+  let p2 = client.queryAsync(
+    'recent_eth_transactions_paged',
+    `SELECT block_number, transaction_index, "value" FROM eth.recent_transactions limit 1250`,
+    RELAY_URL
+  );
+  await p1;
+  await p2;
 }, 30000);
-
 
 const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
@@ -151,7 +165,7 @@ test('async query all pages works', async () => {
 }, 30000);
 
 test('test latest prices (USD) works', async () => {
-  let pair='BTC-USD';
+  let pair = 'BTC-USD';
   const price = await client.getLatestPrices([pair]);
   const latestPrice = price as LatestPrices;
 
@@ -164,7 +178,7 @@ test('test latest prices (USD) works', async () => {
 });
 
 test('test latest prices (other currency) works', async () => {
-  let pair='BTC-AUD';
+  let pair = 'BTC-AUD';
   const price = await client.getLatestPrices([pair]);
   const latestPrice = price as LatestPrices;
 
@@ -177,14 +191,14 @@ test('test latest prices (other currency) works', async () => {
 }, 10000);
 
 test('test historical prices works', async () => {
-  let pairs=['BTC-USD'];
+  let pairs = ['BTC-USD'];
   const prices = await client.getPrices(
     pairs,
     new Date('2023-01-01').getTime() / 1000,
     new Date('2023-01-02').getTime() / 1000,
     '1h'
   );
-  
+
   pairs.forEach((v: string) => {
     expect(prices[v]).toBeTruthy();
     expect(prices[v].length).toEqual(24);
@@ -192,23 +206,23 @@ test('test historical prices works', async () => {
     let unixMilli = Math.floor(new Date('2023-01-01T01:00:00Z').getTime());
     prices[v].forEach((price, index) => {
       expect(new Date(price.timestamp).getTime()).toEqual(unixMilli);
-      unixMilli += 3600 * 1000
+      unixMilli += 3600 * 1000;
     });
 
     expect(prices[v][0].price).toEqual(16527.39);
     expect(prices[v][23].price).toEqual(16612.22);
-  })
+  });
 }, 10000);
 
 test('test historical prices with multiple pairs', async () => {
-  let pairs=['BTC-USD', 'ETH-AUD'];
+  let pairs = ['BTC-USD', 'ETH-AUD'];
   const prices = await client.getPrices(
     pairs,
     new Date('2023-01-01').getTime() / 1000,
     new Date('2023-01-02').getTime() / 1000,
     '1h'
   );
-  
+
   pairs.forEach((v: string) => {
     expect(prices[v]).toBeTruthy();
     expect(prices[v].length).toEqual(24);
@@ -216,9 +230,9 @@ test('test historical prices with multiple pairs', async () => {
     let unixMilli = Math.floor(new Date('2023-01-01T01:00:00Z').getTime());
     prices[v].forEach((price, index) => {
       expect(new Date(price.timestamp).getTime()).toEqual(unixMilli);
-      unixMilli += 3600 * 1000
+      unixMilli += 3600 * 1000;
     });
     expect(prices[v][0].price).toBeGreaterThan(0.0);
     expect(prices[v][23].price).toBeGreaterThan(0.0);
-  })
+  });
 }, 10000);
