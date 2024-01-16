@@ -118,7 +118,7 @@ class SpiceClient {
     return data as LatestPrices;
 }
 
-public async getPrices(pair: string[], startTime?: number, endTime?: number, granularity?: string): Promise<HistoricalPrices> {
+  public async getPrices(pair: string[], startTime?: number, endTime?: number, granularity?: string): Promise<HistoricalPrices> {
     if (!pair || pair.length == 0) {
       throw new Error('Pair is required');
     }
@@ -141,19 +141,27 @@ public async getPrices(pair: string[], startTime?: number, endTime?: number, gra
     }
 
     return resp.json() as Promise<HistoricalPrices>;
-}
+  }
 
   public async query(
     queryText: string,
     onData: ((data: Table) => void) | undefined = undefined
   ): Promise<Table> {
+
+    return retry.retryWithExponentialBackoff<Table>(async () => {
+      return this.doQueryRequest(queryText, onData);
+    }, this._maxRetries);
+
+  }
+  public async doQueryRequest (
+    queryText: string,
+    onData: ((data: Table) => void) | undefined = undefined
+  ): Promise<Table> {
     let client: FlightClient;
 
-    const do_get = await retry.retryWithExponentialBackoff<EventEmitter>(async () => {
-      return this.getResultStream(queryText, (c: FlightClient) => {
-        client = c;
-      });
-    }, this._maxRetries) 
+    const do_get = await this.getResultStream(queryText, (c: FlightClient) => {
+      client = c;
+    });
 
     let schema: Buffer | undefined;
     let chunks: Buffer[] = [];
