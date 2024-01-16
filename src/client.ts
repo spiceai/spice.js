@@ -23,6 +23,8 @@ import {
   LatestPrices,
 } from './interfaces';
 
+import * as retry from './retry';
+
 const fetch = require('node-fetch');
 const httpsAgent = new https.Agent({ keepAlive: true });
 
@@ -47,6 +49,7 @@ class SpiceClient {
   private _apiKey: string;
   private _flight_url: string;
   private _http_url: string;
+  private _maxRetries: number = retry.FLIGHT_QUERY_MAX_RETRIES;
 
   public constructor(apiKey: string, http_url: string = 'https://data.spiceai.io', flight_url: string = 'flight.spiceai.io:443') {
     this._apiKey = apiKey;
@@ -145,9 +148,12 @@ public async getPrices(pair: string[], startTime?: number, endTime?: number, gra
     onData: ((data: Table) => void) | undefined = undefined
   ): Promise<Table> {
     let client: FlightClient;
-    const do_get = await this.getResultStream(queryText, (c: FlightClient) => {
-      client = c;
-    });
+
+    const do_get = await retry.retryWithExponentialBackoff<EventEmitter>(async () => {
+      return this.getResultStream(queryText, (c: FlightClient) => {
+        client = c;
+      });
+    }, this._maxRetries) 
 
     let schema: Buffer | undefined;
     let chunks: Buffer[] = [];
@@ -166,6 +172,11 @@ public async getPrices(pair: string[], startTime?: number, endTime?: number, gra
         const table = tableFromIPC(chunks);
         client.close();
         resolve(table);
+      });
+
+      do_get.on('error', (err: any) => {
+        client.close();
+        reject(err);
       });
     });
   }
@@ -301,6 +312,19 @@ public async getPrices(pair: string[], startTime?: number, endTime?: number, gra
     }
 
     return await this.getQueryResultsAll(notification.queryId);
+  }
+
+  /*
+   * Sets the maximum number of times to retry Query calls. The default is 3
+   * @param maxRetries Num of max retries. Setting to 0 will disable retries
+   */
+  public setMaxRetries (maxRetries: number)  {
+    
+    if (maxRetries < 0) {
+      throw new Error('maxRetries must be greater than or equal to 0');
+    }
+    
+    this._maxRetries = maxRetries;
   }
 
   private fetchInternal = async (
