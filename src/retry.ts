@@ -44,7 +44,7 @@ async function retryWithExponentialBackoff<Type>(operation: any, maxRetries: num
           .catch((err: any) => {
           
             let shouldRetry = shouldRetryOperationForError(err);
-            console.log(`Attempt to retry operation; previous attempts ${operationRetry.attempts()}`);
+            // console.log(`Attempt to retry operation; previous attempts ${operationRetry.attempts()}`);
             if (!shouldRetry) {
               // if we don't retry specific error we can't use operationRetry.mainError() as it is not available
               // so we reject it here 
