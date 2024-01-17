@@ -3,12 +3,21 @@ import * as grpc from '@grpc/grpc-js';
 
 //default max retry value
 const FLIGHT_QUERY_MAX_RETRIES = 3; 
+const SPICE_NO_RETRY_FLAG = '_SPICE_NO_RETRY';
 
-function someFunc(){}
+
+function dontRetry(err: any) {
+  err[SPICE_NO_RETRY_FLAG] = true;
+}
 
 function shouldRetryOperationForError (err: any) : boolean {
 
-    let code  = err && err.code;
+  // error marked as permanent so operation should not be retried
+  if (err && err[SPICE_NO_RETRY_FLAG]) {
+    return false;
+  }  
+  
+  let code  = err && err.code;
 
     if (!code) {
         return false;
@@ -63,5 +72,6 @@ async function retryWithExponentialBackoff<Type>(operation: any, maxRetries: num
 
   export {
     FLIGHT_QUERY_MAX_RETRIES,
+    dontRetry,
     retryWithExponentialBackoff,
   }

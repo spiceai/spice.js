@@ -163,6 +163,9 @@ class SpiceClient {
       client = c;
     });
 
+    // indicates that data has been partially or fully sent
+    let isDataAlreadySent = false;
+
     let schema: Buffer | undefined;
     let chunks: Buffer[] = [];
     do_get.on('data', (response: FlightData) => {
@@ -171,6 +174,7 @@ class SpiceClient {
       if (!schema) {
         schema = ipcMessage;
       } else if (onData) {
+        isDataAlreadySent = true;
         onData(tableFromIPC([schema, ipcMessage]));
       }
     });
@@ -184,6 +188,9 @@ class SpiceClient {
 
       do_get.on('error', (err: any) => {
         client.close();
+        if (isDataAlreadySent)
+          retry.dontRetry(err);
+
         reject(err);
       });
     });
