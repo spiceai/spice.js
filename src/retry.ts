@@ -3,17 +3,17 @@ import * as grpc from '@grpc/grpc-js';
 
 //default max retry value
 const FLIGHT_QUERY_MAX_RETRIES = 3; 
-const SPICE_NO_RETRY_FLAG = '_SPICE_NO_RETRY';
+const SPICE_NO_RETRY = '_SPICE_NO_RETRY';
 
 
 function dontRetry(err: any) {
-  err[SPICE_NO_RETRY_FLAG] = true;
+  err[SPICE_NO_RETRY] = true;
 }
 
 function shouldRetryOperationForError (err: any) : boolean {
 
   // error marked as permanent so operation should not be retried
-  if (err && err[SPICE_NO_RETRY_FLAG]) {
+  if (err && err[SPICE_NO_RETRY]) {
     return false;
   }  
   
@@ -44,27 +44,25 @@ async function retryWithExponentialBackoff<Type>(operation: any, maxRetries: num
       const operationRetry = retry.operation({
         retries: maxRetries,
         // the exponential factor that will be used
-        factor: 2,
+        factor: 1.5,
       });
   
       operationRetry.attempt(() => {
         operation()
           .then(resolve)
           .catch((err: any) => {
-          
-            let shouldRetry = shouldRetryOperationForError(err);
-            // console.log(`Attempt to retry operation; previous attempts ${operationRetry.attempts()}`);
-            if (!shouldRetry) {
-              // if we don't retry specific error we can't use operationRetry.mainError() as it is not available
-              // so we reject it here 
-              reject(err);
+
+            let shouldRetry = shouldRetryOperationForError(err); 
+            
+            // console.log(`Attempt to retry operation; previous attempts ${operationRetry.attempts()}; should retry: ${shouldRetry}`);
+  
+            if (shouldRetry && operationRetry.retry(err)) {
               return;
             }
-  
-            if (operationRetry.retry(err)) {
-              return
-            }
-            reject(operationRetry.mainError())
+
+            // in case we didn't try to retry the operation then mainError will be null
+            // so we need to pass err for this scenario as an alternative
+            reject(operationRetry.mainError() || err)
           })
       })
     })
