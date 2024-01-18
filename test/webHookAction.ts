@@ -1,33 +1,27 @@
 import listenForWebhookMessage from "./ws";
 
-const RELAY_BUCKETS = ['spice.js'];
+const RELAY_BUCKETS = ["spice.js"];
 
 export async function webHookAction(fn: () => void): Promise<string> {
-    return new Promise((resolve, reject) => {
-        try {
-            let ws = listenForWebhookMessage(RELAY_BUCKETS, (body: string) => {
-                // close the websocket
-                ws.close();
-                
-                // resolve the promise after a short delay
-                setTimeout(() => {
-                    try {
-                        resolve(body);
-                    } catch (e) {
-                        reject(e);
-                    }
-                }, 500);
-            });
+  return new Promise(async (resolve, reject) => {
+    try {
+      let ws = await listenForWebhookMessage(RELAY_BUCKETS, (body: string) => {
+        // close the websocket
+        ws.close();
 
-            // invoke action that should trigger a webhook after a short delay to make sure websocket is subscribed
-            setTimeout(() => {
-                fn();
-            }, 2000);
+        // resolve the promise after a short delay as a workaround to ensure that the websocket is
+        // fully closed before the test ends and can be used again
+        setTimeout(() => {
+          resolve(body);
+        }, 500);
+      });
 
-        } catch (e) {
-            reject(e);
-        }
-    });
+      fn();
 
-    // could be improved by adding timeout using Promise.race 
+    } catch (e) {
+      reject(e);
+    }
+  });
+
+  // could be improved by adding timeout+closing ws in this case by using Promise.race
 }
