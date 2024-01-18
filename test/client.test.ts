@@ -2,7 +2,6 @@ import dotenv from 'dotenv';
 import { SpiceClient } from '../';
 import 'dotenv/config';
 import { Vector } from 'apache-arrow';
-import listenForWebhookMessage from './ws';
 import {
   AsyncQueryResponse,
   QueryCompleteNotification,

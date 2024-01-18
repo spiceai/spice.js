@@ -2,7 +2,7 @@ import listenForWebhookMessage from "./ws";
 
 const RELAY_BUCKETS = ["spice.js"];
 
-export async function webHookAction(fn: () => void): Promise<string> {
+const webHookAction = (fn: () => void): Promise<string> => {
   return new Promise(async (resolve, reject) => {
     try {
       let ws = await listenForWebhookMessage(RELAY_BUCKETS, (body: string) => {
@@ -17,11 +17,12 @@ export async function webHookAction(fn: () => void): Promise<string> {
       });
 
       fn();
-
     } catch (e) {
       reject(e);
     }
   });
 
   // could be improved by adding timeout+closing ws in this case by using Promise.race
-}
+};
+
+export { webHookAction };
