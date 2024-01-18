@@ -1,16 +1,14 @@
 import dotenv from 'dotenv';
-import { WebSocket } from 'ws';
 import { SpiceClient } from '../';
 import 'dotenv/config';
 import { Vector } from 'apache-arrow';
-import listenForWebhookMessage from './ws';
 import {
   AsyncQueryResponse,
   QueryCompleteNotification,
 } from '../src/interfaces';
 import { LatestPrices } from '../src/interfaces';
+import { webHookAction } from './webHookAction';
 
-const RELAY_BUCKETS = ['spice.js'];
 const RELAY_URL = process.env.RELAY_URL;
 if (!RELAY_URL) {
   throw 'RELAY_URL environment variable not set';
@@ -80,89 +78,70 @@ test('async query first page works', async () => {
   const queryText =
     'SELECT number, "timestamp", base_fee_per_gas, base_fee_per_gas / 1e9 AS base_fee_per_gas_gwei FROM eth.recent_blocks limit 3';
 
-  let queryResp: AsyncQueryResponse;
-  let ws: WebSocket;
+  let body = await webHookAction(async () => {
+    let queryResp: AsyncQueryResponse = await client.queryAsync(queryName, queryText, RELAY_URL);
 
-  const webhook = new Promise<void>((resolve) => {
-    ws = listenForWebhookMessage(RELAY_BUCKETS, async (body: string) => {
-      ws.close();
-      await wait(500);
+    expect(queryResp).toBeTruthy();
+    expect(queryResp.queryId).toHaveLength(36);
+  })
 
-      const notification = JSON.parse(body) as QueryCompleteNotification;
-      if (notification.sql !== queryText) return;
+  const notification = JSON.parse(body) as QueryCompleteNotification;
+  if (notification.sql !== queryText) return;
 
-      expect(notification.appId).toEqual(239); // spicehq/spicejs
-      expect(notification.queryId).toHaveLength(36);
-      expect(notification.requestTime).toBeTruthy();
-      expect(notification.completionTime).toBeTruthy();
-      expect(notification.state).toEqual('completed');
-      expect(notification.sql).toEqual(queryText);
-      expect(notification.rowCount).toEqual(3);
+  // TODO: change appID to correspond your API key when testing locally
+  expect(notification.appId).toEqual(239); // spicehq/spicejs
 
-      const results = await client.getQueryResultsFromNotification(body);
+  expect(notification.queryId).toHaveLength(36);
+  expect(notification.requestTime).toBeTruthy();
+  expect(notification.completionTime).toBeTruthy();
+  expect(notification.state).toEqual('completed');
+  expect(notification.sql).toEqual(queryText);
+  expect(notification.rowCount).toEqual(3);
 
-      expect(results.rowCount).toEqual(3);
-      expect(results.schema).toHaveLength(4);
-      expect(results.schema[0].name).toEqual('number');
-      expect(results.schema[0].type).toEqual({ name: 'BIGINT' });
-      expect(results.schema[1].name).toEqual('timestamp');
-      expect(results.schema[1].type).toEqual({ name: 'BIGINT' });
-      expect(results.schema[2].name).toEqual('base_fee_per_gas');
-      expect(results.schema[2].type).toEqual({ name: 'BIGINT' });
-      expect(results.schema[3].name).toEqual('base_fee_per_gas_gwei');
-      expect(results.schema[3].type).toEqual({ name: 'DOUBLE' });
+  const results = await client.getQueryResultsFromNotification(body);
 
-      expect(results.rows).toHaveLength(3);
+  expect(results.rowCount).toEqual(3);
+  expect(results.schema).toHaveLength(4);
+  expect(results.schema[0].name).toEqual('number');
+  expect(results.schema[0].type).toEqual({ name: 'BIGINT' });
+  expect(results.schema[1].name).toEqual('timestamp');
+  expect(results.schema[1].type).toEqual({ name: 'BIGINT' });
+  expect(results.schema[2].name).toEqual('base_fee_per_gas');
+  expect(results.schema[2].type).toEqual({ name: 'BIGINT' });
+  expect(results.schema[3].name).toEqual('base_fee_per_gas_gwei');
+  expect(results.schema[3].type).toEqual({ name: 'DOUBLE' });
 
-      resolve();
-    });
-  });
+  expect(results.rows).toHaveLength(3);
 
-  queryResp = await client.queryAsync(queryName, queryText, RELAY_URL);
-
-  expect(queryResp).toBeTruthy();
-  expect(queryResp.queryId).toHaveLength(36);
-
-  await webhook;
-}, 30000);
+}, 60000);
 
 test('async query all pages works', async () => {
   const rowLimit = 1250;
   const queryName = 'recent_eth_transactions_paged';
   const queryText = `SELECT block_number, transaction_index, "value" FROM eth.recent_transactions limit ${rowLimit}`;
 
-  let queryResp: AsyncQueryResponse;
-  let ws: WebSocket;
+  let body = await webHookAction(async () => {
+    let queryResp: AsyncQueryResponse = await client.queryAsync(queryName, queryText, RELAY_URL);
 
-  const webhook = new Promise<void>((resolve) => {
-    ws = listenForWebhookMessage(RELAY_BUCKETS, async (body: string) => {
-      ws.close();
-      await wait(500);
+    expect(queryResp).toBeTruthy();
+    expect(queryResp.queryId).toHaveLength(36);
+  })
 
-      const notification = JSON.parse(body) as QueryCompleteNotification;
-      if (notification.sql !== queryText) return;
+  const notification = JSON.parse(body) as QueryCompleteNotification;
+  if (notification.sql !== queryText) return;
 
-      expect(notification.appId).toEqual(239); // spicehq/spicejs
-      expect(notification.queryId).toHaveLength(36);
-      expect(notification.state).toEqual('completed');
-      expect(notification.rowCount).toEqual(rowLimit);
+  // TODO: change appID to correspond your API key when testing locally
+  expect(notification.appId).toEqual(239); // spicehq/spicejs
+  expect(notification.queryId).toHaveLength(36);
+  expect(notification.state).toEqual('completed');
+  expect(notification.rowCount).toEqual(rowLimit);
 
-      const results = await client.getQueryResultsFromNotification(body);
+  const results = await client.getQueryResultsFromNotification(body);
 
-      expect(results.rowCount).toEqual(rowLimit);
-      expect(results.rows).toHaveLength(rowLimit);
+  expect(results.rowCount).toEqual(rowLimit);
+  expect(results.rows).toHaveLength(rowLimit);
 
-      resolve();
-    });
-  });
-
-  queryResp = await client.queryAsync(queryName, queryText, RELAY_URL);
-
-  expect(queryResp).toBeTruthy();
-  expect(queryResp.queryId).toHaveLength(36);
-
-  await webhook;
-}, 30000);
+}, 60000);
 
 test('test latest prices (USD) works', async () => {
   let pair = 'BTC-USD';

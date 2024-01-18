@@ -16,55 +16,62 @@ if (!relaySecret) {
 
 const listenForWebhookMessage = (
   buckets: string[],
-  onMessage: (body: string) => Promise<void>
-): WebSocket => {
-  const ws = new WebSocket(server);
-  ws.on('open', function () {
-    console.log('web socket connected, sending authentication request');
-    ws.send(
-      JSON.stringify({ action: 'auth', key: relayKey, secret: relaySecret })
-    );
-  });
-
-  ws.on('message', function (data: string) {
-    const msg = JSON.parse(data.toString());
-    switch (msg.type) {
-      case 'status': {
-        console.log('[info] web socket status message received', msg);
-        switch (msg.status) {
-          case 'unauthorized': {
-            throw 'web socket unauthorized. Set RELAY_KEY and RELAY_SECRET environment variables.';
+  onMessage: (body: string) => void
+): Promise<WebSocket> => {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(server);
+    ws.on('open', function () {
+      console.log('web socket connected, sending authentication request');
+      ws.send(
+        JSON.stringify({ action: 'auth', key: relayKey, secret: relaySecret })
+      );
+    });
+    ws.on('message', function (data: string) {
+      const msg = JSON.parse(data.toString());
+      switch (msg.type) {
+        case 'status': {
+          console.log('[info] web socket status message received', msg);
+          switch (msg.status) {
+            case 'unauthorized': {
+              reject('web socket unauthorized. Set RELAY_KEY and RELAY_SECRET environment variables.');
+              break;
+            }
+            case 'authenticated': {
+              ws.send(JSON.stringify({ action: 'subscribe', buckets: buckets }));
+              break;
+            }
+            case 'subscribed': {
+              resolve(ws);
+              break;
+            }
+            case 'ping': {
+              ws.pong();
+              break;
+            }
           }
-          case 'authenticated': {
-            ws.send(JSON.stringify({ action: 'subscribe', buckets: buckets }));
-            break;
-          }
-          case 'ping': {
-            ws.pong();
-            break;
-          }
+          break;
         }
-        break;
+        case 'webhook': {
+          console.log('[info] web socket webhook message received');
+          onMessage(msg.body);
+          break;
+        }
+        default: {
+          console.log('[info] web socket message received', msg);
+        }
       }
-      case 'webhook': {
-        onMessage(msg.body);
-        break;
-      }
-      default: {
-        console.log('[info] web socket message received', msg);
-      }
-    }
-  });
+    });
 
-  ws.on('error', function (e) {
-    console.error('web socket error', e);
-  });
+    ws.on('error', function (e) {
+      console.error('web socket error', e);
+      reject(e);
+    });
 
-  ws.on('close', function (e) {
-    console.log('web socket closed', e);
+    ws.on('close', function (e) {
+      console.log('web socket closed', e);
+      reject(e);
+    });
   });
-
-  return ws;
 };
 
 export default listenForWebhookMessage;
