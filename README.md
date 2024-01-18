@@ -67,3 +67,12 @@ Read more about the Spice.ai Async HTTP API at [docs.spice.ai](https://docs.spic
 ## Documentation
 
 Check out our [API documentation](https://docs.spice.ai/sdks/node.js-sdk) to learn more about how to use the Node.js SDK.
+
+## Running tests locally
+
+To run the tests (`yarn test`):
+1. Create [WebhookRelay](https://webhookrelay.com/) account (Free)
+2. [Create Access Token](https://my.webhookrelay.com/tokens) => save **key** and **secret** as `RELAY_KEY` and `RELAY_SECRET`
+3. Create [New Empty Bucket](https://my.webhookrelay.com/buckets) called `spice.js` => save **Default public endpoint** value as `RELAY_KEY` 
+
+Pass `RELAY_KEY`, `RELAY_SECRET`, `RELAY_URL` as parameters when running the tests.

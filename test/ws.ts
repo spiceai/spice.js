@@ -16,7 +16,7 @@ if (!relaySecret) {
 
 const listenForWebhookMessage = (
   buckets: string[],
-  onMessage: (body: string) => Promise<void>
+  onMessage: (body: string) => void
 ): WebSocket => {
   const ws = new WebSocket(server);
   ws.on('open', function () {
@@ -47,6 +47,7 @@ const listenForWebhookMessage = (
         break;
       }
       case 'webhook': {
+        console.log('[info] web socket webhook message received');
         onMessage(msg.body);
         break;
       }
