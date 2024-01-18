@@ -52,9 +52,6 @@ async function retryWithExponentialBackoff<Type>(
         .catch((err: any) => {
           let shouldRetry = shouldRetryOperationForError(err);
 
-          // console.log(
-          //   `Attempt to retry operation; previous attempts ${operationRetry.attempts()}; should retry: ${shouldRetry}`
-          // );
 
           if (shouldRetry && operationRetry.retry(err)) {
             return;
