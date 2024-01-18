@@ -64,6 +64,14 @@ main();
 
 Read more about the Spice.ai Async HTTP API at [docs.spice.ai](https://docs.spice.ai/api/sql-query-api/http-api-1).
 
+### Configuring retry policy
+
+SDK performs 3 retry attempts when using Apache Arrow Flight API. This could be configured as 
+```
+const spiceClient = new SpiceClient('API_KEY');
+spiceClient.setMaxRetries(5); // Setting to 0 will disable retries
+```
+
 ## Documentation
 
 Check out our [API documentation](https://docs.spice.ai/sdks/node.js-sdk) to learn more about how to use the Node.js SDK.
@@ -73,6 +81,12 @@ Check out our [API documentation](https://docs.spice.ai/sdks/node.js-sdk) to lea
 To run the tests (`yarn test`):
 1. Create [WebhookRelay](https://webhookrelay.com/) account (Free)
 2. [Create Access Token](https://my.webhookrelay.com/tokens) => save **key** and **secret** as `RELAY_KEY` and `RELAY_SECRET`
-3. Create [New Empty Bucket](https://my.webhookrelay.com/buckets) called `spice.js` => save **Default public endpoint** value as `RELAY_KEY` 
+3. Create [New Empty Bucket](https://my.webhookrelay.com/buckets) called `spice.js` => save **Default public endpoint** value as `RELAY_URL` 
 
-Pass `RELAY_KEY`, `RELAY_SECRET`, `RELAY_URL` as parameters when running the tests.
+Pass `RELAY_KEY`, `RELAY_SECRET`, `RELAY_URL` as parameters when running the tests, for example via **.env** config file.
+```
+API_KEY=<Your API_KEY>
+RELAY_KEY=<Your RELAY_KEY from Step 2 above>
+RELAY_SECRET=<Your RELAY_SECRET from Step 2 above>
+RELAY_URL=<Your RELAY_URL from Step 3 above>
+```
