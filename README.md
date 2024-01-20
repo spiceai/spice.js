@@ -76,7 +76,7 @@ spiceClient.setMaxRetries(5); // Setting to 0 will disable retries
 
 Note: Retries are automatically performed for connection and system internal errors. However, it is the responsibility of
 the SDK user to properly handle errors such as RESOURCE_EXHAUSTED or similar. This error indicates that the user's quota has
-been reached, and it may be necessary to decide whether to retry the request immediately or to add throttling mechanism.
+been reached, and it may be necessary to decide whether to retry the request later or to add a throttling mechanism.
 
 ## Documentation
 
