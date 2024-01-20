@@ -66,11 +66,17 @@ Read more about the Spice.ai Async HTTP API at [docs.spice.ai](https://docs.spic
 
 ### Configuring retry policy
 
-SDK performs 3 retry attempts when using Apache Arrow Flight API. This could be configured as 
+Starting from [version 1.0.1](https://github.com/spiceai/spice.js/releases/tag/v1.0.1) the `SpiceClient` implements connection retrying mechanism (3 attemps by default).
+This could be configured or disabled using `setMaxRetries`:
+
 ```
 const spiceClient = new SpiceClient('API_KEY');
 spiceClient.setMaxRetries(5); // Setting to 0 will disable retries
 ```
+
+Note: Retries are automatically performed for connection and system internal errors. However, it is the responsibility of
+the SDK user to properly handle errors such as RESOURCE_EXHAUSTED or similar. This error indicates that the user's quota has
+been reached, and it may be necessary to decide whether to retry the request immediately or to add throttling mechanism.
 
 ## Documentation
 
