@@ -64,7 +64,7 @@ main();
 
 Read more about the Spice.ai Async HTTP API at [docs.spice.ai](https://docs.spice.ai/api/sql-query-api/http-api-1).
 
-### Configuring retry policy
+### Connection retry
 
 From [version 1.0.1](https://github.com/spiceai/spice.js/releases/tag/v1.0.1) the `SpiceClient` implements connection retry mechanism (3 attemps by default).
 The number of attempts can be configured via `setMaxRetries`:
