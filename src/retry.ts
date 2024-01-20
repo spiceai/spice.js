@@ -26,6 +26,7 @@ function shouldRetryOperationForError(err: any): boolean {
     grpc.status.DEADLINE_EXCEEDED,
     grpc.status.ABORTED,
     grpc.status.INTERNAL,
+    grpc.status.UNKNOWN,
   ].includes(code);
 }
 
