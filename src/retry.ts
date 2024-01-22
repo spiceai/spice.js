@@ -22,12 +22,11 @@ function shouldRetryOperationForError(err: any): boolean {
   }
 
   return [
-    grpc.status.CANCELLED,
     grpc.status.UNAVAILABLE,
     grpc.status.DEADLINE_EXCEEDED,
-    grpc.status.RESOURCE_EXHAUSTED,
     grpc.status.ABORTED,
     grpc.status.INTERNAL,
+    grpc.status.UNKNOWN,
   ].includes(code);
 }
 
