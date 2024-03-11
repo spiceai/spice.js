@@ -16,7 +16,7 @@
   "dependencies": {
     "@grpc/grpc-js": "^1.9.13",
     "@grpc/proto-loader": "^0.7.6",
-    "apache-arrow": "^14.0.2",
+    "apache-arrow": "^15.0.1",
     "node-fetch": "^2.6.9",
     "retry": "^0.13.1"
   },
