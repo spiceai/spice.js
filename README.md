@@ -39,7 +39,7 @@ Read more about the Spice.ai Apache Arrow Flight API at [docs.spice.ai](https://
 import { SpiceClient } from '@spiceai/spice';
 const main = async () => {
   const spiceClient = new SpiceClient('API_KEY');
-  const queryResp = await client.queryAsync(
+  const queryResp = await spiceClient.queryAsync(
     'recent_blocks',
     'SELECT number, "timestamp", gas_used FROM eth.recent_blocks LIMIT 10',
     'https://o4skc7qyx7mrl8x7wdtgmc.hooks.webhookrelay.com'
@@ -52,7 +52,7 @@ const main = async () => {
   }
 
   // Webhook trigger with body
-  const queryResults = await client.getResultsFromQueryCompleteNotification(
+  const queryResults = await spiceClient.getQueryResultsFromNotification(
     body
   );
 
