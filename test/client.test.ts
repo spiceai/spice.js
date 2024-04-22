@@ -6,7 +6,6 @@ import {
   AsyncQueryResponse,
   QueryCompleteNotification,
 } from '../src/interfaces';
-import { LatestPrices } from '../src/interfaces';
 import { webHookAction } from './webHookAction';
 
 const RELAY_URL = process.env.RELAY_URL;
@@ -26,7 +25,7 @@ const api_key = process.env.API_KEY;
 if (!api_key) {
   throw 'API_KEY environment variable not set';
 }
-const client = new SpiceClient(api_key, HTTP_DATA_PATH, FLIGHT_PATH);
+const client = new SpiceClient(api_key, HTTP_DATA_PATH);
 beforeAll(async () => {
   let p1 = client.queryAsync(
     'recent_eth_blocks',
@@ -79,11 +78,15 @@ test('async query first page works', async () => {
     'SELECT number, "timestamp", base_fee_per_gas, base_fee_per_gas / 1e9 AS base_fee_per_gas_gwei FROM eth.recent_blocks limit 3';
 
   let body = await webHookAction(async () => {
-    let queryResp: AsyncQueryResponse = await client.queryAsync(queryName, queryText, RELAY_URL);
+    let queryResp: AsyncQueryResponse = await client.queryAsync(
+      queryName,
+      queryText,
+      RELAY_URL
+    );
 
     expect(queryResp).toBeTruthy();
     expect(queryResp.queryId).toHaveLength(36);
-  })
+  });
 
   const notification = JSON.parse(body) as QueryCompleteNotification;
   if (notification.sql !== queryText) return;
@@ -112,7 +115,6 @@ test('async query first page works', async () => {
   expect(results.schema[3].type).toEqual({ name: 'DOUBLE' });
 
   expect(results.rows).toHaveLength(3);
-
 }, 60000);
 
 test('async query all pages works', async () => {
@@ -121,11 +123,15 @@ test('async query all pages works', async () => {
   const queryText = `SELECT block_number, transaction_index, "value" FROM eth.recent_transactions limit ${rowLimit}`;
 
   let body = await webHookAction(async () => {
-    let queryResp: AsyncQueryResponse = await client.queryAsync(queryName, queryText, RELAY_URL);
+    let queryResp: AsyncQueryResponse = await client.queryAsync(
+      queryName,
+      queryText,
+      RELAY_URL
+    );
 
     expect(queryResp).toBeTruthy();
     expect(queryResp.queryId).toHaveLength(36);
-  })
+  });
 
   const notification = JSON.parse(body) as QueryCompleteNotification;
   if (notification.sql !== queryText) return;
@@ -140,78 +146,4 @@ test('async query all pages works', async () => {
 
   expect(results.rowCount).toEqual(rowLimit);
   expect(results.rows).toHaveLength(rowLimit);
-
 }, 60000);
-
-test('test latest prices (USD) works', async () => {
-  let pair = 'BTC-USD';
-  const price = await client.getLatestPrices([pair]);
-  const latestPrice = price as LatestPrices;
-
-  expect(latestPrice).toBeTruthy();
-  expect(latestPrice[pair]).toBeTruthy();
-  expect(latestPrice[pair].prices).toBeTruthy();
-  expect(latestPrice[pair].minPrice).toBeTruthy();
-  expect(latestPrice[pair].maxPrice).toBeTruthy();
-  expect(latestPrice[pair].avePrice).toBeTruthy();
-});
-
-test('test latest prices (other currency) works', async () => {
-  let pair = 'BTC-AUD';
-  const price = await client.getLatestPrices([pair]);
-  const latestPrice = price as LatestPrices;
-
-  expect(latestPrice).toBeTruthy();
-  expect(latestPrice[pair]).toBeTruthy();
-  expect(latestPrice[pair].prices).toBeTruthy();
-  expect(latestPrice[pair].minPrice).toBeTruthy();
-  expect(latestPrice[pair].maxPrice).toBeTruthy();
-  expect(latestPrice[pair].avePrice).toBeTruthy();
-}, 10000);
-
-test('test historical prices works', async () => {
-  let pairs = ['BTC-USD'];
-  const prices = await client.getPrices(
-    pairs,
-    new Date('2023-01-01').getTime() / 1000,
-    new Date('2023-01-02').getTime() / 1000,
-    '1h'
-  );
-
-  pairs.forEach((v: string) => {
-    expect(prices[v]).toBeTruthy();
-    expect(prices[v].length).toEqual(24);
-
-    let unixMilli = Math.floor(new Date('2023-01-01T01:00:00Z').getTime());
-    prices[v].forEach((price, index) => {
-      expect(new Date(price.timestamp).getTime()).toEqual(unixMilli);
-      unixMilli += 3600 * 1000;
-    });
-
-    expect(prices[v][0].price).toEqual(16527.39);
-    expect(prices[v][23].price).toEqual(16612.22);
-  });
-}, 10000);
-
-test('test historical prices with multiple pairs', async () => {
-  let pairs = ['BTC-USD', 'ETH-AUD'];
-  const prices = await client.getPrices(
-    pairs,
-    new Date('2023-01-01').getTime() / 1000,
-    new Date('2023-01-02').getTime() / 1000,
-    '1h'
-  );
-
-  pairs.forEach((v: string) => {
-    expect(prices[v]).toBeTruthy();
-    expect(prices[v].length).toEqual(24);
-
-    let unixMilli = Math.floor(new Date('2023-01-01T01:00:00Z').getTime());
-    prices[v].forEach((price, index) => {
-      expect(new Date(price.timestamp).getTime()).toEqual(unixMilli);
-      unixMilli += 3600 * 1000;
-    });
-    expect(prices[v][0].price).toBeGreaterThan(0.0);
-    expect(prices[v][23].price).toBeGreaterThan(0.0);
-  });
-}, 10000);
