@@ -16,11 +16,8 @@ import {
 import {
   AsyncQueryRequest,
   AsyncQueryResponse,
-  AsyncMultiplePricesRequest,
   QueryCompleteNotification,
   QueryResultsResponse,
-  HistoricalPrices,
-  LatestPrices,
 } from './interfaces';
 
 import * as retry from './retry';
@@ -31,7 +28,7 @@ const httpsAgent = new https.Agent({ keepAlive: true });
 const PROTO_PATH = './proto/Flight.proto';
 // If we're running in a Next.js environment, we need to adjust the path to the proto file
 const PACKAGE_PATH = __dirname.includes('/.next/server/app')
-  ? __dirname.replace(/\/\.next\/.*$/, "/node_modules/@spiceai/spice/dist")
+  ? __dirname.replace(/\/\.next\/.*$/, '/node_modules/@spiceai/spice/dist')
   : __dirname;
 const fullProtoPath = path.join(PACKAGE_PATH, PROTO_PATH);
 
@@ -51,7 +48,11 @@ class SpiceClient {
   private _http_url: string;
   private _maxRetries: number = retry.FLIGHT_QUERY_MAX_RETRIES;
 
-  public constructor(apiKey: string, http_url: string = 'https://data.spiceai.io', flight_url: string = 'flight.spiceai.io:443') {
+  public constructor(
+    apiKey: string,
+    http_url: string = 'https://data.spiceai.io',
+    flight_url: string = 'flight.spiceai.io:443'
+  ) {
     this._apiKey = apiKey;
     this._http_url = http_url;
     this._flight_url = flight_url;
@@ -102,58 +103,15 @@ class SpiceClient {
     return client.DoGet(flightTicket);
   }
 
-  public async getLatestPrices(pairs: string[]): Promise<LatestPrices> {
-    if (!pairs || pairs.length === 0) {
-      throw new Error('At least one pair is required');
-    }
-
-    const resp = await this.fetchInternal(`/v1/prices?pairs=` + pairs.join(","));
-    if (!resp.ok) {
-      throw new Error(
-        `Failed to get latest prices V1: ${resp.statusText} (${await resp.text()})`
-      );
-    }
-
-    let data = await resp.json();
-    return data as LatestPrices;
-}
-
-  public async getPrices(pair: string[], startTime?: number, endTime?: number, granularity?: string): Promise<HistoricalPrices> {
-    if (!pair || pair.length == 0) {
-      throw new Error('Pair is required');
-    }
-
-    var url = `/v1/prices/historical?pairs=${pair.join(",")}`
-    if (startTime) {
-      url += `&start=${startTime}`
-    }
-    if (endTime) {
-      url += `&end=${endTime}`
-    }
-    if (granularity) {
-      url += `&granularity=${granularity}`
-    }
-    const resp = await this.fetchInternal(url);
-    if (!resp.ok) {
-      throw new Error(
-        `Failed to get V1 prices: ${resp.statusText} (${await resp.text()})`
-      );
-    }
-
-    return resp.json() as Promise<HistoricalPrices>;
-  }
-
   public async query(
     queryText: string,
     onData: ((data: Table) => void) | undefined = undefined
   ): Promise<Table> {
-
     return retry.retryWithExponentialBackoff<Table>(async () => {
       return this.doQueryRequest(queryText, onData);
     }, this._maxRetries);
-
   }
-  public async doQueryRequest (
+  public async doQueryRequest(
     queryText: string,
     onData: ((data: Table) => void) | undefined = undefined
   ): Promise<Table> {
@@ -188,8 +146,7 @@ class SpiceClient {
 
       do_get.on('error', (err: any) => {
         client.close();
-        if (isDataAlreadySent)
-          retry.dontRetry(err);
+        if (isDataAlreadySent) retry.dontRetry(err);
 
         reject(err);
       });
@@ -333,12 +290,11 @@ class SpiceClient {
    * Sets the maximum number of times to retry Query calls. The default is 3
    * @param maxRetries Num of max retries. Setting to 0 will disable retries
    */
-  public setMaxRetries (maxRetries: number)  {
-    
+  public setMaxRetries(maxRetries: number) {
     if (maxRetries < 0) {
       throw new Error('maxRetries must be greater than or equal to 0');
     }
-    
+
     this._maxRetries = maxRetries;
   }
 
