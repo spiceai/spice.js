@@ -50,15 +50,12 @@ class SpiceClient {
   private _flight_ssl_enabled: boolean = true;
   private _maxRetries: number = retry.FLIGHT_QUERY_MAX_RETRIES;
 
-  public constructor(
-    {
-      api_key,
-      http_url,
-      flight_url,
-      flight_ssl_enabled,
-    }: SpiceClientConfig = {}
-    // apiKey: string, // http_url: string = 'https://data.spiceai.io', // flight_url: string = 'flight.spiceai.io:443'
-  ) {
+  public constructor({
+    api_key,
+    http_url,
+    flight_url,
+    flight_ssl_enabled,
+  }: SpiceClientConfig = {}) {
     this._apiKey = api_key;
     this._http_url = http_url || 'http://localhost:3000';
     this._flight_url = flight_url || 'localhost:50051';
