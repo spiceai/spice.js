@@ -18,7 +18,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         nodever: [18, 20]
-    name: Test on ${{ matrix.os }} Node.js ${{ matrix.nodever }}
+    name: Test with spice.ai cloud on ${{ matrix.os }} Node.js ${{ matrix.nodever }}
     steps:
       - uses: actions/checkout@v3
       - name: Set up NodeJS
@@ -44,7 +44,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         nodever: [18, 20]
-    name: Test on ${{ matrix.os }} Node.js ${{ matrix.nodever }}
+    name: Test with local spice runtime on ${{ matrix.os }} Node.js ${{ matrix.nodever }}
     steps:
       - uses: actions/checkout@v3
       - name: Set up NodeJS
