@@ -77,8 +77,8 @@ jobs:
           psql -d postgres -c "ALTER USER postgres PASSWORD 'postgres';"
           createdb testdb
 
-          - name: Wait for PostgreSQL to start
-          run: sleep 10
+      - name: Wait for PostgreSQL to start
+        run: sleep 10
 
       - name: Check PostgreSQL
         env:
