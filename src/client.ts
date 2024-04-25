@@ -18,6 +18,7 @@ import {
   AsyncQueryResponse,
   QueryCompleteNotification,
   QueryResultsResponse,
+  type SpiceClientConfig,
 } from './interfaces';
 
 import * as retry from './retry';
@@ -43,22 +44,41 @@ const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
 const flight_proto = arrow.flight.protocol;
 
 class SpiceClient {
-  private _apiKey: string;
+  private _apiKey?: string;
   private _flight_url: string;
   private _http_url: string;
+  private _flight_tls_enabled: boolean = true;
   private _maxRetries: number = retry.FLIGHT_QUERY_MAX_RETRIES;
 
-  public constructor(
-    apiKey: string,
-    http_url: string = 'https://data.spiceai.io',
-    flight_url: string = 'flight.spiceai.io:443'
-  ) {
-    this._apiKey = apiKey;
-    this._http_url = http_url;
-    this._flight_url = flight_url;
+  public constructor(params: string | SpiceClientConfig) {
+    // support legacy constructor with api_key as first agument
+    if (typeof params === 'string') {
+      this._apiKey = params;
+      this._http_url = 'https://data.spiceai.io';
+      this._flight_url = 'flight.spiceai.io:443';
+    } else {
+      const { api_key, http_url, flight_url, flight_tls_enabled } = params;
+
+      this._apiKey = api_key;
+      this._http_url = http_url || 'http://localhost:3000';
+      this._flight_url = flight_url || 'localhost:50051';
+      this._flight_tls_enabled =
+        flight_tls_enabled !== undefined
+          ? flight_tls_enabled
+          : this._flight_url.includes('localhost')
+          ? false
+          : true;
+    }
   }
 
   private createClient(meta: any): any {
+    if (!this._flight_tls_enabled) {
+      return new flight_proto.FlightService(
+        this._flight_url,
+        grpc.credentials.createInsecure()
+      );
+    }
+
     const creds = grpc.credentials.createSsl();
     const metaCallback = (_params: any, callback: any) => {
       callback(null, meta);

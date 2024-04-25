@@ -28,3 +28,10 @@ export interface QueryResultsResponse {
   schema: { name: 'string'; type: { name: string } }[];
   rows: any[];
 }
+
+export interface SpiceClientConfig {
+  api_key?: string;
+  http_url?: string;
+  flight_url?: string;
+  flight_tls_enabled?: boolean;
+}
