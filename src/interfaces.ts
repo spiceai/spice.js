@@ -33,5 +33,5 @@ export interface SpiceClientConfig {
   api_key?: string;
   http_url?: string;
   flight_url?: string;
-  flight_ssl_enabled?: boolean;
+  flight_tls_enabled?: boolean;
 }

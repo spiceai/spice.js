@@ -47,7 +47,7 @@ class SpiceClient {
   private _apiKey?: string;
   private _flight_url: string;
   private _http_url: string;
-  private _flight_ssl_enabled: boolean = true;
+  private _flight_tls_enabled: boolean = true;
   private _maxRetries: number = retry.FLIGHT_QUERY_MAX_RETRIES;
 
   public constructor(params: string | SpiceClientConfig) {
@@ -57,14 +57,14 @@ class SpiceClient {
       this._http_url = 'https://data.spiceai.io';
       this._flight_url = 'flight.spiceai.io:443';
     } else {
-      const { api_key, http_url, flight_url, flight_ssl_enabled } = params;
+      const { api_key, http_url, flight_url, flight_tls_enabled } = params;
 
       this._apiKey = api_key;
       this._http_url = http_url || 'http://localhost:3000';
       this._flight_url = flight_url || 'localhost:50051';
-      this._flight_ssl_enabled =
-        flight_ssl_enabled !== undefined
-          ? flight_ssl_enabled
+      this._flight_tls_enabled =
+        flight_tls_enabled !== undefined
+          ? flight_tls_enabled
           : this._flight_url.includes('localhost')
           ? false
           : true;
@@ -72,7 +72,7 @@ class SpiceClient {
   }
 
   private createClient(meta: any): any {
-    if (!this._flight_ssl_enabled) {
+    if (!this._flight_tls_enabled) {
       return new flight_proto.FlightService(
         this._flight_url,
         grpc.credentials.createInsecure()
