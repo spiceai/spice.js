@@ -48,6 +48,19 @@ describe('cloud', () => {
 
   const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
+  test('legacy client uses spice.ai cloud ', async () => {
+    const client = new SpiceClient(api_key);
+
+    const tableResult = await client.query(
+      'SELECT number, "timestamp", base_fee_per_gas, base_fee_per_gas / 1e9 AS base_fee_per_gas_gwei FROM eth.recent_blocks limit 3'
+    );
+
+    expect(tableResult.toArray()).toHaveLength(3);
+
+    let baseFeeGwei = tableResult.getChild('base_fee_per_gas_gwei');
+    expect(baseFeeGwei?.length).toEqual(3);
+  });
+
   test('streaming works', async () => {
     let numChunks = 0;
     await client.query(

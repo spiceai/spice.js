@@ -50,21 +50,25 @@ class SpiceClient {
   private _flight_ssl_enabled: boolean = true;
   private _maxRetries: number = retry.FLIGHT_QUERY_MAX_RETRIES;
 
-  public constructor({
-    api_key,
-    http_url,
-    flight_url,
-    flight_ssl_enabled,
-  }: SpiceClientConfig = {}) {
-    this._apiKey = api_key;
-    this._http_url = http_url || 'http://localhost:3000';
-    this._flight_url = flight_url || 'localhost:50051';
-    this._flight_ssl_enabled =
-      flight_ssl_enabled !== undefined
-        ? flight_ssl_enabled
-        : this._flight_url.includes('localhost')
-        ? false
-        : true;
+  public constructor(params: string | SpiceClientConfig) {
+    // support legacy constructor with api_key as first agument
+    if (typeof params === 'string') {
+      this._apiKey = params;
+      this._http_url = 'https://data.spiceai.io';
+      this._flight_url = 'flight.spiceai.io:443';
+    } else {
+      const { api_key, http_url, flight_url, flight_ssl_enabled } = params;
+
+      this._apiKey = api_key;
+      this._http_url = http_url || 'http://localhost:3000';
+      this._flight_url = flight_url || 'localhost:50051';
+      this._flight_ssl_enabled =
+        flight_ssl_enabled !== undefined
+          ? flight_ssl_enabled
+          : this._flight_url.includes('localhost')
+          ? false
+          : true;
+    }
   }
 
   private createClient(meta: any): any {
