@@ -8,15 +8,19 @@ See full documentation at [docs.spice.ai](https://docs.spice.ai/sdks/node.js-sdk
 
 `npm install @spiceai/spice` or `yarn add @spiceai/spice`
 
-## Usage
+## Usage 
 
-### High-Performance Apache Arrow Flight Query
+### High-Performance Apache Arrow Flight Query with https://spice.ai cloud
 
 ```js
 import { SpiceClient } from '@spiceai/spice';
 
 const main = async () => {
-  const spiceClient = new SpiceClient('API_KEY');
+  const spiceClient = new SpiceClient({
+    api_key: 'API_KEY', // spice.ai api key,
+    http_url: 'https://data.spiceai.io',
+    flight_url: 'flight.spiceai.io:443'
+  });
   const table = await spiceClient.query(
     'SELECT number, "timestamp", gas_used FROM eth.recent_blocks LIMIT 10'
   );
@@ -63,6 +67,32 @@ main();
 ```
 
 Read more about the Spice.ai Async HTTP API at [docs.spice.ai](https://docs.spice.ai/api/sql-query-api/http-api-1).
+
+### Usage with locally running [spice runtime](https://github.com/spiceai/spiceai)
+
+Follow the [quiqstart guide](https://github.com/spiceai/spiceai?tab=readme-ov-file#%EF%B8%8F-quickstart-local-machine) to install and run spice locally
+
+```js
+import { SpiceClient } from '@spiceai/spice';
+
+const main = async () => {
+  // uses connection to local runtime by default
+  const spiceClient = new SpiceClient();
+
+  // or use custom connection params:
+  // const spiceClient = new SpiceClient({
+  //   http_url: 'http://my_spice_http_host',
+  //   flight_url: 'my_spice_flight_host',
+  // });
+
+  const table = await spiceClient.query(
+    'SELECT trip_distance, total_amount FROM taxi_trips ORDER BY trip_distance DESC LIMIT 10;'
+  );
+  console.table(table.toArray());
+};
+
+main();
+```
 
 ### Connection retry
 
