@@ -50,7 +50,7 @@ class SpiceClient {
   private _flight_tls_enabled: boolean = true;
   private _maxRetries: number = retry.FLIGHT_QUERY_MAX_RETRIES;
 
-  public constructor(params: string | SpiceClientConfig) {
+  public constructor(params: string | SpiceClientConfig = {}) {
     // support legacy constructor with api_key as first agument
     if (typeof params === 'string') {
       this._apiKey = params;
