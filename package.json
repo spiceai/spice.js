@@ -14,9 +14,9 @@
   "author": "Spice AI, Inc. <webmaster@spice.ai>",
   "license": "MIT",
   "dependencies": {
-    "@grpc/grpc-js": "^1.9.13",
-    "@grpc/proto-loader": "^0.7.6",
-    "apache-arrow": "^15.0.2",
+    "@grpc/grpc-js": "1.10.6",
+    "@grpc/proto-loader": "0.7.12",
+    "apache-arrow": "16.0.0",
     "node-fetch": "^2.6.9",
     "retry": "^0.13.1"
   },
