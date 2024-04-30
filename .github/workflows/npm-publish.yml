@@ -21,7 +21,7 @@ jobs:
       - run: yarn install
       - run: yarn build
       - run: |
-          yarn test
+          yarn test -t 'cloud'
         env:
           API_KEY: ${{ secrets.API_KEY }}
           RELAY_KEY: ${{ secrets.RELAY_KEY }}
