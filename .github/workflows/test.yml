@@ -116,7 +116,7 @@ jobs:
           SPICE_SECRET_POSTGRES_PASSWORD: postgres
         working-directory: test/scripts
         run: |
-          spice run &> spice.log &
+          spiced &> spice.log &
           # time to initialize added dataset
           sleep 10
 
