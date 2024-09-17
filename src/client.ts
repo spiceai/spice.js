@@ -44,7 +44,7 @@ const packageDefinition = protoLoader.loadSync(fullProtoPath, {
 const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
 const flight_proto = arrow.flight.protocol;
 
-const VERSION = "2.0.0";
+import { VERSION } from "./version";
 function getUserAgent(): string {
   const os_version = os.version();
   return `spice.js ${VERSION} (${os_version})`;
@@ -74,8 +74,8 @@ class SpiceClient {
         flight_tls_enabled !== undefined
           ? flight_tls_enabled
           : this._flight_url.includes('localhost')
-          ? false
-          : true;
+            ? false
+            : true;
     }
 
     this._user_agent = getUserAgent();
@@ -220,8 +220,7 @@ class SpiceClient {
 
     if (!resp.ok) {
       throw new Error(
-        `Failed to execute query: ${resp.status} ${
-          resp.statusText
+        `Failed to execute query: ${resp.status} ${resp.statusText
         } ${await resp.text()}`
       );
     }
@@ -260,8 +259,7 @@ class SpiceClient {
     const resp = await this.fetchInternal(`/v0.1/sql/${queryId}`, params);
     if (!resp.ok) {
       throw new Error(
-        `Failed to get query results: ${resp.status} ${
-          resp.statusText
+        `Failed to get query results: ${resp.status} ${resp.statusText
         } ${await resp.text()}`
       );
     }
