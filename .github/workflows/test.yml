@@ -80,7 +80,7 @@ jobs:
           createdb testdb
 
       - name: Wait for PostgreSQL to start
-        run: sleep 10
+        run: sleep 5
 
       - name: Check PostgreSQL
         env:
@@ -101,6 +101,7 @@ jobs:
         run: |
           curl https://install.spiceai.org | /bin/bash
           echo "$HOME/.spice/bin" >> $GITHUB_PATH
+          spice upgrade
       
       - name: Install Spice (https://install.spiceai.org) (MacOS)
         if: matrix.os == 'macos-latest'
@@ -118,7 +119,7 @@ jobs:
         run: |
           spiced &> spice.log &
           # time to initialize added dataset
-          sleep 10
+          sleep 2
 
       - name: Running tests
         run: |
