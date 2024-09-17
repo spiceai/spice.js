@@ -1,0 +1,15 @@
+version: v1beta1
+kind: Spicepod
+name: test_spicejs
+datasets:
+  - from: postgres:test_postgresql_table
+    name: test_postgresql_table
+    secrets:
+      store: en
+    params:
+      pg_host: localhost
+      pg_port: 5432
+      pg_db: testdb
+      pg_user: postgres
+      pg_pass: password
+      pg_sslmode: disable

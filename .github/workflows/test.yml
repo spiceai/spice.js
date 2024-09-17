@@ -26,13 +26,9 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.nodever }}
-      - name: Install requirements
-        run: |
-          yarn install
-          yarn build
       - name: Running tests
         run: |
-          yarn test -t 'cloud'
+          make TEST_SUITE=cloud test
         env:
           API_KEY: ${{ secrets.API_KEY }}
           RELAY_KEY: ${{ secrets.RELAY_KEY }}
@@ -53,46 +49,6 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.nodever }}
-      - name: Install requirements
-        run: |
-          yarn install
-          yarn build
-
-      - name: Install PostgreSQL (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql
-          sudo service postgresql start
-          sleep 5
-          sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='postgres'" | grep -q 1 || sudo -u postgres createuser -s postgres
-          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
-          sudo -u postgres createdb testdb
-
-      - name: Install PostgreSQL (MacOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew install postgresql
-          brew services start postgresql
-          sleep 5
-          createuser -s postgres
-          psql -d postgres -c "ALTER USER postgres PASSWORD 'postgres';"
-          createdb testdb
-
-      - name: Wait for PostgreSQL to start
-        run: sleep 10
-
-      - name: Check PostgreSQL
-        env:
-          PGPASSWORD: postgres
-        run: psql -h localhost -U postgres -c 'SELECT version();'
-
-      - name: Prepare PostgreSQL dataset
-        env:
-          PGPASSWORD: postgres
-        run: |
-          psql -h localhost -U postgres -d testdb < test/scripts/setup-data-postgresql.sql
-          psql -h localhost -U postgres -d testdb -c 'SELECT * FROM test_postgresql_table;'
 
       - name: install Spice (https://install.spiceai.org)
         run: |
@@ -102,32 +58,9 @@ jobs:
       - name: Check spice version
         run: spice version
 
-      - name: Init spice app
-        run: |
-          spice init test_app
-
-      - name: Spice dataset configure
-        working-directory: test_app
-        run: |
-          echo -e "test_postgresql_table\neth recent blocks\npostgres:test_postgresql_table\ny" | spice dataset configure
-          # configure pg credentials
-          echo -e "params:\n  pg_host: localhost\n  pg_port: 5432\n  pg_db: testdb\n  pg_user: postgres\n  pg_pass_key: password\n  pg_sslmode: disable" >> ./datasets/test_postgresql_table/dataset.yaml
-          # configure env secret store
-          echo -e "secrets:\n  store: env\n" >> spicepod.yaml
-          cat spicepod.yaml
-
-      - name: Start spice runtime
-        env:
-          SPICE_SECRET_POSTGRES_PASSWORD: postgres
-        working-directory: test_app
-        run: |
-          spice run &> spice.log &
-          # time to initialize added dataset
-          sleep 10
-
       - name: Running tests
         run: |
-          yarn test -t 'local'
+          make TEST_SUITE=local test
         env:
           API_KEY: ${{ secrets.API_KEY }}
           RELAY_KEY: ${{ secrets.RELAY_KEY }}
