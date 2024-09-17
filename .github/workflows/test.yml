@@ -95,6 +95,8 @@ jobs:
           psql -h localhost -U postgres -d testdb -c 'SELECT * FROM test_postgresql_table;'
 
       - name: install Spice (https://install.spiceai.org)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           curl https://install.spiceai.org | /bin/bash
           echo "$HOME/.spice/bin" >> $GITHUB_PATH
@@ -105,9 +107,9 @@ jobs:
       - name: Start spice runtime
         env:
           SPICE_SECRET_POSTGRES_PASSWORD: postgres
-        working-directory: test_app
+        working-directory: test/scripts
         run: |
-          cd test/scripts && spice run &> spice.log &
+          spice run &> spice.log &
           # time to initialize added dataset
           sleep 10
 
