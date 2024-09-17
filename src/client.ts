@@ -22,8 +22,6 @@ import {
   type SpiceClientConfig,
 } from './interfaces';
 
-import { version } from '../package.json';
-
 import * as retry from './retry';
 
 const fetch = require('node-fetch');
@@ -46,9 +44,10 @@ const packageDefinition = protoLoader.loadSync(fullProtoPath, {
 const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
 const flight_proto = arrow.flight.protocol;
 
+const VERSION = "2.0.0";
 function getUserAgent(): string {
   const os_version = os.version();
-  return `spice.js ${version} (${os_version})`;
+  return `spice.js ${VERSION} (${os_version})`;
 }
 
 class SpiceClient {
