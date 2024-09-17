@@ -1,6 +1,12 @@
-## Contributing to spice.js
+# Contributing to spice.js
 
-### Developing
+## Requirements
+
+* [NodeJS 18 or 20](https://nodejs.org/en/download/package-manager)
+* [Docker](https://docs.docker.com/engine/install/)
+* Yarn (`npm install -g yarn`)
+
+## Developing
 
 The development branch is `trunk`. This is the branch that all pull
 requests should be made against.
@@ -13,30 +19,24 @@ To develop locally:
 
 2. Create a new branch:
 
-   ```
+   ```bash
    git checkout -b MY_BRANCH_NAME
    ```
 
-3. Install Yarn
+3. Install the dependencies with:
 
-   ```
-   npm install -g yarn
-   ```
-
-4. Install the dependencies with:
-
-   ```
+   ```bash
    yarn install
    ```
 
-5. To run the tests, create a `.env` file with your [Spice.ai](https://spice.ai) API Key:
+4. To run the tests, create a `.env` file with your [Spice.ai](https://spice.ai) API Key:
 
-   ```
+   ```env
    API_KEY=<Spice.ai API Key>
    ```
 
-6. Run the tests with:
+5. Run the tests with:
 
-   ```
-   yarn test
+   ```bash
+   make test
    ```
