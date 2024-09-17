@@ -126,4 +126,4 @@ jobs:
         if: always()
         run: |
           killall spice || true
-          cat spice.log
+          cat test/scripts/spice.log
