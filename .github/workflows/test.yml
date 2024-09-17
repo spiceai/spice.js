@@ -94,12 +94,19 @@ jobs:
           psql -h localhost -U postgres -d testdb < test/scripts/setup-data-postgresql.sql
           psql -h localhost -U postgres -d testdb -c 'SELECT * FROM test_postgresql_table;'
 
-      - name: install Spice (https://install.spiceai.org)
+      - name: Install Spice (https://install.spiceai.org) (Linux)
+        if: matrix.os == 'ubuntu-latest'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           curl https://install.spiceai.org | /bin/bash
           echo "$HOME/.spice/bin" >> $GITHUB_PATH
+      
+      - name: Install Spice (https://install.spiceai.org) (MacOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install spiceai/spiceai/spice
+          brew install spiceai/spiceai/spiced
 
       - name: Check spice version
         run: spice version
