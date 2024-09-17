@@ -15,6 +15,7 @@ jobs:
   test-cloud:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
         nodever: [18, 20]
@@ -41,6 +42,7 @@ jobs:
   test-local-spice:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
         nodever: [18, 20]
@@ -92,32 +94,27 @@ jobs:
           psql -h localhost -U postgres -d testdb < test/scripts/setup-data-postgresql.sql
           psql -h localhost -U postgres -d testdb -c 'SELECT * FROM test_postgresql_table;'
 
-      - name: install Spice (https://install.spiceai.org)
+      - name: Install Spice (https://install.spiceai.org) (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           curl https://install.spiceai.org | /bin/bash
           echo "$HOME/.spice/bin" >> $GITHUB_PATH
+      
+      - name: Install Spice (https://install.spiceai.org) (MacOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install spiceai/spiceai/spice
+          brew install spiceai/spiceai/spiced
 
       - name: Check spice version
         run: spice version
 
-      - name: Init spice app
-        run: |
-          spice init test_app
-
-      - name: Spice dataset configure
-        working-directory: test_app
-        run: |
-          echo -e "test_postgresql_table\neth recent blocks\npostgres:test_postgresql_table\ny" | spice dataset configure
-          # configure pg credentials
-          echo -e "params:\n  pg_host: localhost\n  pg_port: 5432\n  pg_db: testdb\n  pg_user: postgres\n  pg_pass_key: password\n  pg_sslmode: disable" >> ./datasets/test_postgresql_table/dataset.yaml
-          # configure env secret store
-          echo -e "secrets:\n  store: env\n" >> spicepod.yaml
-          cat spicepod.yaml
-
       - name: Start spice runtime
         env:
           SPICE_SECRET_POSTGRES_PASSWORD: postgres
-        working-directory: test_app
+        working-directory: test/scripts
         run: |
           spice run &> spice.log &
           # time to initialize added dataset
@@ -131,3 +128,9 @@ jobs:
           RELAY_KEY: ${{ secrets.RELAY_KEY }}
           RELAY_SECRET: ${{ secrets.RELAY_SECRET }}
           RELAY_URL: ${{ secrets.RELAY_URL }}
+
+      - name: Stop spice and check logs
+        if: always()
+        run: |
+          killall spice || true
+          cat test/scripts/spice.log
