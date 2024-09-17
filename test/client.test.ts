@@ -110,7 +110,7 @@ describe('cloud', () => {
     if (notification.sql !== queryText) return;
 
     // TODO: change appID to correspond your API key when testing locally
-    expect(notification.appId).toEqual(239); // spicehq/spicejs
+    expect(notification.appId).toEqual(470); // spicehq/spicejs
 
     expect(notification.queryId).toHaveLength(36);
     expect(notification.requestTime).toBeTruthy();
@@ -155,7 +155,7 @@ describe('cloud', () => {
     if (notification.sql !== queryText) return;
 
     // TODO: change appID to correspond your API key when testing locally
-    expect(notification.appId).toEqual(239); // spicehq/spicejs
+    expect(notification.appId).toEqual(470); // spicehq/spicejs
     expect(notification.queryId).toHaveLength(36);
     expect(notification.state).toEqual('completed');
     expect(notification.rowCount).toEqual(rowLimit);
