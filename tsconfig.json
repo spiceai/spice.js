@@ -5,6 +5,7 @@
     "target": "ES2017",
     "esModuleInterop": true,
     "moduleResolution": "node",
+    "resolveJsonModule": true,
     "declaration": true, // generate .d.ts files
     "sourceMap": true,
     "jsx": "react",

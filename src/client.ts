@@ -1,4 +1,5 @@
 import path from 'path';
+import os from "os";
 import * as https from 'https';
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
@@ -20,6 +21,8 @@ import {
   QueryResultsResponse,
   type SpiceClientConfig,
 } from './interfaces';
+
+import { version } from '../package.json';
 
 import * as retry from './retry';
 
@@ -43,10 +46,16 @@ const packageDefinition = protoLoader.loadSync(fullProtoPath, {
 const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
 const flight_proto = arrow.flight.protocol;
 
+function getUserAgent(): string {
+  const os_version = os.version();
+  return `spice.js ${version} (${os_version})`;
+}
+
 class SpiceClient {
   private _apiKey?: string;
   private _flight_url: string;
   private _http_url: string;
+  private _user_agent: string;
   private _flight_tls_enabled: boolean = true;
   private _maxRetries: number = retry.FLIGHT_QUERY_MAX_RETRIES;
 
@@ -69,6 +78,8 @@ class SpiceClient {
           ? false
           : true;
     }
+
+    this._user_agent = getUserAgent();
   }
 
   private createClient(meta: any): any {
@@ -99,6 +110,7 @@ class SpiceClient {
     const meta = new grpc.Metadata();
     const client: FlightClient = this.createClient(meta);
     meta.set('authorization', 'Bearer ' + this._apiKey);
+    meta.set('x-spice-user-agent', this._user_agent);
 
     let queryBuff = Buffer.from(queryText, 'utf8');
 
@@ -131,6 +143,7 @@ class SpiceClient {
       return this.doQueryRequest(queryText, onData);
     }, this._maxRetries);
   }
+
   public async doQueryRequest(
     queryText: string,
     onData: ((data: Table) => void) | undefined = undefined
@@ -200,6 +213,7 @@ class SpiceClient {
       headers: {
         'Content-Type': 'application/json',
         'X-API-Key': this._apiKey,
+        "X-Spice-User-Agent": this._user_agent,
       },
       body: JSON.stringify(asyncQueryRequest),
       agent: httpsAgent,
