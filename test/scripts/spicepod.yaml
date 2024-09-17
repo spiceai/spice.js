@@ -11,5 +11,5 @@ datasets:
       pg_port: 5432
       pg_db: testdb
       pg_user: postgres
-      pg_pass: password
+      pg_pass: postgres
       pg_sslmode: disable
