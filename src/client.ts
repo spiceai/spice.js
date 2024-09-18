@@ -345,6 +345,7 @@ class SpiceClient {
         'Content-Type': 'application/json',
         'Accept-Encoding': 'br, gzip, deflate',
         'X-API-Key': this._apiKey,
+        "X-Spice-User-Agent": this._user_agent,
       },
       agent: httpsAgent,
     });
