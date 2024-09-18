@@ -1,5 +1,4 @@
 import path from 'path';
-import os from "os";
 import * as https from 'https';
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
@@ -23,6 +22,7 @@ import {
 } from './interfaces';
 
 import * as retry from './retry';
+import { getUserAgent } from './user-agent';
 
 const fetch = require('node-fetch');
 const httpsAgent = new https.Agent({ keepAlive: true });
@@ -43,14 +43,6 @@ const packageDefinition = protoLoader.loadSync(fullProtoPath, {
 });
 const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
 const flight_proto = arrow.flight.protocol;
-
-import { VERSION } from "./version";
-function getUserAgent(): string {
-  const os_type = os.type();
-  const os_release = os.release();
-  const os_arch = os.machine();
-  return `spice.js ${VERSION} (${os_type}/${os_release} ${os_arch})`;
-}
 
 class SpiceClient {
   private _apiKey?: string;
