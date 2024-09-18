@@ -46,8 +46,10 @@ const flight_proto = arrow.flight.protocol;
 
 import { VERSION } from "./version";
 function getUserAgent(): string {
-  const os_version = os.version();
-  return `spice.js ${VERSION} (${os_version})`;
+  const os_type = os.type();
+  const os_release = os.release();
+  const os_arch = os.arch();
+  return `spice.js ${VERSION} (${os_type}/${os_release} ${os_arch})`;
 }
 
 class SpiceClient {
