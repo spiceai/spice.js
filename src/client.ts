@@ -22,6 +22,7 @@ import {
 } from './interfaces';
 
 import * as retry from './retry';
+import { getUserAgent } from './user-agent';
 
 const fetch = require('node-fetch');
 const httpsAgent = new https.Agent({ keepAlive: true });
@@ -47,6 +48,7 @@ class SpiceClient {
   private _apiKey?: string;
   private _flight_url: string;
   private _http_url: string;
+  private _user_agent: string;
   private _flight_tls_enabled: boolean = true;
   private _maxRetries: number = retry.FLIGHT_QUERY_MAX_RETRIES;
 
@@ -66,9 +68,11 @@ class SpiceClient {
         flight_tls_enabled !== undefined
           ? flight_tls_enabled
           : this._flight_url.includes('localhost')
-          ? false
-          : true;
+            ? false
+            : true;
     }
+
+    this._user_agent = getUserAgent();
   }
 
   private createClient(meta: any): any {
@@ -99,6 +103,7 @@ class SpiceClient {
     const meta = new grpc.Metadata();
     const client: FlightClient = this.createClient(meta);
     meta.set('authorization', 'Bearer ' + this._apiKey);
+    meta.set('x-spice-user-agent', this._user_agent);
 
     let queryBuff = Buffer.from(queryText, 'utf8');
 
@@ -131,6 +136,7 @@ class SpiceClient {
       return this.doQueryRequest(queryText, onData);
     }, this._maxRetries);
   }
+
   public async doQueryRequest(
     queryText: string,
     onData: ((data: Table) => void) | undefined = undefined
@@ -200,6 +206,7 @@ class SpiceClient {
       headers: {
         'Content-Type': 'application/json',
         'X-API-Key': this._apiKey,
+        "X-Spice-User-Agent": this._user_agent,
       },
       body: JSON.stringify(asyncQueryRequest),
       agent: httpsAgent,
@@ -207,8 +214,7 @@ class SpiceClient {
 
     if (!resp.ok) {
       throw new Error(
-        `Failed to execute query: ${resp.status} ${
-          resp.statusText
+        `Failed to execute query: ${resp.status} ${resp.statusText
         } ${await resp.text()}`
       );
     }
@@ -247,8 +253,7 @@ class SpiceClient {
     const resp = await this.fetchInternal(`/v0.1/sql/${queryId}`, params);
     if (!resp.ok) {
       throw new Error(
-        `Failed to get query results: ${resp.status} ${
-          resp.statusText
+        `Failed to get query results: ${resp.status} ${resp.statusText
         } ${await resp.text()}`
       );
     }
@@ -334,6 +339,7 @@ class SpiceClient {
         'Content-Type': 'application/json',
         'Accept-Encoding': 'br, gzip, deflate',
         'X-API-Key': this._apiKey,
+        "X-Spice-User-Agent": this._user_agent,
       },
       agent: httpsAgent,
     });

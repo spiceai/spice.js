@@ -39,6 +39,7 @@ jobs:
           node-version: 18
           registry-url: https://registry.npmjs.org/
       - run: yarn install
+      - run: node scripts/update-version.js # ensure the version in version.ts is updated
       - run: yarn build
       - run: yarn publish --access public
         env:

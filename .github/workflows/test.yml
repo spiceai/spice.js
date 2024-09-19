@@ -123,7 +123,7 @@ jobs:
 
       - name: Running tests
         run: |
-          yarn test -t 'local'
+          yarn test -t "(local|user-agent)"
         env:
           API_KEY: ${{ secrets.API_KEY }}
           RELAY_KEY: ${{ secrets.RELAY_KEY }}
