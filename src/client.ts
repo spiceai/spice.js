@@ -35,12 +35,13 @@ const PACKAGE_PATH = __dirname.includes('/.next/server/app')
 const fullProtoPath = path.join(PACKAGE_PATH, PROTO_PATH);
 
 const packageDefinition = protoLoader.loadSync(fullProtoPath, {
-  keepCase: true,
+  keepCase: false,
   longs: String,
   enums: String,
   defaults: true,
   oneofs: true,
 });
+
 const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
 const flightProto = arrow.flight.protocol;
 
