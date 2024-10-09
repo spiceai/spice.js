@@ -10,4 +10,8 @@ describe('local', () => {
 
     expect(tableResult.toArray()).toHaveLength(3);
   });
+
+  it('connection and refresh to local spice runtime works', async () => {
+    await client.refreshDataset('test_postgresql_table_accelerated');
+  });
 });
