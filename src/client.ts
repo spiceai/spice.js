@@ -63,12 +63,12 @@ class SpiceClient {
       const { apiKey, httpUrl, flightUrl, flightTlsEnabled } = params;
 
       this._apiKey = apiKey;
-      this._httpUrl = httpUrl || 'http://localhost:8090';
-      this._flightUrl = flightUrl || 'localhost:50051';
+      this._httpUrl = httpUrl || 'http://127.0.0.1:8090';
+      this._flightUrl = flightUrl || '127.0.0.1:50051';
       this._flightTlsEnabled =
         flightTlsEnabled !== undefined
           ? flightTlsEnabled
-          : this._flightUrl.includes('localhost')
+          : this._flightUrl.includes('127.0.0.1')
             ? false
             : true;
     }
