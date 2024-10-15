@@ -222,11 +222,18 @@ class SpiceClient {
       headers.push(['X-API-Key', this._apiKey || '']);
     }
 
-    return fetch(url, {
-      headers: new Headers(headers),
-      agent: httpsAgent,
-      method
-    });
+    if (this._httpUrl.startsWith("https://")) {
+      return fetch(url, {
+        headers: new Headers(headers),
+        agent: httpsAgent,
+        method
+      });
+    } else {
+      return fetch(url, {
+        headers: new Headers(headers),
+        method
+      });
+    }
   };
 }
 
