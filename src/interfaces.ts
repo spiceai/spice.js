@@ -30,8 +30,8 @@ export interface QueryResultsResponse {
 }
 
 export interface SpiceClientConfig {
-  api_key?: string;
-  http_url?: string;
-  flight_url?: string;
-  flight_tls_enabled?: boolean;
+  apiKey?: string;
+  httpUrl?: string;
+  flightUrl?: string;
+  flightTlsEnabled?: boolean;
 }

@@ -2,6 +2,7 @@ import path from 'path';
 import * as https from 'https';
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
+import fetch, { Headers } from 'node-fetch';
 import { EventEmitter } from 'stream';
 import { Table, tableFromIPC } from 'apache-arrow';
 import {
@@ -24,7 +25,6 @@ import {
 import * as retry from './retry';
 import { getUserAgent } from './user-agent';
 
-const fetch = require('node-fetch');
 const httpsAgent = new https.Agent({ keepAlive: true });
 
 const PROTO_PATH = './proto/Flight.proto';
@@ -35,50 +35,51 @@ const PACKAGE_PATH = __dirname.includes('/.next/server/app')
 const fullProtoPath = path.join(PACKAGE_PATH, PROTO_PATH);
 
 const packageDefinition = protoLoader.loadSync(fullProtoPath, {
-  keepCase: true,
+  keepCase: false,
   longs: String,
   enums: String,
   defaults: true,
   oneofs: true,
 });
+
 const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
-const flight_proto = arrow.flight.protocol;
+const flightProto = arrow.flight.protocol;
 
 class SpiceClient {
   private _apiKey?: string;
-  private _flight_url: string;
-  private _http_url: string;
-  private _user_agent: string;
-  private _flight_tls_enabled: boolean = true;
+  private _flightUrl: string;
+  private _httpUrl: string;
+  private _userAgent: string;
+  private _flightTlsEnabled: boolean = true;
   private _maxRetries: number = retry.FLIGHT_QUERY_MAX_RETRIES;
 
   public constructor(params: string | SpiceClientConfig = {}) {
     // support legacy constructor with api_key as first agument
     if (typeof params === 'string') {
       this._apiKey = params;
-      this._http_url = 'https://data.spiceai.io';
-      this._flight_url = 'flight.spiceai.io:443';
+      this._httpUrl = 'https://data.spiceai.io';
+      this._flightUrl = 'flight.spiceai.io:443';
     } else {
-      const { api_key, http_url, flight_url, flight_tls_enabled } = params;
+      const { apiKey, httpUrl, flightUrl, flightTlsEnabled } = params;
 
-      this._apiKey = api_key;
-      this._http_url = http_url || 'http://localhost:3000';
-      this._flight_url = flight_url || 'localhost:50051';
-      this._flight_tls_enabled =
-        flight_tls_enabled !== undefined
-          ? flight_tls_enabled
-          : this._flight_url.includes('localhost')
+      this._apiKey = apiKey;
+      this._httpUrl = httpUrl || 'http://127.0.0.1:8090';
+      this._flightUrl = flightUrl || '127.0.0.1:50051';
+      this._flightTlsEnabled =
+        flightTlsEnabled !== undefined
+          ? flightTlsEnabled
+          : this._flightUrl.includes('127.0.0.1')
             ? false
             : true;
     }
 
-    this._user_agent = getUserAgent();
+    this._userAgent = getUserAgent();
   }
 
   private createClient(meta: any): any {
-    if (!this._flight_tls_enabled) {
-      return new flight_proto.FlightService(
-        this._flight_url,
+    if (!this._flightTlsEnabled) {
+      return new flightProto.FlightService(
+        this._flightUrl,
         grpc.credentials.createInsecure()
       );
     }
@@ -93,7 +94,7 @@ class SpiceClient {
       creds,
       callCreds
     );
-    return new flight_proto.FlightService(this._flight_url, combCreds);
+    return new flightProto.FlightService(this._flightUrl, combCreds);
   }
 
   private async getResultStream(
@@ -103,7 +104,7 @@ class SpiceClient {
     const meta = new grpc.Metadata();
     const client: FlightClient = this.createClient(meta);
     meta.set('authorization', 'Bearer ' + this._apiKey);
-    meta.set('x-spice-user-agent', this._user_agent);
+    meta.set('x-spice-user-agent', this._userAgent);
 
     let queryBuff = Buffer.from(queryText, 'utf8');
 
@@ -137,13 +138,13 @@ class SpiceClient {
     }, this._maxRetries);
   }
 
-  public async doQueryRequest(
+  private async doQueryRequest(
     queryText: string,
     onData: ((data: Table) => void) | undefined = undefined
   ): Promise<Table> {
     let client: FlightClient;
 
-    const do_get = await this.getResultStream(queryText, (c: FlightClient) => {
+    const resultStream = await this.getResultStream(queryText, (c: FlightClient) => {
       client = c;
     });
 
@@ -152,7 +153,7 @@ class SpiceClient {
 
     let schema: Buffer | undefined;
     let chunks: Buffer[] = [];
-    do_get.on('data', (response: FlightData) => {
+    resultStream.on('data', (response: FlightData) => {
       let ipcMessage = getIpcMessage(response);
       chunks.push(ipcMessage);
       if (!schema) {
@@ -164,151 +165,19 @@ class SpiceClient {
     });
 
     return new Promise((resolve, reject) => {
-      do_get.on('status', (response: FlightStatus) => {
+      resultStream.on('status', (response: FlightStatus) => {
         const table = tableFromIPC(chunks);
         client.close();
         resolve(table);
       });
 
-      do_get.on('error', (err: any) => {
+      resultStream.on('error', (err: any) => {
         client.close();
         if (isDataAlreadySent) retry.dontRetry(err);
 
         reject(err);
       });
     });
-  }
-
-  public async queryAsync(
-    queryName: string,
-    queryText: string,
-    webhookUri: string
-  ): Promise<AsyncQueryResponse> {
-    if (!queryName) {
-      throw new Error('queryName is required');
-    }
-
-    if (!queryText) {
-      throw new Error('queryText is required');
-    }
-
-    if (!webhookUri) {
-      throw new Error('webhookUri is required');
-    }
-
-    const asyncQueryRequest: AsyncQueryRequest = {
-      sql: queryText,
-      notifications: [{ name: queryName, type: 'webhook', uri: webhookUri }],
-    };
-
-    const resp = await fetch(`${this._http_url}/v0.1/sql`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': this._apiKey,
-        "X-Spice-User-Agent": this._user_agent,
-      },
-      body: JSON.stringify(asyncQueryRequest),
-      agent: httpsAgent,
-    });
-
-    if (!resp.ok) {
-      throw new Error(
-        `Failed to execute query: ${resp.status} ${resp.statusText
-        } ${await resp.text()}`
-      );
-    }
-
-    return resp.json() as Promise<AsyncQueryResponse>;
-  }
-
-  public async getQueryResults(
-    queryId: string,
-    offset?: number,
-    limit?: number
-  ): Promise<QueryResultsResponse> {
-    if (!queryId) {
-      throw new Error('queryId is required');
-    }
-    if (offset && offset < 0) {
-      throw new Error('offset must be greater than or equal to 0');
-    }
-    if (limit && (limit < 0 || limit > 500)) {
-      throw new Error(
-        'limit must be greater than or equal to 0 and less than or equal to 500'
-      );
-    }
-
-    const params: { [key: string]: string } = {};
-
-    if (offset || limit) {
-      if (offset) {
-        params.offset = String(offset);
-      }
-      if (limit) {
-        params.limit = String(limit);
-      }
-    }
-
-    const resp = await this.fetchInternal(`/v0.1/sql/${queryId}`, params);
-    if (!resp.ok) {
-      throw new Error(
-        `Failed to get query results: ${resp.status} ${resp.statusText
-        } ${await resp.text()}`
-      );
-    }
-
-    return resp.json() as Promise<QueryResultsResponse>;
-  }
-
-  /*
-   * Get query results.
-   * @param queryId The query ID.
-   * @param allPages If true, get all pages of results. If false, get only the first page.
-   * @returns The query results.
-   */
-  public async getQueryResultsAll(
-    queryId: string
-  ): Promise<QueryResultsResponse> {
-    let offset = 0;
-    let limit = 500;
-    const queryResponse = await this.getQueryResults(queryId, offset, limit);
-
-    for (let page = 0; page < 1000; page++) {
-      if (queryResponse.rowCount <= limit || queryResponse.rowCount <= offset) {
-        break;
-      }
-
-      offset += limit;
-      const resp = await this.getQueryResults(queryId, offset, limit);
-      queryResponse.rows.push(...resp.rows);
-    }
-
-    return queryResponse;
-  }
-
-  /*
-   * Get query results from a notification body.
-   * @param notificationBody The notification body.
-   * @param allPages If true, get all pages of results. If false, get only the first page.
-   * @returns The query results.
-   */
-  public async getQueryResultsFromNotification(
-    notificationBody: string,
-    allPages: boolean = false
-  ): Promise<QueryResultsResponse> {
-    if (!notificationBody) {
-      throw new Error('notificationBody is required');
-    }
-
-    const notification: QueryCompleteNotification =
-      JSON.parse(notificationBody);
-
-    if (!notification.queryId || notification.queryId.length != 36) {
-      throw new Error('Invalid notification. queryId is missing or invalid.');
-    }
-
-    return await this.getQueryResultsAll(notification.queryId);
   }
 
   /*
@@ -323,26 +192,48 @@ class SpiceClient {
     this._maxRetries = maxRetries;
   }
 
-  private fetchInternal = async (
+  public async refreshDataset(dataset: string) {
+    const response = await this.fetchInternal('POST', `/v1/datasets/${dataset}/acceleration/refresh`);
+    if (response.status !== 201) {
+      const responseText = await response.text();
+      throw new Error(`Failed to refresh dataset ${dataset}. Status code: ${response.status}, Response: ${responseText}`);
+    }
+  }
+
+  private fetchInternal(
+    method: string,
     path: string,
     params?: { [key: string]: string }
-  ) => {
+  ) {
     let url;
     if (params && Object.keys(params).length) {
-      url = `${this._http_url}${path}?${new URLSearchParams(params)}`;
+      url = `${this._httpUrl}${path}?${new URLSearchParams(params)}`;
     } else {
-      url = `${this._http_url}${path}`;
+      url = `${this._httpUrl}${path}`;
     }
 
-    return await fetch(url, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept-Encoding': 'br, gzip, deflate',
-        'X-API-Key': this._apiKey,
-        "X-Spice-User-Agent": this._user_agent,
-      },
-      agent: httpsAgent,
-    });
+    const headers = [
+      ['Content-Type', 'application/json'],
+      ['Accept-Encoding', 'br, gzip, deflate'],
+      ['X-Spice-User-Agent', this._userAgent]
+    ];
+
+    if (this._apiKey) {
+      headers.push(['X-API-Key', this._apiKey || '']);
+    }
+
+    if (this._httpUrl.startsWith("https://")) {
+      return fetch(url, {
+        headers: new Headers(headers),
+        agent: httpsAgent,
+        method
+      });
+    } else {
+      return fetch(url, {
+        headers: new Headers(headers),
+        method
+      });
+    }
   };
 }
 

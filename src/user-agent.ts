@@ -2,8 +2,8 @@ import os from "os";
 import { VERSION } from "./version";
 
 export function getUserAgent(): string {
-    const os_type = os.type();
-    const os_release = os.release();
-    const os_arch = os.machine();
-    return `spice.js ${VERSION} (${os_type}/${os_release} ${os_arch})`;
+    const osType = os.type();
+    const osRelease = os.release();
+    const osArch = os.machine();
+    return `spice.js ${VERSION} (${osType}/${osRelease} ${osArch})`;
 }

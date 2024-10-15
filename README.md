@@ -17,9 +17,9 @@ import { SpiceClient } from '@spiceai/spice';
 
 const main = async () => {
   const spiceClient = new SpiceClient({
-    api_key: 'API_KEY', // spice.ai api key,
-    http_url: 'https://data.spiceai.io',
-    flight_url: 'flight.spiceai.io:443'
+    apiKey: 'API_KEY', // spice.ai api key,
+    httpUrl: 'https://data.spiceai.io',
+    flightUrl: 'flight.spiceai.io:443'
   });
   const table = await spiceClient.query(
     'SELECT number, "timestamp", gas_used FROM eth.recent_blocks LIMIT 10'
@@ -32,45 +32,15 @@ main();
 
 Querying data is done through a `SpiceClient` object that initializes the connection with Spice endpoint. `SpiceClient` has the following arguments:
 
-- `apiKey` (string, required): API key to authenticate with the endpoint.
-- `url` (string, optional): URL of the endpoint to use (default: flight.spiceai.io:443)
+- `apiKey` (string, optional): API key to authenticate with the endpoint.
+- `flightUrl` (string, optional): URL of the Flight endpoint to use (default: `localhost:50051`)
+- `httpUrl` (string, optional): URL of the HTTP endpoint to use (default: `http://localhost:8090`)
 
 Read more about the Spice.ai Apache Arrow Flight API at [docs.spice.ai](https://docs.spice.ai/api/sql-query-api/apache-arrow-flight-api).
 
-### Async Query
-
-```js
-import { SpiceClient } from '@spiceai/spice';
-const main = async () => {
-  const spiceClient = new SpiceClient('API_KEY');
-  const queryResp = await spiceClient.queryAsync(
-    'recent_blocks',
-    'SELECT number, "timestamp", gas_used FROM eth.recent_blocks LIMIT 10',
-    'https://o4skc7qyx7mrl8x7wdtgmc.hooks.webhookrelay.com'
-  ).catch((reason) => {
-    console.error('Query failed.', reason)    
-  });
-
-  if !queryResp {
-    return;
-  }
-
-  // Webhook trigger with body
-  const queryResults = await spiceClient.getQueryResultsFromNotification(
-    body
-  );
-
-  console.log(queryResults);
-};
-
-main();
-```
-
-Read more about the Spice.ai Async HTTP API at [docs.spice.ai](https://docs.spice.ai/api/sql-query-api/http-api-1).
-
 ### Usage with locally running [spice runtime](https://github.com/spiceai/spiceai)
 
-Follow the [quiqstart guide](https://github.com/spiceai/spiceai?tab=readme-ov-file#%EF%B8%8F-quickstart-local-machine) to install and run spice locally
+Follow the [quickstart guide](https://docs.spiceai.org/getting-started) to install and run spice locally
 
 ```js
 import { SpiceClient } from '@spiceai/spice';
@@ -81,8 +51,8 @@ const main = async () => {
 
   // or use custom connection params:
   // const spiceClient = new SpiceClient({
-  //   http_url: 'http://my_spice_http_host',
-  //   flight_url: 'my_spice_flight_host',
+  //   httpUrl: 'http://my_spice_http_host',
+  //   flightUrl: 'my_spice_flight_host',
   // });
 
   const table = await spiceClient.query(
@@ -113,19 +83,4 @@ Check out our [API documentation](https://docs.spice.ai/sdks/node.js-sdk) to lea
 
 ## Running tests locally
 
-To run the tests (`make test`):
-
-1. Create [WebhookRelay](https://webhookrelay.com/) account (Free)
-2. [Create Access Token](https://my.webhookrelay.com/tokens) => save **key** and **secret** as `RELAY_KEY` and `RELAY_SECRET`
-3. Create [New Empty Bucket](https://my.webhookrelay.com/buckets) called `spice.js` => save **Default public endpoint** value as `RELAY_URL`
-
-Pass `RELAY_KEY`, `RELAY_SECRET`, `RELAY_URL` as parameters when running the tests, for example via **.env** config file.
-
-```env
-API_KEY=<Your API_KEY>
-RELAY_KEY=<Your RELAY_KEY from Step 2 above>
-RELAY_SECRET=<Your RELAY_SECRET from Step 2 above>
-RELAY_URL=<Your RELAY_URL from Step 3 above>
-```
-
-For more information, see [CONTRIBUTING.md](./CONTRIBUTING.md)
+Run the tests with `make test`. For more information, see [CONTRIBUTING.md](./CONTRIBUTING.md)

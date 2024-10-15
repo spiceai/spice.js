@@ -27,16 +27,16 @@ type FlightEndpoint = {
 
 type FlightInfo = {
   schema: Buffer;
-  flight_descriptor: FlightDescriptor;
+  flightDescriptor: FlightDescriptor;
   endpoint: FlightEndpoint[];
-  total_records: number;
-  total_bytes: number;
+  totalRecords: number;
+  totalBytes: number;
 };
 
 type FlightData = {
-  data_header: Buffer;
-  app_metadata: Buffer;
-  data_body: Buffer;
+  dataHeader: Buffer;
+  appMetadata: Buffer;
+  dataBody: Buffer;
 };
 
 type FlightStatus = {
@@ -54,13 +54,13 @@ type FlightClient = {
 };
 
 const getIpcMessage = (flightData: FlightData): Buffer => {
-  let header_size_buff = Buffer.alloc(4);
-  header_size_buff.writeUInt32LE(flightData.data_header.length, 0);
+  let headerBuffer = Buffer.alloc(4);
+  headerBuffer.writeUInt32LE(flightData.dataHeader.length, 0);
 
   return Buffer.concat([
-    header_size_buff,
-    flightData.data_header,
-    flightData.data_body,
+    headerBuffer,
+    flightData.dataHeader,
+    flightData.dataBody,
   ]);
 };
 
