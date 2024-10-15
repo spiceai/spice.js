@@ -83,19 +83,4 @@ Check out our [API documentation](https://docs.spice.ai/sdks/node.js-sdk) to lea
 
 ## Running tests locally
 
-To run the tests (`make test`):
-
-1. Create [WebhookRelay](https://webhookrelay.com/) account (Free)
-2. [Create Access Token](https://my.webhookrelay.com/tokens) => save **key** and **secret** as `RELAY_KEY` and `RELAY_SECRET`
-3. Create [New Empty Bucket](https://my.webhookrelay.com/buckets) called `spice.js` => save **Default public endpoint** value as `RELAY_URL`
-
-Pass `RELAY_KEY`, `RELAY_SECRET`, `RELAY_URL` as parameters when running the tests, for example via **.env** config file.
-
-```env
-API_KEY=<Your API_KEY>
-RELAY_KEY=<Your RELAY_KEY from Step 2 above>
-RELAY_SECRET=<Your RELAY_SECRET from Step 2 above>
-RELAY_URL=<Your RELAY_URL from Step 3 above>
-```
-
-For more information, see [CONTRIBUTING.md](./CONTRIBUTING.md)
+Run the tests with `make test`. For more information, see [CONTRIBUTING.md](./CONTRIBUTING.md)
