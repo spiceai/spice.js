@@ -4,11 +4,6 @@ import 'dotenv/config';
 import { Vector } from 'apache-arrow';
 
 describe('cloud', () => {
-  const RELAY_URL = process.env.RELAY_URL;
-  if (!RELAY_URL) {
-    throw 'RELAY_URL environment variable not set';
-  }
-
   const HTTP_DATA_PATH = process.env.HTTP_URL
     ? process.env.HTTP_URL
     : 'https://data.spiceai.io';
