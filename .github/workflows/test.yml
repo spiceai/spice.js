@@ -17,12 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: [
-          { os: 'ubuntu-latest', nodever: 18 },
-          { os: 'ubuntu-latest', nodever: 20 },
-          { os: 'ubuntu-latest', nodever: 22 },
-          { os: 'macos-latest', nodever: 22 }
-        ]
+        version: [{ os: 'ubuntu-latest', nodever: 18 },{ os: 'ubuntu-latest', nodever: 20 },{ os: 'ubuntu-latest', nodever: 22 },{ os: 'macos-latest', nodever: 22 }]
     name: Test with spice runtime on ${{ matrix.version.os }} Node.JS ${{ matrix.version.nodever }}
     steps:
       - uses: actions/checkout@v4
