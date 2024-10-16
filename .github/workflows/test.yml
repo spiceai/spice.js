@@ -12,18 +12,18 @@ on:
       - v*
 
 jobs:
-  test-cloud:
+  test-multi-version:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        nodever: [18, 20]
+        os: [ubuntu-latest]
+        nodever: [18, 20, 22]
     name: Test with spice.ai cloud on ${{ matrix.os }} Node.js ${{ matrix.nodever }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up NodeJS
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.nodever }}
       - name: Install requirements
@@ -32,25 +32,25 @@ jobs:
           yarn build
       - name: Running tests
         run: |
-          yarn test -t 'cloud'
+          yarn test
         env:
           API_KEY: ${{ secrets.API_KEY }}
           RELAY_KEY: ${{ secrets.RELAY_KEY }}
           RELAY_SECRET: ${{ secrets.RELAY_SECRET }}
           RELAY_URL: ${{ secrets.RELAY_URL }}
 
-  test-local-spice:
+  test-cross-os:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        nodever: [18, 20]
+        nodever: [22]
     name: Test with local spice runtime on ${{ matrix.os }} Node.js ${{ matrix.nodever }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up NodeJS
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.nodever }}
       - name: Install requirements
@@ -123,7 +123,7 @@ jobs:
 
       - name: Running tests
         run: |
-          yarn test -t "(local|user-agent)"
+          yarn test
         env:
           API_KEY: ${{ secrets.API_KEY }}
           RELAY_KEY: ${{ secrets.RELAY_KEY }}
