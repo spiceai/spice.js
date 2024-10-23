@@ -195,8 +195,16 @@ class SpiceClient {
 
   public async refreshDataset(dataset: string, refresh_overrides?: RefreshOverrides) {
     if (!refresh_overrides) {
-      refresh_overrides = {};
+      refresh_overrides = {
+        refresh_sql: null,
+        refresh_mode: null,
+        refresh_jitter_max: null,
+      };
     }
+
+    refresh_overrides.refresh_sql = refresh_overrides.refresh_sql || null;
+    refresh_overrides.refresh_mode = refresh_overrides.refresh_mode || null;
+    refresh_overrides.refresh_jitter_max = refresh_overrides.refresh_jitter_max || null;
 
     const body = JSON.stringify(refresh_overrides);
 
@@ -234,12 +242,14 @@ class SpiceClient {
       return fetch(url, {
         headers: new Headers(headers),
         agent: httpsAgent,
-        method
+        method,
+        body
       });
     } else {
       return fetch(url, {
         headers: new Headers(headers),
-        method
+        method,
+        body
       });
     }
   };

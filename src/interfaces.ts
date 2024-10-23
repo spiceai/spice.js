@@ -37,7 +37,7 @@ export interface SpiceClientConfig {
 }
 
 export interface RefreshOverrides {
-  refresh_sql?: string;
-  refresh_mode?: string;
-  refresh_jitter_max?: string;
+  refresh_sql?: string | null;
+  refresh_mode?: string | null;
+  refresh_jitter_max?: string | null;
 }
