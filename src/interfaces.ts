@@ -35,3 +35,9 @@ export interface SpiceClientConfig {
   flightUrl?: string;
   flightTlsEnabled?: boolean;
 }
+
+export interface RefreshOverrides {
+  refresh_sql?: string | null;
+  refresh_mode?: string | null;
+  refresh_jitter_max?: string | null;
+}

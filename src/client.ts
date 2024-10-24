@@ -19,6 +19,7 @@ import {
   AsyncQueryResponse,
   QueryCompleteNotification,
   QueryResultsResponse,
+  RefreshOverrides,
   type SpiceClientConfig,
 } from './interfaces';
 
@@ -192,8 +193,22 @@ class SpiceClient {
     this._maxRetries = maxRetries;
   }
 
-  public async refreshDataset(dataset: string) {
-    const response = await this.fetchInternal('POST', `/v1/datasets/${dataset}/acceleration/refresh`);
+  public async refreshDataset(dataset: string, refresh_overrides?: RefreshOverrides) {
+    if (!refresh_overrides) {
+      refresh_overrides = {
+        refresh_sql: null,
+        refresh_mode: null,
+        refresh_jitter_max: null,
+      };
+    }
+
+    refresh_overrides.refresh_sql = refresh_overrides.refresh_sql || null;
+    refresh_overrides.refresh_mode = refresh_overrides.refresh_mode || null;
+    refresh_overrides.refresh_jitter_max = refresh_overrides.refresh_jitter_max || null;
+
+    const body = JSON.stringify(refresh_overrides);
+
+    const response = await this.fetchInternal('POST', `/v1/datasets/${dataset}/acceleration/refresh`, undefined, body);
     if (response.status !== 201) {
       const responseText = await response.text();
       throw new Error(`Failed to refresh dataset ${dataset}. Status code: ${response.status}, Response: ${responseText}`);
@@ -203,7 +218,8 @@ class SpiceClient {
   private fetchInternal(
     method: string,
     path: string,
-    params?: { [key: string]: string }
+    params?: { [key: string]: string },
+    body?: string,
   ) {
     let url;
     if (params && Object.keys(params).length) {
@@ -226,12 +242,14 @@ class SpiceClient {
       return fetch(url, {
         headers: new Headers(headers),
         agent: httpsAgent,
-        method
+        method,
+        body
       });
     } else {
       return fetch(url, {
         headers: new Headers(headers),
-        method
+        method,
+        body
       });
     }
   };
