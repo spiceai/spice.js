@@ -13,7 +13,6 @@ assignees: ''
 | Endgame |     |
 | QA      |     |
 | Docs    |     |
-| Comms   |     |
 
 ## Planning Checklist
 
@@ -38,3 +37,4 @@ assignees: ''
 - [ ] Ensure the [npm-publish](https://github.com/spiceai/spice.js/actions/workflows/npm-publish.yml) workflow has triggered, and successfully published the package.
 - [ ] Run a test pass using the [`spice.js` sample](https://github.com/spiceai/samples/tree/trunk/client-sdk/spice.js-sdk-sample) using the latest published version.
 - [ ] Update `version.txt` and version in `Cargo.toml` to the next release version.
+- [ ] The SDK release is added to the next [Spice release notes](https://github.com/spiceai/spiceai/tree/trunk/docs/release_notes)
