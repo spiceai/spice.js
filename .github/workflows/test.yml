@@ -11,6 +11,8 @@ on:
     tags:
       - v*
 
+  workflow_dispatch:
+
 jobs:
   test:
     runs-on: ${{ matrix.version.os }}
