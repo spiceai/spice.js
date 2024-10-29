@@ -33,7 +33,7 @@ assignees: ''
 - [ ] QA DRI sign-off
 - [ ] Docs DRI sign-off
 - [ ] Create a new branch `release-v[semver]` for the release from trunk. E.g. `release-v0.17.0-beta`
-- [ ] Release the new version by creating and publishing a latest [GitHub Release](https://github.com/spiceai/spiceai/releases/new) with the tag from the release branch. E.g. `v0.17.0-beta`.
+- [ ] Release the new version by creating and publishing a latest [GitHub Release](https://github.com/spiceai/spice.js/releases/new) with the tag from the release branch. E.g. `v0.17.0-beta`.
 - [ ] Ensure the [npm-publish](https://github.com/spiceai/spice.js/actions/workflows/npm-publish.yml) workflow has triggered, and successfully published the package.
 - [ ] Run a test pass using the [`spice.js` sample](https://github.com/spiceai/samples/tree/trunk/client-sdk/spice.js-sdk-sample) using the latest published version.
 - [ ] Update `version.ts` and version in `package.json` to the next release version.
