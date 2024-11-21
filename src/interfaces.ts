@@ -34,6 +34,7 @@ export interface SpiceClientConfig {
   httpUrl?: string;
   flightUrl?: string;
   flightTlsEnabled?: boolean;
+  userAgent?: string;
 }
 
 export interface RefreshOverrides {

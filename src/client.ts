@@ -60,8 +60,9 @@ class SpiceClient {
       this._apiKey = params;
       this._httpUrl = 'https://data.spiceai.io';
       this._flightUrl = 'flight.spiceai.io:443';
+      this._userAgent = getUserAgent();
     } else {
-      const { apiKey, httpUrl, flightUrl, flightTlsEnabled } = params;
+      const { apiKey, httpUrl, flightUrl, flightTlsEnabled, userAgent } = params;
 
       this._apiKey = apiKey;
       this._httpUrl = httpUrl || 'http://127.0.0.1:8090';
@@ -72,9 +73,8 @@ class SpiceClient {
           : this._flightUrl.includes('127.0.0.1')
             ? false
             : true;
+      this._userAgent = userAgent || getUserAgent();
     }
-
-    this._userAgent = getUserAgent();
   }
 
   private createClient(meta: any): any {
@@ -105,7 +105,7 @@ class SpiceClient {
     const meta = new grpc.Metadata();
     const client: FlightClient = this.createClient(meta);
     meta.set('authorization', 'Bearer ' + this._apiKey);
-    meta.set('x-spice-user-agent', this._userAgent);
+    meta.set('User-Agent', this._userAgent);
 
     let queryBuff = Buffer.from(queryText, 'utf8');
 
