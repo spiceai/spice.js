@@ -231,7 +231,7 @@ class SpiceClient {
     const headers = [
       ['Content-Type', 'application/json'],
       ['Accept-Encoding', 'br, gzip, deflate'],
-      ['X-Spice-User-Agent', this._userAgent]
+      ['User-Agent', this._userAgent]
     ];
 
     if (this._apiKey) {
