@@ -900,10 +900,10 @@ anymatch@^3.0.3, anymatch@~3.1.2:
     normalize-path "^3.0.0"
     picomatch "^2.0.4"
 
-apache-arrow@17.0.0:
-  version "17.0.0"
-  resolved "https://registry.yarnpkg.com/apache-arrow/-/apache-arrow-17.0.0.tgz#73d98566c86352c9a0314c03890dbd7211073827"
-  integrity sha512-X0p7auzdnGuhYMVKYINdQssS4EcKec9TCXyez/qtJt32DrIMGbzqiaMiQ0X6fQlQpw8Fl0Qygcv4dfRAr5Gu9Q==
+apache-arrow@18.1.0:
+  version "18.1.0"
+  resolved "https://registry.yarnpkg.com/apache-arrow/-/apache-arrow-18.1.0.tgz#bb17a9e91e4e2f7b5cf4efcb9c1ab57cedac7e2a"
+  integrity sha512-v/ShMp57iBnBp4lDgV8Jx3d3Q5/Hac25FWmQ98eMahUiHPXcvwIMKJD0hBIgclm/FCG+LwPkAKtkRO1O/W0YGg==
   dependencies:
     "@swc/helpers" "^0.5.11"
     "@types/command-line-args" "^5.2.3"
