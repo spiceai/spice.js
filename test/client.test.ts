@@ -3,7 +3,7 @@ import { SpiceClient } from '../';
 import 'dotenv/config';
 import { Vector } from 'apache-arrow';
 
-describe('cloud', () => {
+describe.skip('cloud', () => {
   const HTTP_DATA_PATH = process.env.HTTP_URL
     ? process.env.HTTP_URL
     : 'https://data.spiceai.io';

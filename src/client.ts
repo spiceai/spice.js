@@ -73,7 +73,8 @@ class SpiceClient {
           : this._flightUrl.includes('127.0.0.1')
             ? false
             : true;
-      this._userAgent = userAgent || getUserAgent();
+      // Prepend the user-supplied user agent (if any) with the default user agent
+      this._userAgent = userAgent ? `${userAgent} ${getUserAgent()}` : getUserAgent();
     }
   }
 
