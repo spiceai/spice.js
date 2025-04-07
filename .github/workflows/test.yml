@@ -15,22 +15,24 @@ on:
 
 jobs:
   test:
-    runs-on: ${{ matrix.version.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        version: [
-          { os: 'ubuntu-latest', nodever: 22 },
-          { os: 'macos-latest', nodever: 22 },
-        ]
-    name: Test with spice runtime on ${{ matrix.version.os }} Node.JS ${{ matrix.version.nodever }}
+        os:
+          - ubuntu-latest
+          - macos-latest
+        node:
+          - 22
+          # - 24 - Node.JS 24 will be released in Apr 2025
+    name: Test with spice runtime on ${{ matrix.os }} Node.JS ${{ matrix.node }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up NodeJS
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.version.nodever }}
+          node-version: ${{ matrix.node }}
 
       - name: Install requirements
         run: |
@@ -38,7 +40,7 @@ jobs:
           yarn build
 
       - name: Install PostgreSQL (Linux)
-        if: matrix.version.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql
@@ -49,7 +51,7 @@ jobs:
           sudo -u postgres createdb testdb
 
       - name: Install PostgreSQL (MacOS)
-        if: matrix.version.os == 'macos-latest'
+        if: matrix.os == 'macos-latest'
         run: |
           brew install postgresql
           brew services start postgresql
