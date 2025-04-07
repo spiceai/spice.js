@@ -31,7 +31,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.version.nodever }}
-      
+
       - name: Install requirements
         run: |
           yarn install
@@ -81,9 +81,11 @@ jobs:
           curl https://install.spiceai.org | /bin/bash
           echo "$HOME/.spice/bin" >> $GITHUB_PATH
           $HOME/.spice/bin/spice install
-      
+
       - name: Install Spice (https://install.spiceai.org) (MacOS)
         if: matrix.version.os == 'macos-latest'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           brew install spiceai/spiceai/spice
           brew install spiceai/spiceai/spiced
