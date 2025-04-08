@@ -1,11 +1,11 @@
-import { SpiceClient } from '../';
+import { SpiceClient } from "../";
 
-describe('local', () => {
+describe("local", () => {
   const client = new SpiceClient();
 
-  it('connection and query to local spice runtime works', async () => {
+  it("connection and query to local spice runtime works", async () => {
     const tableResult = await client.query(
-      'select * from test_postgresql_table limit 3'
+      "SELECT * FROM test_postgresql_table_not_accelerated LIMIT 3",
     );
 
     expect(tableResult.toArray()).toHaveLength(3);
