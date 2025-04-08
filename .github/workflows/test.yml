@@ -99,7 +99,7 @@ jobs:
         run: |
           yarn test
         env:
-          API_KEY: ${{ secrets.API_KEY }}
+          SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }}
 
       - name: Stop spice and check logs
         if: always()
