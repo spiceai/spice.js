@@ -30,11 +30,13 @@ const httpsAgent = new https.Agent({ keepAlive: true });
 
 const PROTO_PATH = './proto/Flight.proto';
 // If we're running in a Next.js environment, we need to adjust the path to the proto file
-const PACKAGE_PATH = __dirname.includes('/.next/server/app')
-  ? __dirname.replace(/\/\.next\/.*$/, '/node_modules/@spiceai/spice/dist')
+const PACKAGE_PATH = __dirname.includes('.next')
+  ? path.join(
+      __dirname.substring(0, __dirname.indexOf('.next')),
+      './node_modules/@spiceai/spice/'
+    )
   : __dirname;
 const fullProtoPath = path.join(PACKAGE_PATH, PROTO_PATH);
-
 const packageDefinition = protoLoader.loadSync(fullProtoPath, {
   keepCase: false,
   longs: String,
@@ -62,7 +64,8 @@ class SpiceClient {
       this._flightUrl = 'flight.spiceai.io:443';
       this._userAgent = getUserAgent();
     } else {
-      const { apiKey, httpUrl, flightUrl, flightTlsEnabled, userAgent } = params;
+      const { apiKey, httpUrl, flightUrl, flightTlsEnabled, userAgent } =
+        params;
 
       this._apiKey = apiKey;
       this._httpUrl = httpUrl || 'http://127.0.0.1:8090';
@@ -71,10 +74,12 @@ class SpiceClient {
         flightTlsEnabled !== undefined
           ? flightTlsEnabled
           : this._flightUrl.includes('127.0.0.1')
-            ? false
-            : true;
+          ? false
+          : true;
       // Prepend the user-supplied user agent (if any) with the default user agent
-      this._userAgent = userAgent ? `${userAgent} ${getUserAgent()}` : getUserAgent();
+      this._userAgent = userAgent
+        ? `${userAgent} ${getUserAgent()}`
+        : getUserAgent();
     }
   }
 
@@ -146,9 +151,12 @@ class SpiceClient {
   ): Promise<Table> {
     let client: FlightClient;
 
-    const resultStream = await this.getResultStream(queryText, (c: FlightClient) => {
-      client = c;
-    });
+    const resultStream = await this.getResultStream(
+      queryText,
+      (c: FlightClient) => {
+        client = c;
+      }
+    );
 
     // indicates that data has been partially or fully sent
     let isDataAlreadySent = false;
@@ -194,7 +202,10 @@ class SpiceClient {
     this._maxRetries = maxRetries;
   }
 
-  public async refreshDataset(dataset: string, refresh_overrides?: RefreshOverrides) {
+  public async refreshDataset(
+    dataset: string,
+    refresh_overrides?: RefreshOverrides
+  ) {
     if (!refresh_overrides) {
       refresh_overrides = {
         refresh_sql: null,
@@ -205,14 +216,22 @@ class SpiceClient {
 
     refresh_overrides.refresh_sql = refresh_overrides.refresh_sql || null;
     refresh_overrides.refresh_mode = refresh_overrides.refresh_mode || null;
-    refresh_overrides.refresh_jitter_max = refresh_overrides.refresh_jitter_max || null;
+    refresh_overrides.refresh_jitter_max =
+      refresh_overrides.refresh_jitter_max || null;
 
     const body = JSON.stringify(refresh_overrides);
 
-    const response = await this.fetchInternal('POST', `/v1/datasets/${dataset}/acceleration/refresh`, undefined, body);
+    const response = await this.fetchInternal(
+      'POST',
+      `/v1/datasets/${dataset}/acceleration/refresh`,
+      undefined,
+      body
+    );
     if (response.status !== 201) {
       const responseText = await response.text();
-      throw new Error(`Failed to refresh dataset ${dataset}. Status code: ${response.status}, Response: ${responseText}`);
+      throw new Error(
+        `Failed to refresh dataset ${dataset}. Status code: ${response.status}, Response: ${responseText}`
+      );
     }
   }
 
@@ -220,7 +239,7 @@ class SpiceClient {
     method: string,
     path: string,
     params?: { [key: string]: string },
-    body?: string,
+    body?: string
   ) {
     let url;
     if (params && Object.keys(params).length) {
@@ -232,28 +251,28 @@ class SpiceClient {
     const headers = [
       ['Content-Type', 'application/json'],
       ['Accept-Encoding', 'br, gzip, deflate'],
-      ['User-Agent', this._userAgent]
+      ['User-Agent', this._userAgent],
     ];
 
     if (this._apiKey) {
       headers.push(['X-API-Key', this._apiKey || '']);
     }
 
-    if (this._httpUrl.startsWith("https://")) {
+    if (this._httpUrl.startsWith('https://')) {
       return fetch(url, {
         headers: new Headers(headers),
         agent: httpsAgent,
         method,
-        body
+        body,
       });
     } else {
       return fetch(url, {
         headers: new Headers(headers),
         method,
-        body
+        body,
       });
     }
-  };
+  }
 }
 
 export { SpiceClient };
