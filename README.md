@@ -19,11 +19,9 @@ const main = async () => {
   const spiceClient = new SpiceClient({
     apiKey: 'API_KEY', // spice.ai api key,
     httpUrl: 'https://data.spiceai.io',
-    flightUrl: 'flight.spiceai.io:443'
+    flightUrl: 'flight.spiceai.io:443',
   });
-  const table = await spiceClient.query(
-    'SELECT number, "timestamp", gas_used FROM eth.recent_blocks LIMIT 10'
-  );
+  const table = await spiceClient.query('SHOW TABLES;');
   console.table(table.toArray());
 };
 
@@ -56,7 +54,7 @@ const main = async () => {
   // });
 
   const table = await spiceClient.query(
-    'SELECT trip_distance, total_amount FROM taxi_trips ORDER BY trip_distance DESC LIMIT 10;'
+    'SELECT trip_distance, total_amount FROM taxi_trips ORDER BY trip_distance DESC LIMIT 10;',
   );
   console.table(table.toArray());
 };
@@ -76,6 +74,16 @@ spiceClient.setMaxRetries(5); // Setting to 0 will disable retries
 
 Retries are performed for connection and system internal errors. It is the SDK user's responsibility to properly
 handle other errors, for example RESOURCE_EXHAUSTED (HTTP 429).
+
+### Fallback behavior
+
+The `SpiceClient` automatically handles environments where Apache Arrow Flight gRPC cannot be used (e.g., serverless environments like AWS Lambda, Vercel, Netlify). The fallback strategy is:
+
+1. **Preferred**: Uses Apache Arrow Flight (gRPC) with gzip compression for optimal performance
+2. **Automatic**: If the Flight proto file is missing, it's automatically downloaded from `https://data.spiceai.io/v1/proto/flight` and cached
+3. **Fallback**: If gRPC cannot be initialized, automatically falls back to the HTTP `/v1/sql` endpoint
+
+Both gRPC and HTTP modes support compression (zstd, br, gzip, deflate) to reduce bandwidth usage. This ensures the SDK works efficiently in any environment without configuration changes. See [docs/http-fallback.md](./docs/http-fallback.md) for more details.
 
 ## Documentation
 
