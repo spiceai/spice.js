@@ -26,10 +26,21 @@ describe('cloud', () => {
     flightUrl: FLIGHT_PATH,
   });
 
+  // Build custom headers for Vercel client
+  const vercelCustomHeaders: { [key: string]: string } = {};
+  const vercelBypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  if (vercelBypassSecret) {
+    vercelCustomHeaders['x-vercel-protection-bypass'] = vercelBypassSecret;
+  }
+
   const vercelClient = new SpiceClient({
     apiKey: api_key,
     httpUrl: VERCEL_ENDPOINT,
     flightUrl: FLIGHT_PATH,
+    customHeaders:
+      Object.keys(vercelCustomHeaders).length > 0
+        ? vercelCustomHeaders
+        : undefined,
   });
 
   const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));

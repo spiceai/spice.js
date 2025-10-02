@@ -141,6 +141,7 @@ class SpiceClient {
   private _maxRetries: number = retry.FLIGHT_QUERY_MAX_RETRIES;
   private _useGrpc: boolean = grpcAvailable;
   private _initPromise: Promise<void>;
+  private _customHeaders?: { [key: string]: string };
 
   public constructor(params: string | SpiceClientConfig = {}) {
     // support legacy constructor with api_key as first agument
@@ -150,8 +151,14 @@ class SpiceClient {
       this._flightUrl = 'flight.spiceai.io:443';
       this._userAgent = getUserAgent();
     } else {
-      const { apiKey, httpUrl, flightUrl, flightTlsEnabled, userAgent } =
-        params;
+      const {
+        apiKey,
+        httpUrl,
+        flightUrl,
+        flightTlsEnabled,
+        userAgent,
+        customHeaders,
+      } = params;
 
       this._apiKey = apiKey;
       this._httpUrl = httpUrl || 'http://127.0.0.1:8090';
@@ -164,6 +171,7 @@ class SpiceClient {
       this._userAgent = userAgent
         ? `${userAgent} ${getUserAgent()}`
         : getUserAgent();
+      this._customHeaders = customHeaders;
     }
 
     // Initialize gRPC during construction
@@ -521,7 +529,14 @@ class SpiceClient {
       ['User-Agent', this._userAgent],
     ]);
 
-    // Add custom headers
+    // Add instance-level custom headers
+    if (this._customHeaders) {
+      Object.entries(this._customHeaders).forEach(([key, value]) => {
+        headers.set(key, value);
+      });
+    }
+
+    // Add custom headers (will override instance-level headers if same key)
     if (customHeaders) {
       Object.entries(customHeaders).forEach(([key, value]) => {
         headers.set(key, value);
