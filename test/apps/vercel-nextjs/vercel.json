@@ -1,0 +1,15 @@
+{
+    "buildCommand": "npm run build",
+    "devCommand": "npm run dev",
+    "installCommand": "npm install",
+    "framework": "nextjs",
+    "regions": [
+        "iad1"
+    ],
+    "env": {
+        "SPICEAI_API_KEY": {
+            "description": "Spice.ai API Key for authentication",
+            "value": ""
+        }
+    }
+}
