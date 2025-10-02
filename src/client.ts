@@ -98,10 +98,10 @@ function loadProtoFromContent(content: string): any {
   try {
     // Parse the proto content directly in memory using protobufjs
     const root = protobuf.parse(content, { keepCase: false }).root;
-    
+
     // Convert to JSON descriptor
     const json = root.toJSON();
-    
+
     // Load from JSON
     const packageDefinition = protoLoader.fromJSON(json, {
       keepCase: false,
@@ -114,10 +114,13 @@ function loadProtoFromContent(content: string): any {
     const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
     return arrow.flight.protocol;
   } catch (error: any) {
-    console.error('[spice.js] Failed to load proto from content:', error.message);
+    console.error(
+      '[spice.js] Failed to load proto from content:',
+      error.message,
+    );
     throw error;
   }
-}/**
+} /**
  * Initialize the proto file (sync attempt)
  */
 function initializeProto(): void {
