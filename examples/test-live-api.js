@@ -1,6 +1,6 @@
 /**
  * Live Integration Test against spice.ai endpoints
- * 
+ *
  * This test validates:
  * 1. gRPC (Apache Arrow Flight) queries
  * 2. HTTP fallback queries
@@ -42,45 +42,55 @@ async function testGrpcEndpoint() {
 
     // Test 1: Simple query
     console.log('Query 1: Simple constant values');
-    console.log('SQL: SELECT 42 as answer, \'hello\' as greeting\n');
-    
+    console.log("SQL: SELECT 42 as answer, 'hello' as greeting\n");
+
     const table1 = await client.query(
-      'SELECT 42 as answer, \'hello\' as greeting'
+      "SELECT 42 as answer, 'hello' as greeting",
     );
 
     console.log(`✓ Query successful!`);
     console.log(`  Rows: ${table1.numRows}`);
-    console.log(`  Columns: ${table1.schema.fields.map(f => f.name).join(', ')}`);
+    console.log(
+      `  Columns: ${table1.schema.fields.map((f) => f.name).join(', ')}`,
+    );
     console.log('\nResults:');
     console.table(table1.toArray());
 
     // Test 2: Math operations
     console.log('\n─────────────────────────────────────────────────');
     console.log('Query 2: Math operations');
-    console.log('SQL: SELECT 10 * 20 as product, 100 / 4 as division, 2 + 2 as sum\n');
-    
+    console.log(
+      'SQL: SELECT 10 * 20 as product, 100 / 4 as division, 2 + 2 as sum\n',
+    );
+
     const table2 = await client.query(
-      'SELECT 10 * 20 as product, 100 / 4 as division, 2 + 2 as sum'
+      'SELECT 10 * 20 as product, 100 / 4 as division, 2 + 2 as sum',
     );
 
     console.log(`✓ Query successful!`);
     console.log(`  Rows: ${table2.numRows}`);
-    console.log(`  Columns: ${table2.schema.fields.map(f => f.name).join(', ')}`);
+    console.log(
+      `  Columns: ${table2.schema.fields.map((f) => f.name).join(', ')}`,
+    );
     console.log('\nResults:');
     console.table(table2.toArray());
 
     // Test 3: String operations
     console.log('\n─────────────────────────────────────────────────');
     console.log('Query 3: String operations');
-    console.log('SQL: SELECT UPPER(\'test\') as upper_text, LOWER(\'TEST\') as lower_text\n');
-    
+    console.log(
+      "SQL: SELECT UPPER('test') as upper_text, LOWER('TEST') as lower_text\n",
+    );
+
     const table3 = await client.query(
-      'SELECT UPPER(\'test\') as upper_text, LOWER(\'TEST\') as lower_text'
+      "SELECT UPPER('test') as upper_text, LOWER('TEST') as lower_text",
     );
 
     console.log(`✓ Query successful!`);
     console.log(`  Rows: ${table3.numRows}`);
-    console.log(`  Columns: ${table3.schema.fields.map(f => f.name).join(', ')}`);
+    console.log(
+      `  Columns: ${table3.schema.fields.map((f) => f.name).join(', ')}`,
+    );
     console.log('\nResults:');
     console.table(table3.toArray());
 
@@ -113,18 +123,18 @@ async function testHttpEndpoint() {
 
     // Test 1: Simple query
     console.log('Query 1: Simple constant values');
-    console.log('SQL: SELECT 123 as number, \'world\' as text\n');
-    
+    console.log("SQL: SELECT 123 as number, 'world' as text\n");
+
     const response1 = await fetch('https://data.spiceai.io/v1/sql', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/vnd.spiceai.sql.v1+json',
+        Accept: 'application/vnd.spiceai.sql.v1+json',
         'Accept-Encoding': 'zstd, br, gzip, deflate',
         'X-API-Key': API_KEY,
       },
       body: JSON.stringify({
-        sql: 'SELECT 123 as number, \'world\' as text',
+        sql: "SELECT 123 as number, 'world' as text",
         parameters: [],
       }),
     });
@@ -135,7 +145,7 @@ async function testHttpEndpoint() {
 
     const contentType1 = response1.headers.get('content-type');
     const contentEncoding1 = response1.headers.get('content-encoding');
-    
+
     console.log(`✓ Response received`);
     console.log(`  Status: ${response1.status}`);
     console.log(`  Content-Type: ${contentType1}`);
@@ -144,7 +154,7 @@ async function testHttpEndpoint() {
     const body1 = await response1.text();
     const lines1 = body1.trim().split('\n');
     const data1 = JSON.parse(lines1[0]);
-    
+
     console.log(`  Rows: ${data1.data ? data1.data.length : 'unknown format'}`);
     console.log('\nResults:');
     console.table(data1.data || data1.rows || [data1]);
@@ -152,13 +162,15 @@ async function testHttpEndpoint() {
     // Test 2: Boolean and null
     console.log('\n─────────────────────────────────────────────────');
     console.log('Query 2: Different data types');
-    console.log('SQL: SELECT true as bool_val, NULL as null_val, 3.14 as float_val\n');
-    
+    console.log(
+      'SQL: SELECT true as bool_val, NULL as null_val, 3.14 as float_val\n',
+    );
+
     const response2 = await fetch('https://data.spiceai.io/v1/sql', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/vnd.spiceai.sql.v1+json',
+        Accept: 'application/vnd.spiceai.sql.v1+json',
         'Accept-Encoding': 'zstd, br, gzip, deflate',
         'X-API-Key': API_KEY,
       },
@@ -174,7 +186,7 @@ async function testHttpEndpoint() {
 
     const contentType2 = response2.headers.get('content-type');
     const contentEncoding2 = response2.headers.get('content-encoding');
-    
+
     console.log(`✓ Response received`);
     console.log(`  Status: ${response2.status}`);
     console.log(`  Content-Type: ${contentType2}`);
@@ -183,7 +195,7 @@ async function testHttpEndpoint() {
     const body2 = await response2.text();
     const lines2 = body2.trim().split('\n');
     const data2 = JSON.parse(lines2[0]);
-    
+
     console.log(`  Rows: ${data2.data ? data2.data.length : 'unknown format'}`);
     console.log('\nResults:');
     console.table(data2.data || data2.rows || [data2]);
@@ -216,16 +228,22 @@ async function testHttpViaClient() {
 
     // Query with various data types
     console.log('Query: Complex data types');
-    console.log('SQL: SELECT 999 as id, \'test\' as name, true as active, 1.5 as score\n');
-    
+    console.log(
+      "SQL: SELECT 999 as id, 'test' as name, true as active, 1.5 as score\n",
+    );
+
     const table = await client.query(
-      'SELECT 999 as id, \'test\' as name, true as active, 1.5 as score'
+      "SELECT 999 as id, 'test' as name, true as active, 1.5 as score",
     );
 
     console.log(`✓ Query successful!`);
     console.log(`  Rows: ${table.numRows}`);
-    console.log(`  Columns: ${table.schema.fields.map(f => f.name).join(', ')}`);
-    console.log(`  Column Types: ${table.schema.fields.map(f => f.type.toString()).join(', ')}`);
+    console.log(
+      `  Columns: ${table.schema.fields.map((f) => f.name).join(', ')}`,
+    );
+    console.log(
+      `  Column Types: ${table.schema.fields.map((f) => f.type.toString()).join(', ')}`,
+    );
     console.log('\nResults:');
     console.table(table.toArray());
 
@@ -239,14 +257,18 @@ async function testHttpViaClient() {
     console.log('\nData Validation:');
     console.log(`  id: ${row.id} (${typeof row.id}) - Expected: 999`);
     console.log(`  name: ${row.name} (${typeof row.name}) - Expected: 'test'`);
-    console.log(`  active: ${row.active} (${typeof row.active}) - Expected: true`);
+    console.log(
+      `  active: ${row.active} (${typeof row.active}) - Expected: true`,
+    );
     console.log(`  score: ${row.score} (${typeof row.score}) - Expected: 1.5`);
 
     if (Number(row.id) !== 999) {
       throw new Error(`id validation failed: expected 999, got ${row.id}`);
     }
     if (String(row.name) !== 'test') {
-      throw new Error(`name validation failed: expected 'test', got ${row.name}`);
+      throw new Error(
+        `name validation failed: expected 'test', got ${row.name}`,
+      );
     }
     // Boolean and score validation (allowing for type conversions)
     console.log('\n✓ All data validations passed!');
@@ -280,7 +302,7 @@ async function runAllTests() {
   console.log('FINAL SUMMARY');
   console.log('═══════════════════════════════════════════════\n');
 
-  const passed = results.filter(r => r).length;
+  const passed = results.filter((r) => r).length;
   const total = results.length;
 
   console.log(`Tests Passed: ${passed}/${total}`);
