@@ -19,7 +19,7 @@
     "@types/node": "^22.10.2",
     "@types/node-fetch": "^2.6.12",
     "@types/retry": "^0.12.5",
-    "apache-arrow": "18.1.0",
+    "apache-arrow": "21.0.0",
     "node-fetch": "^2",
     "retry": "^0.13.1",
     "typescript": "^5.7.2"
