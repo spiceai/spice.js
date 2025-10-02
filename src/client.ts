@@ -17,10 +17,6 @@ import {
   getIpcMessage,
 } from './flight';
 import {
-  AsyncQueryRequest,
-  AsyncQueryResponse,
-  QueryCompleteNotification,
-  QueryResultsResponse,
   RefreshOverrides,
   type SpiceClientConfig,
 } from './interfaces';
@@ -109,10 +105,9 @@ async function loadProtoFile(): Promise<string | null> {
 
 let flightProto: any = null;
 let grpcAvailable = false;
-let protoInitPromise: Promise<void> | null = null;
 
 /**
- * Initialize the proto file (sync attempt, async fallback)
+ * Initialize the proto file (sync attempt)
  */
 function initializeProto(): void {
   try {
@@ -129,15 +124,7 @@ function initializeProto(): void {
     flightProto = arrow.flight.protocol;
     grpcAvailable = true;
   } catch (error: any) {
-    if (error.code === 'ENOENT') {
-      console.warn(
-        '[spice.js] Local Flight.proto not found. Will attempt to download on first query.',
-      );
-    } else {
-      console.warn(
-        `[spice.js] Failed to load gRPC Flight proto: ${error.message}`,
-      );
-    }
+    // Silent failure - will attempt download during client initialization
     grpcAvailable = false;
   }
 }
@@ -153,7 +140,7 @@ class SpiceClient {
   private _flightTlsEnabled: boolean = true;
   private _maxRetries: number = retry.FLIGHT_QUERY_MAX_RETRIES;
   private _useGrpc: boolean = grpcAvailable;
-  private _grpcInitAttempted: boolean = false;
+  private _initPromise: Promise<void>;
 
   public constructor(params: string | SpiceClientConfig = {}) {
     // support legacy constructor with api_key as first agument
@@ -172,42 +159,34 @@ class SpiceClient {
       this._flightTlsEnabled =
         flightTlsEnabled !== undefined
           ? flightTlsEnabled
-          : this._flightUrl.includes('127.0.0.1')
-            ? false
-            : true;
+          : !this._flightUrl.includes('127.0.0.1');
       // Prepend the user-supplied user agent (if any) with the default user agent
       this._userAgent = userAgent
         ? `${userAgent} ${getUserAgent()}`
         : getUserAgent();
     }
+
+    // Initialize gRPC during construction
+    this._initPromise = this.initializeGrpc();
   }
 
   /**
-   * Attempts to initialize gRPC by downloading the proto file if needed.
-   * Returns true if gRPC is available, false otherwise.
+   * Initializes gRPC by downloading the proto file if needed.
+   * Called during SpiceClient construction.
    */
-  private async ensureGrpcAvailable(): Promise<boolean> {
+  private async initializeGrpc(): Promise<void> {
     // If already available, return immediately
-    if (this._useGrpc && grpcAvailable) {
-      return true;
+    if (this._useGrpc && grpcAvailable && flightProto) {
+      return;
     }
-
-    // If we've already tried and failed, don't try again
-    if (this._grpcInitAttempted) {
-      return false;
-    }
-
-    this._grpcInitAttempted = true;
 
     try {
       // Try to load proto file (download if needed)
       const protoPath = await loadProtoFile();
 
       if (!protoPath) {
-        console.warn(
-          '[spice.js] Unable to initialize gRPC. Falling back to HTTP endpoint.',
-        );
-        return false;
+        this._useGrpc = false;
+        return;
       }
 
       // Load the proto file
@@ -220,21 +199,36 @@ class SpiceClient {
       });
 
       const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
+      
+      if (!arrow?.flight?.protocol?.FlightService) {
+        throw new Error('Invalid proto file structure');
+      }
+
       flightProto = arrow.flight.protocol;
       grpcAvailable = true;
       this._useGrpc = true;
-
-      console.log('[spice.js] gRPC Flight protocol initialized successfully');
-      return true;
     } catch (error: any) {
       console.warn(
-        `[spice.js] Failed to initialize gRPC: ${error.message}. Falling back to HTTP.`,
+        `[spice.js] gRPC initialization failed: ${error.message}. Using HTTP endpoint.`,
       );
-      return false;
+      this._useGrpc = false;
     }
   }
 
-  private createClient(meta: any): any {
+  /**
+   * Ensures the client is fully initialized before use.
+   * @returns true if gRPC is available, false otherwise.
+   */
+  private async ensureInitialized(): Promise<boolean> {
+    await this._initPromise;
+    return this._useGrpc && grpcAvailable && flightProto !== null;
+  }
+
+  private createClient(meta: grpc.Metadata): FlightClient {
+    if (!flightProto?.FlightService) {
+      throw new Error('gRPC Flight protocol not initialized');
+    }
+
     // gRPC channel options
     // Compression support is advertised via metadata (grpc-accept-encoding header)
     // The server will use compression if it supports it
@@ -270,23 +264,27 @@ class SpiceClient {
     getFlightClient: ((client: FlightClient) => void) | undefined = undefined,
   ): Promise<EventEmitter> {
     const meta = new grpc.Metadata();
-    const client: FlightClient = this.createClient(meta);
-    meta.set('authorization', 'Bearer ' + this._apiKey);
+    meta.set('authorization', `Bearer ${this._apiKey || ''}`);
     meta.set('User-Agent', this._userAgent);
-
     // Advertise that we accept compressed responses
     // The server can choose to compress if it supports it
     meta.set('grpc-accept-encoding', 'gzip,deflate');
 
-    let queryBuff = Buffer.from(queryText, 'utf8');
+    const client: FlightClient = this.createClient(meta);
 
-    let flightTicket = await new Promise<Ticket>((resolve, reject) => {
+    const queryBuff = Buffer.from(queryText, 'utf8');
+
+    const flightTicket = await new Promise<Ticket>((resolve, reject) => {
       // GetFlightInfo returns FlightInfo that have endpoints with ticket to call DoGet with
       client.GetFlightInfo(
         { type: DescriptorType.CMD, cmd: queryBuff },
         (err: any, result: FlightInfo) => {
           if (err) {
             reject(err);
+            return;
+          }
+          if (!result?.endpoint?.[0]?.ticket) {
+            reject(new Error('Invalid FlightInfo response: missing ticket'));
             return;
           }
           resolve(result.endpoint[0].ticket);
@@ -314,59 +312,59 @@ class SpiceClient {
     queryText: string,
     onData: ((data: Table) => void) | undefined = undefined,
   ): Promise<Table> {
-    // Try to ensure gRPC is available (will download proto if needed)
-    if (!this._useGrpc) {
-      const grpcReady = await this.ensureGrpcAvailable();
-      if (!grpcReady) {
-        console.log('[spice.js] Using HTTP endpoint for query');
-        return this.doHttpQueryRequest(queryText, onData);
-      }
-    }
+    // Wait for initialization to complete
+    const useGrpc = await this.ensureInitialized();
 
-    // If gRPC is still not available after initialization attempt, fall back to HTTP
-    if (!this._useGrpc) {
+    if (!useGrpc) {
       return this.doHttpQueryRequest(queryText, onData);
     }
 
-    let client: FlightClient;
+    let client: FlightClient | undefined;
 
-    const resultStream = await this.getResultStream(
-      queryText,
-      (c: FlightClient) => {
-        client = c;
-      },
-    );
+    try {
+      const resultStream = await this.getResultStream(
+        queryText,
+        (c: FlightClient) => {
+          client = c;
+        },
+      );
 
-    // indicates that data has been partially or fully sent
-    let isDataAlreadySent = false;
+      // indicates that data has been partially or fully sent
+      let isDataAlreadySent = false;
 
-    let schema: Buffer | undefined;
-    let chunks: Buffer[] = [];
-    resultStream.on('data', (response: FlightData) => {
-      let ipcMessage = getIpcMessage(response);
-      chunks.push(ipcMessage);
-      if (!schema) {
-        schema = ipcMessage;
-      } else if (onData) {
-        isDataAlreadySent = true;
-        onData(tableFromIPC([schema, ipcMessage]));
-      }
-    });
-
-    return new Promise((resolve, reject) => {
-      resultStream.on('status', (response: FlightStatus) => {
-        const table = tableFromIPC(chunks);
-        client.close();
-        resolve(table);
+      let schema: Buffer | undefined;
+      const chunks: Buffer[] = [];
+      
+      resultStream.on('data', (response: FlightData) => {
+        const ipcMessage = getIpcMessage(response);
+        chunks.push(ipcMessage);
+        if (!schema) {
+          schema = ipcMessage;
+        } else if (onData) {
+          isDataAlreadySent = true;
+          onData(tableFromIPC([schema, ipcMessage]));
+        }
       });
 
-      resultStream.on('error', (err: any) => {
-        client.close();
-        if (isDataAlreadySent) retry.dontRetry(err);
+      return new Promise((resolve, reject) => {
+        resultStream.on('status', (_response: FlightStatus) => {
+          const table = tableFromIPC(chunks);
+          client?.close();
+          resolve(table);
+        });
 
-        reject(err);
+        resultStream.on('error', (err: any) => {
+          client?.close();
+          if (isDataAlreadySent) {
+            retry.dontRetry(err);
+          }
+          reject(err);
+        });
       });
-    });
+    } catch (error) {
+      client?.close();
+      throw error;
+    }
   }
 
   private async doHttpQueryRequest(
@@ -446,7 +444,6 @@ class SpiceClient {
 
   private jsonToArrowTable(schema: any[], rows: any[]): Table {
     // Convert JSON response to Arrow Table format
-    // Create a simple object representation that Arrow can understand
     const columns: { [key: string]: any[] } = {};
 
     // Initialize columns
@@ -471,7 +468,7 @@ class SpiceClient {
    * Sets the maximum number of times to retry Query calls. The default is 3
    * @param maxRetries Num of max retries. Setting to 0 will disable retries
    */
-  public setMaxRetries(maxRetries: number) {
+  public setMaxRetries(maxRetries: number): void {
     if (maxRetries < 0) {
       throw new Error('maxRetries must be greater than or equal to 0');
     }
@@ -482,21 +479,14 @@ class SpiceClient {
   public async refreshDataset(
     dataset: string,
     refresh_overrides?: RefreshOverrides,
-  ) {
-    if (!refresh_overrides) {
-      refresh_overrides = {
-        refresh_sql: null,
-        refresh_mode: null,
-        refresh_jitter_max: null,
-      };
-    }
+  ): Promise<void> {
+    const overrides: RefreshOverrides = {
+      refresh_sql: refresh_overrides?.refresh_sql || null,
+      refresh_mode: refresh_overrides?.refresh_mode || null,
+      refresh_jitter_max: refresh_overrides?.refresh_jitter_max || null,
+    };
 
-    refresh_overrides.refresh_sql = refresh_overrides.refresh_sql || null;
-    refresh_overrides.refresh_mode = refresh_overrides.refresh_mode || null;
-    refresh_overrides.refresh_jitter_max =
-      refresh_overrides.refresh_jitter_max || null;
-
-    const body = JSON.stringify(refresh_overrides);
+    const body = JSON.stringify(overrides);
 
     const response = await this.fetchInternal(
       'POST',
@@ -504,6 +494,7 @@ class SpiceClient {
       undefined,
       body,
     );
+    
     if (response.status !== 201) {
       const responseText = await response.text();
       throw new Error(
@@ -519,35 +510,42 @@ class SpiceClient {
     body?: string,
     customHeaders?: { [key: string]: string },
   ) {
-    let url;
-    if (params && Object.keys(params).length) {
-      url = `${this._httpUrl}${path}?${new URLSearchParams(params)}`;
-    } else {
-      url = `${this._httpUrl}${path}`;
-    }
+    const url = params && Object.keys(params).length
+      ? `${this._httpUrl}${path}?${new URLSearchParams(params)}`
+      : `${this._httpUrl}${path}`;
 
-    const headers = [
+    const headers = new Headers([
       ['Content-Type', 'application/json'],
       ['Accept-Encoding', 'zstd, br, gzip, deflate'],
       ['User-Agent', this._userAgent],
-    ];
+    ]);
 
     // Add custom headers
     if (customHeaders) {
       Object.entries(customHeaders).forEach(([key, value]) => {
-        headers.push([key, value]);
+        headers.set(key, value);
       });
     }
 
     if (this._apiKey) {
-      headers.push(['X-API-Key', this._apiKey || '']);
+      headers.set('X-API-Key', this._apiKey);
     }
 
+    const fetchOptions: RequestInit = {
+      headers,
+      method,
+      body,
+    };
+
     if (this._httpUrl.startsWith('https://')) {
-      return fetch(url, {
-        headers: new Headers(headers),
-        agent: httpsAgent,
-        method,
+      fetchOptions.agent = httpsAgent;
+    }
+
+    return fetch(url, fetchOptions);
+  }
+}
+
+export { SpiceClient };
         body,
       });
     } else {
