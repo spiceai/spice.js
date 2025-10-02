@@ -23,14 +23,16 @@ jobs:
           - ubuntu-latest
           - macos-latest
         node:
+          - 18
+          - 20
           - 22
-          # - 24 - Node.JS 24 will be released in Apr 2025
+          - 24
     name: Test with spice runtime on ${{ matrix.os }} Node.JS ${{ matrix.node }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up NodeJS
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
 
