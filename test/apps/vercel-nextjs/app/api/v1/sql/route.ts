@@ -5,14 +5,14 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    const body = await request.json();
-    const { sql } = body;
+    // Accept plain text SQL query
+    const sql = await request.text();
 
-    if (!sql) {
+    if (!sql || sql.trim().length === 0) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Missing required field: sql',
+          error: 'Missing SQL query in request body',
         }),
         {
           status: 400,
