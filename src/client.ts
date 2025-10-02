@@ -4,7 +4,10 @@ import * as os from 'os';
 import * as https from 'https';
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
-import fetch, { Headers } from 'node-fetch';
+import fetch, {
+  Headers,
+  RequestInit as NodeFetchRequestInit,
+} from 'node-fetch';
 import { EventEmitter } from 'stream';
 import { Table, tableFromIPC, tableFromArrays } from 'apache-arrow';
 import {
@@ -16,10 +19,7 @@ import {
   Ticket,
   getIpcMessage,
 } from './flight';
-import {
-  RefreshOverrides,
-  type SpiceClientConfig,
-} from './interfaces';
+import { RefreshOverrides, type SpiceClientConfig } from './interfaces';
 
 import * as retry from './retry';
 import { getUserAgent } from './user-agent';
@@ -199,7 +199,7 @@ class SpiceClient {
       });
 
       const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
-      
+
       if (!arrow?.flight?.protocol?.FlightService) {
         throw new Error('Invalid proto file structure');
       }
@@ -334,7 +334,7 @@ class SpiceClient {
 
       let schema: Buffer | undefined;
       const chunks: Buffer[] = [];
-      
+
       resultStream.on('data', (response: FlightData) => {
         const ipcMessage = getIpcMessage(response);
         chunks.push(ipcMessage);
@@ -494,7 +494,7 @@ class SpiceClient {
       undefined,
       body,
     );
-    
+
     if (response.status !== 201) {
       const responseText = await response.text();
       throw new Error(
@@ -510,9 +510,10 @@ class SpiceClient {
     body?: string,
     customHeaders?: { [key: string]: string },
   ) {
-    const url = params && Object.keys(params).length
-      ? `${this._httpUrl}${path}?${new URLSearchParams(params)}`
-      : `${this._httpUrl}${path}`;
+    const url =
+      params && Object.keys(params).length
+        ? `${this._httpUrl}${path}?${new URLSearchParams(params)}`
+        : `${this._httpUrl}${path}`;
 
     const headers = new Headers([
       ['Content-Type', 'application/json'],
@@ -531,7 +532,7 @@ class SpiceClient {
       headers.set('X-API-Key', this._apiKey);
     }
 
-    const fetchOptions: RequestInit = {
+    const fetchOptions: NodeFetchRequestInit = {
       headers,
       method,
       body,
@@ -542,19 +543,6 @@ class SpiceClient {
     }
 
     return fetch(url, fetchOptions);
-  }
-}
-
-export { SpiceClient };
-        body,
-      });
-    } else {
-      return fetch(url, {
-        headers: new Headers(headers),
-        method,
-        body,
-      });
-    }
   }
 }
 
