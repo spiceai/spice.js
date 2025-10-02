@@ -398,7 +398,7 @@ class SpiceClient {
       const lines = body
         .trim()
         .split('\n')
-        .filter((line) => line.trim());
+        .filter((line: string) => line.trim());
 
       if (lines.length > 0) {
         const allRows: any[] = [];
