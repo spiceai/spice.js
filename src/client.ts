@@ -1,9 +1,9 @@
 import path from 'path';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as https from 'https';
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
+import * as protobuf from 'protobufjs';
 import fetch, {
   Headers,
   RequestInit as NodeFetchRequestInit,
@@ -29,8 +29,6 @@ const httpsAgent = new https.Agent({ keepAlive: true });
 const PROTO_PATH = './proto/Flight.proto';
 const PROTO_DOWNLOAD_URL =
   process.env.SPICE_PROTO_URL || 'https://data.spiceai.io/v1/proto/flight';
-const PROTO_CACHE_DIR = path.join(os.tmpdir(), 'spiceai-proto-cache');
-const PROTO_CACHE_FILE = path.join(PROTO_CACHE_DIR, 'Flight.proto');
 
 // If we're running in a Next.js environment, we need to adjust the path to the proto file
 const PACKAGE_PATH = __dirname.includes('.next')
@@ -41,8 +39,11 @@ const PACKAGE_PATH = __dirname.includes('.next')
   : __dirname;
 const fullProtoPath = path.join(PACKAGE_PATH, PROTO_PATH);
 
+// In-memory proto content cache
+let protoContent: string | null = null;
+
 /**
- * Downloads the Flight.proto file from the remote URL and caches it locally
+ * Downloads the Flight.proto file from the remote URL and keeps it in memory
  */
 async function downloadProtoFile(): Promise<string> {
   try {
@@ -55,18 +56,10 @@ async function downloadProtoFile(): Promise<string> {
       );
     }
 
-    const protoContent = await response.text();
+    const content = await response.text();
+    console.log('[spice.js] Flight.proto downloaded successfully');
 
-    // Ensure cache directory exists
-    if (!fs.existsSync(PROTO_CACHE_DIR)) {
-      fs.mkdirSync(PROTO_CACHE_DIR, { recursive: true });
-    }
-
-    // Write to cache
-    fs.writeFileSync(PROTO_CACHE_FILE, protoContent);
-    console.log('[spice.js] Flight.proto downloaded and cached successfully');
-
-    return PROTO_CACHE_FILE;
+    return content;
   } catch (error: any) {
     console.warn(`[spice.js] Failed to download proto file: ${error.message}`);
     throw error;
@@ -74,26 +67,18 @@ async function downloadProtoFile(): Promise<string> {
 }
 
 /**
- * Attempts to load the proto file from multiple sources:
- * 1. Local package path
- * 2. Cached downloaded file
- * 3. Download from remote URL
+ * Loads proto content from local file or downloads it
+ * Returns the proto content as a string
  */
-async function loadProtoFile(): Promise<string | null> {
+async function loadProtoContent(): Promise<string | null> {
   // Try local file first
   if (fs.existsSync(fullProtoPath)) {
-    return fullProtoPath;
+    return fs.readFileSync(fullProtoPath, 'utf-8');
   }
 
   console.warn(
-    '[spice.js] Local Flight.proto not found, attempting to use cached or download...',
+    '[spice.js] Local Flight.proto not found, attempting to download...',
   );
-
-  // Try cached file
-  if (fs.existsSync(PROTO_CACHE_FILE)) {
-    console.log('[spice.js] Using cached Flight.proto');
-    return PROTO_CACHE_FILE;
-  }
 
   // Try to download
   try {
@@ -107,12 +92,18 @@ let flightProto: any = null;
 let grpcAvailable = false;
 
 /**
- * Initialize the proto file (sync attempt)
+ * Loads proto definition from content in memory using protobufjs
  */
-function initializeProto(): void {
+function loadProtoFromContent(content: string): any {
   try {
-    // Try synchronous load first (normal case)
-    const packageDefinition = protoLoader.loadSync(fullProtoPath, {
+    // Parse the proto content directly in memory using protobufjs
+    const root = protobuf.parse(content, { keepCase: false }).root;
+    
+    // Convert to JSON descriptor
+    const json = root.toJSON();
+    
+    // Load from JSON
+    const packageDefinition = protoLoader.fromJSON(json, {
       keepCase: false,
       longs: String,
       enums: String,
@@ -121,8 +112,23 @@ function initializeProto(): void {
     });
 
     const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
-    flightProto = arrow.flight.protocol;
-    grpcAvailable = true;
+    return arrow.flight.protocol;
+  } catch (error: any) {
+    console.error('[spice.js] Failed to load proto from content:', error.message);
+    throw error;
+  }
+}/**
+ * Initialize the proto file (sync attempt)
+ */
+function initializeProto(): void {
+  try {
+    // Try synchronous load from local file first (normal case)
+    if (fs.existsSync(fullProtoPath)) {
+      const content = fs.readFileSync(fullProtoPath, 'utf-8');
+      flightProto = loadProtoFromContent(content);
+      protoContent = content;
+      grpcAvailable = true;
+    }
   } catch (error: any) {
     // Silent failure - will attempt download during client initialization
     grpcAvailable = false;
@@ -189,30 +195,24 @@ class SpiceClient {
     }
 
     try {
-      // Try to load proto file (download if needed)
-      const protoPath = await loadProtoFile();
+      // Check if we already have proto content in memory
+      if (!protoContent) {
+        protoContent = await loadProtoContent();
+      }
 
-      if (!protoPath) {
+      if (!protoContent) {
         this._useGrpc = false;
         return;
       }
 
-      // Load the proto file
-      const packageDefinition = protoLoader.loadSync(protoPath, {
-        keepCase: false,
-        longs: String,
-        enums: String,
-        defaults: true,
-        oneofs: true,
-      });
+      // Load the proto from content
+      const proto = loadProtoFromContent(protoContent);
 
-      const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
-
-      if (!arrow?.flight?.protocol?.FlightService) {
+      if (!proto?.FlightService) {
         throw new Error('Invalid proto file structure');
       }
 
-      flightProto = arrow.flight.protocol;
+      flightProto = proto;
       grpcAvailable = true;
       this._useGrpc = true;
     } catch (error: any) {
