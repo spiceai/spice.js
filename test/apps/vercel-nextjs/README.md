@@ -84,7 +84,7 @@ Execute a SQL query using the Spice.js SDK with **streaming results**.
 
 ```
 Content-Type: application/json
-X-SPICE-API-KEY: your-api-key (optional if set in environment)
+X-API-KEY: your-api-key (optional if set in environment)
 ```
 
 **Request Body:**
@@ -147,7 +147,7 @@ vercel
 ```bash
 curl -X POST https://your-app.vercel.app/api/v1/sql \
   -H "Content-Type: application/json" \
-  -H "X-SPICE-API-KEY: your-api-key" \
+  -H "X-API-KEY: your-api-key" \
   -d '{"sql": "SELECT 1 as test"}'
 ```
 
