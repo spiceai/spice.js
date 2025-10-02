@@ -17,11 +17,18 @@ describe('cloud', () => {
   const FLIGHT_PATH = process.env.FLIGHT_URL
     ? process.env.FLIGHT_URL
     : 'flight.spiceai.io:443';
-  const VERCEL_ENDPOINT = process.env.VERCEL_ENDPOINT || null;
+  const VERCEL_ENDPOINT =
+    process.env.VERCEL_ENDPOINT || 'https://spice-js.vercel.app/api';
 
-  const client = new SpiceClient({
+  const cloudClient = new SpiceClient({
     apiKey: api_key,
     httpUrl: HTTP_DATA_PATH,
+    flightUrl: FLIGHT_PATH,
+  });
+
+  const vercelClient = new SpiceClient({
+    apiKey: api_key,
+    httpUrl: VERCEL_ENDPOINT,
     flightUrl: FLIGHT_PATH,
   });
 
@@ -40,7 +47,7 @@ describe('cloud', () => {
 
     test('streaming works', async () => {
       let numChunks = 0;
-      await client.query(
+      await cloudClient.query(
         'SELECT * FROM spice.samples.taxi_trips LIMIT 10;',
         (table) => {
           expect(table.toArray().length).toBeLessThanOrEqual(10);
@@ -55,14 +62,14 @@ describe('cloud', () => {
     }, 10000);
 
     test('full result works', async () => {
-      const tableResult = await client.query(
+      const tableResult = await cloudClient.query(
         'SELECT * FROM spice.samples.taxi_trips LIMIT 10;',
       );
       expect(tableResult.toArray()).toHaveLength(10);
     }, 30000);
 
     test('query with simple constants', async () => {
-      const tableResult = await client.query(
+      const tableResult = await cloudClient.query(
         "SELECT 42 as answer, 'test' as message",
       );
       expect(tableResult.toArray()).toHaveLength(1);
@@ -77,7 +84,7 @@ describe('cloud', () => {
     // if gRPC is not available. The SDK handles the fallback transparently.
 
     test('simple query works via SDK (uses gRPC or HTTP fallback)', async () => {
-      const tableResult = await client.query(
+      const tableResult = await cloudClient.query(
         "SELECT 123 as num, 'hello' as text",
       );
 
@@ -88,7 +95,7 @@ describe('cloud', () => {
     });
 
     test('query with different data types', async () => {
-      const tableResult = await client.query(
+      const tableResult = await cloudClient.query(
         'SELECT true as bool_val, 3.14 as float_val, 999 as int_val',
       );
 
@@ -102,7 +109,7 @@ describe('cloud', () => {
     });
 
     test('query with string operations', async () => {
-      const tableResult = await client.query(
+      const tableResult = await cloudClient.query(
         "SELECT UPPER('fallback') as upper_text, LOWER('HTTP') as lower_text, CONCAT('a', 'b') as concat_text",
       );
 
@@ -114,7 +121,7 @@ describe('cloud', () => {
     });
 
     test('query with math operations', async () => {
-      const tableResult = await client.query(
+      const tableResult = await cloudClient.query(
         'SELECT 10 * 5 as product, 100 / 4 as division, 50 - 20 as subtraction, 30 + 15 as addition',
       );
 
@@ -128,7 +135,7 @@ describe('cloud', () => {
 
     test('streaming works with fallback', async () => {
       let numChunks = 0;
-      const tableResult = await client.query(
+      const tableResult = await cloudClient.query(
         'SELECT 1 as col1, 2 as col2, 3 as col3',
         (table) => {
           expect(table.toArray().length).toBeGreaterThanOrEqual(1);
@@ -142,86 +149,22 @@ describe('cloud', () => {
     });
   });
 
-  // Helper function to query via streaming NDJSON endpoint
-  async function queryStreamingEndpoint(
-    endpoint: string,
-    sql: string,
-  ): Promise<any[]> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'X-SPICE-API-KEY': api_key || '',
-    };
-
-    const response = await fetch(`${endpoint}/api/v1/sql`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ sql }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Request failed');
-    }
-
-    // Handle streaming NDJSON response
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error('No response body');
-    }
-
-    const decoder = new TextDecoder();
-    const rows: any[] = [];
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n').filter((line) => line.trim());
-
-      for (const line of lines) {
-        try {
-          const message = JSON.parse(line);
-
-          if (message.type === 'row') {
-            rows.push(message.data);
-          } else if (message.type === 'error') {
-            throw new Error(message.error);
-          }
-        } catch (e) {
-          if (e instanceof Error && e.message.startsWith('Unexpected')) {
-            // JSON parse error, skip
-            continue;
-          }
-          throw e;
-        }
-      }
-    }
-
-    return rows;
-  }
-
-  // Define test endpoints
+  // Define test endpoints - all tests MUST use the SDK's query() function
   const endpoints = [
     {
       name: 'Direct SDK (Flight/HTTP)',
       enabled: true,
-      query: async (sql: string) => {
-        const tableResult = await client.query(sql);
-        return tableResult.toArray();
-      },
+      client: cloudClient,
     },
     {
-      name: 'Vercel Endpoint',
-      enabled: !!VERCEL_ENDPOINT,
-      query: async (sql: string) => {
-        return queryStreamingEndpoint(VERCEL_ENDPOINT!, sql);
-      },
+      name: 'Vercel Endpoint (via SDK)',
+      enabled: true,
+      client: vercelClient,
     },
   ];
 
   // Run the same test suite for each enabled endpoint
-  endpoints.forEach(({ name, enabled, query }) => {
+  endpoints.forEach(({ name, enabled, client: testClient }) => {
     if (!enabled) {
       describe.skip(`${name} (disabled)`, () => {
         test('skipped', () => {});
@@ -231,7 +174,10 @@ describe('cloud', () => {
 
     describe(name, () => {
       test('simple query with constants', async () => {
-        const rows = await query("SELECT 42 as answer, 'test' as message");
+        const tableResult = await testClient.query(
+          "SELECT 42 as answer, 'test' as message",
+        );
+        const rows = tableResult.toArray();
 
         expect(rows).toHaveLength(1);
         const row = rows[0];
@@ -241,9 +187,10 @@ describe('cloud', () => {
       });
 
       test('query with multiple data types', async () => {
-        const rows = await query(
+        const tableResult = await testClient.query(
           'SELECT true as bool_val, 3.14 as float_val, 999 as int_val',
         );
+        const rows = tableResult.toArray();
 
         expect(rows).toHaveLength(1);
         const row = rows[0];
@@ -253,9 +200,10 @@ describe('cloud', () => {
       });
 
       test('query with string operations', async () => {
-        const rows = await query(
+        const tableResult = await testClient.query(
           "SELECT UPPER('test') as upper_text, LOWER('TEST') as lower_text, CONCAT('a', 'b') as concat_text",
         );
+        const rows = tableResult.toArray();
 
         expect(rows).toHaveLength(1);
         const row = rows[0];
@@ -265,9 +213,10 @@ describe('cloud', () => {
       });
 
       test('query with math operations', async () => {
-        const rows = await query(
+        const tableResult = await testClient.query(
           'SELECT 10 * 5 as product, 100 / 4 as division, 50 - 20 as subtraction, 30 + 15 as addition',
         );
+        const rows = tableResult.toArray();
 
         expect(rows).toHaveLength(1);
         const row = rows[0];
@@ -278,9 +227,10 @@ describe('cloud', () => {
       });
 
       test('handles large result sets', async () => {
-        const rows = await query(
+        const tableResult = await testClient.query(
           'SELECT * FROM spice.samples.taxi_trips LIMIT 100',
         );
+        const rows = tableResult.toArray();
 
         expect(rows.length).toBe(100);
         // Verify some expected columns exist
@@ -289,7 +239,7 @@ describe('cloud', () => {
 
       test('error handling works', async () => {
         await expect(
-          query('SELECT * FROM nonexistent_table'),
+          testClient.query('SELECT * FROM nonexistent_table'),
         ).rejects.toThrow();
       });
     });
