@@ -22,14 +22,14 @@
   },
   "scripts": {
     "clean": "rimraf dist",
-    "prebuild": "yarn clean",
+    "prebuild": "npm run clean",
     "build": "tsc",
     "postbuild": "copyfiles proto/* dist",
     "run": "node dist/index.js",
-    "pretest": "yarn build",
+    "pretest": "npm run build",
     "test": "jest",
     "dev": "npx nodemon --exec ts-node ./test/index.ts --watch test --ext .ts",
-    "preversion": "yarn build"
+    "preversion": "npm run build"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
