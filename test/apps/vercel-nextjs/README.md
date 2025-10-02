@@ -60,6 +60,7 @@ npm run build
 ```
 
 This runs:
+
 1. `prebuild`: `cd ../../.. && npm run build` (builds SDK)
 2. `build`: `next build` (builds Next.js app)
 
