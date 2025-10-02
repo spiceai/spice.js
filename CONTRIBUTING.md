@@ -2,9 +2,8 @@
 
 ## Requirements
 
-* [NodeJS 18 or 20](https://nodejs.org/en/download/package-manager)
-* [Docker](https://docs.docker.com/engine/install/)
-* Yarn (`npm install -g yarn`)
+- [NodeJS 18 or 20](https://nodejs.org/en/download/package-manager)
+- [Docker](https://docs.docker.com/engine/install/)
 
 ## Developing
 
@@ -26,7 +25,7 @@ To develop locally:
 3. Install the dependencies with:
 
    ```bash
-   yarn install
+   npm install
    ```
 
 4. To run the tests, create a `.env` file with your [Spice.ai](https://spice.ai) API Key:

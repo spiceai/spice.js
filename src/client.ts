@@ -1,10 +1,12 @@
 import path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 import * as https from 'https';
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import fetch, { Headers } from 'node-fetch';
 import { EventEmitter } from 'stream';
-import { Table, tableFromIPC } from 'apache-arrow';
+import { Table, tableFromIPC, tableFromArrays } from 'apache-arrow';
 import {
   FlightClient,
   FlightData,
@@ -29,24 +31,119 @@ import { getUserAgent } from './user-agent';
 const httpsAgent = new https.Agent({ keepAlive: true });
 
 const PROTO_PATH = './proto/Flight.proto';
+const PROTO_DOWNLOAD_URL =
+  process.env.SPICE_PROTO_URL || 'https://data.spiceai.io/v1/proto/flight';
+const PROTO_CACHE_DIR = path.join(os.tmpdir(), 'spiceai-proto-cache');
+const PROTO_CACHE_FILE = path.join(PROTO_CACHE_DIR, 'Flight.proto');
+
 // If we're running in a Next.js environment, we need to adjust the path to the proto file
 const PACKAGE_PATH = __dirname.includes('.next')
   ? path.join(
       __dirname.substring(0, __dirname.indexOf('.next')),
-      './node_modules/@spiceai/spice/'
+      './node_modules/@spiceai/spice/',
     )
   : __dirname;
 const fullProtoPath = path.join(PACKAGE_PATH, PROTO_PATH);
-const packageDefinition = protoLoader.loadSync(fullProtoPath, {
-  keepCase: false,
-  longs: String,
-  enums: String,
-  defaults: true,
-  oneofs: true,
-});
 
-const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
-const flightProto = arrow.flight.protocol;
+/**
+ * Downloads the Flight.proto file from the remote URL and caches it locally
+ */
+async function downloadProtoFile(): Promise<string> {
+  try {
+    console.log('[spice.js] Downloading Flight.proto from remote source...');
+    const response = await fetch(PROTO_DOWNLOAD_URL);
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to download proto: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const protoContent = await response.text();
+
+    // Ensure cache directory exists
+    if (!fs.existsSync(PROTO_CACHE_DIR)) {
+      fs.mkdirSync(PROTO_CACHE_DIR, { recursive: true });
+    }
+
+    // Write to cache
+    fs.writeFileSync(PROTO_CACHE_FILE, protoContent);
+    console.log('[spice.js] Flight.proto downloaded and cached successfully');
+
+    return PROTO_CACHE_FILE;
+  } catch (error: any) {
+    console.warn(`[spice.js] Failed to download proto file: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Attempts to load the proto file from multiple sources:
+ * 1. Local package path
+ * 2. Cached downloaded file
+ * 3. Download from remote URL
+ */
+async function loadProtoFile(): Promise<string | null> {
+  // Try local file first
+  if (fs.existsSync(fullProtoPath)) {
+    return fullProtoPath;
+  }
+
+  console.warn(
+    '[spice.js] Local Flight.proto not found, attempting to use cached or download...',
+  );
+
+  // Try cached file
+  if (fs.existsSync(PROTO_CACHE_FILE)) {
+    console.log('[spice.js] Using cached Flight.proto');
+    return PROTO_CACHE_FILE;
+  }
+
+  // Try to download
+  try {
+    return await downloadProtoFile();
+  } catch (error) {
+    return null;
+  }
+}
+
+let flightProto: any = null;
+let grpcAvailable = false;
+let protoInitPromise: Promise<void> | null = null;
+
+/**
+ * Initialize the proto file (sync attempt, async fallback)
+ */
+function initializeProto(): void {
+  try {
+    // Try synchronous load first (normal case)
+    const packageDefinition = protoLoader.loadSync(fullProtoPath, {
+      keepCase: false,
+      longs: String,
+      enums: String,
+      defaults: true,
+      oneofs: true,
+    });
+
+    const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
+    flightProto = arrow.flight.protocol;
+    grpcAvailable = true;
+  } catch (error: any) {
+    if (error.code === 'ENOENT') {
+      console.warn(
+        '[spice.js] Local Flight.proto not found. Will attempt to download on first query.',
+      );
+    } else {
+      console.warn(
+        `[spice.js] Failed to load gRPC Flight proto: ${error.message}`,
+      );
+    }
+    grpcAvailable = false;
+  }
+}
+
+// Initialize on module load
+initializeProto();
 
 class SpiceClient {
   private _apiKey?: string;
@@ -55,6 +152,8 @@ class SpiceClient {
   private _userAgent: string;
   private _flightTlsEnabled: boolean = true;
   private _maxRetries: number = retry.FLIGHT_QUERY_MAX_RETRIES;
+  private _useGrpc: boolean = grpcAvailable;
+  private _grpcInitAttempted: boolean = false;
 
   public constructor(params: string | SpiceClientConfig = {}) {
     // support legacy constructor with api_key as first agument
@@ -74,8 +173,8 @@ class SpiceClient {
         flightTlsEnabled !== undefined
           ? flightTlsEnabled
           : this._flightUrl.includes('127.0.0.1')
-          ? false
-          : true;
+            ? false
+            : true;
       // Prepend the user-supplied user agent (if any) with the default user agent
       this._userAgent = userAgent
         ? `${userAgent} ${getUserAgent()}`
@@ -83,11 +182,69 @@ class SpiceClient {
     }
   }
 
+  /**
+   * Attempts to initialize gRPC by downloading the proto file if needed.
+   * Returns true if gRPC is available, false otherwise.
+   */
+  private async ensureGrpcAvailable(): Promise<boolean> {
+    // If already available, return immediately
+    if (this._useGrpc && grpcAvailable) {
+      return true;
+    }
+
+    // If we've already tried and failed, don't try again
+    if (this._grpcInitAttempted) {
+      return false;
+    }
+
+    this._grpcInitAttempted = true;
+
+    try {
+      // Try to load proto file (download if needed)
+      const protoPath = await loadProtoFile();
+
+      if (!protoPath) {
+        console.warn(
+          '[spice.js] Unable to initialize gRPC. Falling back to HTTP endpoint.',
+        );
+        return false;
+      }
+
+      // Load the proto file
+      const packageDefinition = protoLoader.loadSync(protoPath, {
+        keepCase: false,
+        longs: String,
+        enums: String,
+        defaults: true,
+        oneofs: true,
+      });
+
+      const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
+      flightProto = arrow.flight.protocol;
+      grpcAvailable = true;
+      this._useGrpc = true;
+
+      console.log('[spice.js] gRPC Flight protocol initialized successfully');
+      return true;
+    } catch (error: any) {
+      console.warn(
+        `[spice.js] Failed to initialize gRPC: ${error.message}. Falling back to HTTP.`,
+      );
+      return false;
+    }
+  }
+
   private createClient(meta: any): any {
+    // gRPC channel options
+    // Compression support is advertised via metadata (grpc-accept-encoding header)
+    // The server will use compression if it supports it
+    const channelOptions = {};
+
     if (!this._flightTlsEnabled) {
       return new flightProto.FlightService(
         this._flightUrl,
-        grpc.credentials.createInsecure()
+        grpc.credentials.createInsecure(),
+        channelOptions,
       );
     }
 
@@ -99,19 +256,27 @@ class SpiceClient {
       grpc.credentials.createFromMetadataGenerator(metaCallback);
     const combCreds = grpc.credentials.combineChannelCredentials(
       creds,
-      callCreds
+      callCreds,
     );
-    return new flightProto.FlightService(this._flightUrl, combCreds);
+    return new flightProto.FlightService(
+      this._flightUrl,
+      combCreds,
+      channelOptions,
+    );
   }
 
   private async getResultStream(
     queryText: string,
-    getFlightClient: ((client: FlightClient) => void) | undefined = undefined
+    getFlightClient: ((client: FlightClient) => void) | undefined = undefined,
   ): Promise<EventEmitter> {
     const meta = new grpc.Metadata();
     const client: FlightClient = this.createClient(meta);
     meta.set('authorization', 'Bearer ' + this._apiKey);
     meta.set('User-Agent', this._userAgent);
+
+    // Advertise that we accept compressed responses
+    // The server can choose to compress if it supports it
+    meta.set('grpc-accept-encoding', 'gzip,deflate');
 
     let queryBuff = Buffer.from(queryText, 'utf8');
 
@@ -125,7 +290,7 @@ class SpiceClient {
             return;
           }
           resolve(result.endpoint[0].ticket);
-        }
+        },
       );
     });
 
@@ -138,7 +303,7 @@ class SpiceClient {
 
   public async query(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined
+    onData: ((data: Table) => void) | undefined = undefined,
   ): Promise<Table> {
     return retry.retryWithExponentialBackoff<Table>(async () => {
       return this.doQueryRequest(queryText, onData);
@@ -147,15 +312,29 @@ class SpiceClient {
 
   private async doQueryRequest(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined
+    onData: ((data: Table) => void) | undefined = undefined,
   ): Promise<Table> {
+    // Try to ensure gRPC is available (will download proto if needed)
+    if (!this._useGrpc) {
+      const grpcReady = await this.ensureGrpcAvailable();
+      if (!grpcReady) {
+        console.log('[spice.js] Using HTTP endpoint for query');
+        return this.doHttpQueryRequest(queryText, onData);
+      }
+    }
+
+    // If gRPC is still not available after initialization attempt, fall back to HTTP
+    if (!this._useGrpc) {
+      return this.doHttpQueryRequest(queryText, onData);
+    }
+
     let client: FlightClient;
 
     const resultStream = await this.getResultStream(
       queryText,
       (c: FlightClient) => {
         client = c;
-      }
+      },
     );
 
     // indicates that data has been partially or fully sent
@@ -190,6 +369,104 @@ class SpiceClient {
     });
   }
 
+  private async doHttpQueryRequest(
+    queryText: string,
+    onData: ((data: Table) => void) | undefined = undefined,
+  ): Promise<Table> {
+    const response = await this.fetchInternal(
+      'POST',
+      '/v1/sql',
+      undefined,
+      JSON.stringify({ sql: queryText, parameters: [] }),
+      { Accept: 'application/vnd.spiceai.sql.v1+json' },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `HTTP query failed with status ${response.status}: ${errorText}`,
+      );
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+
+    // Handle streaming JSON responses
+    if (contentType.includes('application/json')) {
+      const body = await response.text();
+
+      // Try to parse as newline-delimited JSON (streaming)
+      const lines = body
+        .trim()
+        .split('\n')
+        .filter((line: string) => line.trim());
+
+      if (lines.length > 0) {
+        const allRows: any[] = [];
+        let schema: any = null;
+
+        for (const line of lines) {
+          try {
+            const jsonData = JSON.parse(line);
+
+            // Extract schema from first response
+            if (!schema && jsonData.schema) {
+              schema = jsonData.schema;
+            }
+
+            // Accumulate rows
+            if (jsonData.rows && Array.isArray(jsonData.rows)) {
+              allRows.push(...jsonData.rows);
+
+              // If onData callback is provided, send partial results
+              if (onData && jsonData.rows.length > 0) {
+                const partialTable = this.jsonToArrowTable(
+                  schema || [],
+                  jsonData.rows,
+                );
+                onData(partialTable);
+              }
+            }
+          } catch (parseError) {
+            console.warn(`[spice.js] Failed to parse JSON line: ${parseError}`);
+          }
+        }
+
+        // Return final table with all rows
+        return this.jsonToArrowTable(schema || [], allRows);
+      }
+    }
+
+    // Fallback: try to parse entire body as single JSON
+    const jsonData: any = await response.json();
+    const schema = jsonData.schema || [];
+    const rows = jsonData.rows || [];
+
+    return this.jsonToArrowTable(schema, rows);
+  }
+
+  private jsonToArrowTable(schema: any[], rows: any[]): Table {
+    // Convert JSON response to Arrow Table format
+    // Create a simple object representation that Arrow can understand
+    const columns: { [key: string]: any[] } = {};
+
+    // Initialize columns
+    schema.forEach((col: any) => {
+      columns[col.name] = [];
+    });
+
+    // Populate columns with row data
+    rows.forEach((row: any) => {
+      schema.forEach((col: any, idx: number) => {
+        // Handle both array-based and object-based rows
+        const value = Array.isArray(row) ? row[idx] : row[col.name];
+        columns[col.name].push(value);
+      });
+    });
+
+    // Use Apache Arrow's tableFromArrays to create the table
+    return tableFromArrays(columns);
+  }
+
   /*
    * Sets the maximum number of times to retry Query calls. The default is 3
    * @param maxRetries Num of max retries. Setting to 0 will disable retries
@@ -204,7 +481,7 @@ class SpiceClient {
 
   public async refreshDataset(
     dataset: string,
-    refresh_overrides?: RefreshOverrides
+    refresh_overrides?: RefreshOverrides,
   ) {
     if (!refresh_overrides) {
       refresh_overrides = {
@@ -225,12 +502,12 @@ class SpiceClient {
       'POST',
       `/v1/datasets/${dataset}/acceleration/refresh`,
       undefined,
-      body
+      body,
     );
     if (response.status !== 201) {
       const responseText = await response.text();
       throw new Error(
-        `Failed to refresh dataset ${dataset}. Status code: ${response.status}, Response: ${responseText}`
+        `Failed to refresh dataset ${dataset}. Status code: ${response.status}, Response: ${responseText}`,
       );
     }
   }
@@ -239,7 +516,8 @@ class SpiceClient {
     method: string,
     path: string,
     params?: { [key: string]: string },
-    body?: string
+    body?: string,
+    customHeaders?: { [key: string]: string },
   ) {
     let url;
     if (params && Object.keys(params).length) {
@@ -250,9 +528,16 @@ class SpiceClient {
 
     const headers = [
       ['Content-Type', 'application/json'],
-      ['Accept-Encoding', 'br, gzip, deflate'],
+      ['Accept-Encoding', 'zstd, br, gzip, deflate'],
       ['User-Agent', this._userAgent],
     ];
+
+    // Add custom headers
+    if (customHeaders) {
+      Object.entries(customHeaders).forEach(([key, value]) => {
+        headers.push([key, value]);
+      });
+    }
 
     if (this._apiKey) {
       headers.push(['X-API-Key', this._apiKey || '']);
