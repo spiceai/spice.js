@@ -1,7 +1,7 @@
 {
-    "buildCommand": "npm run build",
+    "buildCommand": "cd ../../.. && npm install && npm run build && cd test/apps/vercel-nextjs && npm install && npm run build",
     "devCommand": "npm run dev",
-    "installCommand": "npm install",
+    "installCommand": "cd ../../.. && npm install && cd test/apps/vercel-nextjs && npm install",
     "framework": "nextjs",
     "regions": [
         "iad1"
