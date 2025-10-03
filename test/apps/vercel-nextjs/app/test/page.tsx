@@ -31,7 +31,14 @@ export default function TestPage() {
   const [error, setError] = useState<string>('');
 
   // Initialize SpiceClient for browser - recreate when apiKey or endpoint changes
-  const client = useMemo(() => new SpiceClient(apiKey || undefined), [apiKey]);
+  const client = useMemo(
+    () =>
+      new SpiceClient({
+        httpUrl: '/api',
+        apiKey: apiKey || undefined,
+      }),
+    [apiKey],
+  );
 
   // Helper function to extract detailed error information
   const getErrorDetails = (err: unknown, context: string): string => {
