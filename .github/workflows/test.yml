@@ -133,8 +133,8 @@ jobs:
             
             # Get both status code and response body
             RESPONSE=$(curl -s -w "\n%{http_code}" "${HEALTH_URL}" || echo -e "\n000")
-            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-            BODY=$(echo "$RESPONSE" | head -n-1)
+            HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+            BODY=$(echo "$RESPONSE" | sed '$d')
             
             if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -q "ok"; then
               echo "✓ Vercel endpoint is ready (HTTP ${HTTP_CODE}, body contains 'ok')"
