@@ -7,8 +7,10 @@ export async function POST(request: NextRequest) {
   try {
     // Accept plain text SQL query
     const sql = await request.text();
+    console.log('[SQL API] Received SQL query:', sql);
 
     if (!sql || sql.trim().length === 0) {
+      console.error('[SQL API] Error: Empty SQL query received');
       return new Response(
         JSON.stringify({
           success: false,
@@ -26,6 +28,7 @@ export async function POST(request: NextRequest) {
     const key = apiKey || process.env.SPICEAI_API_KEY;
 
     if (!key) {
+      console.error('[SQL API] Error: Missing API key');
       return new Response(
         JSON.stringify({
           success: false,
@@ -39,6 +42,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log('[SQL API] Initializing SpiceClient...');
     // Initialize SpiceClient
     const client = new SpiceClient(key);
 
@@ -49,6 +53,7 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          console.log('[SQL API] Starting query execution...');
           // Send initial metadata
           controller.enqueue(
             encoder.encode(
@@ -62,6 +67,10 @@ export async function POST(request: NextRequest) {
 
           // Execute query with streaming callback
           await client.query(sql, (table) => {
+            console.log(
+              '[SQL API] Received table chunk, numRows:',
+              table.numRows,
+            );
             // Convert each chunk's rows
             const resultArray = table.toArray();
 
@@ -86,6 +95,13 @@ export async function POST(request: NextRequest) {
 
           // Send final metadata
           const executionTime = Date.now() - startTime;
+          console.log(
+            '[SQL API] Query completed successfully. Total rows:',
+            totalRows,
+            'Execution time:',
+            executionTime,
+            'ms',
+          );
           controller.enqueue(
             encoder.encode(
               JSON.stringify({
@@ -100,6 +116,11 @@ export async function POST(request: NextRequest) {
 
           controller.close();
         } catch (error) {
+          console.error('[SQL API] Error during query execution:', error);
+          console.error(
+            '[SQL API] Error stack:',
+            error instanceof Error ? error.stack : 'No stack trace',
+          );
           // Send error as final message
           controller.enqueue(
             encoder.encode(
@@ -125,6 +146,11 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    console.error('[SQL API] Unexpected error:', error);
+    console.error(
+      '[SQL API] Error stack:',
+      error instanceof Error ? error.stack : 'No stack trace',
+    );
     return new Response(
       JSON.stringify({
         success: false,
