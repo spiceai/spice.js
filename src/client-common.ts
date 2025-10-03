@@ -221,6 +221,12 @@ export class SpiceClient {
         }
 
         // Return final table with all rows
+        console.log('[DEBUG] Streaming response:', {
+          hasSchema: !!schema,
+          schemaLength: Array.isArray(schema) ? schema.length : 'not array',
+          totalRows: allRows.length,
+          linesProcessed: lines.length,
+        });
         return this.jsonToArrowTable(schema || [], allRows);
       }
     }
@@ -236,6 +242,15 @@ export class SpiceClient {
       // Handle schema - it may be an object with fields property or an array
       const schema = jsonData.schema?.fields || jsonData.schema || [];
       const rows = jsonData.rows || [];
+
+      console.log('[DEBUG] Non-streaming response:', {
+        hasSchema: !!jsonData.schema,
+        schemaType: typeof jsonData.schema,
+        schemaLength: Array.isArray(schema) ? schema.length : 'not array',
+        hasRows: !!jsonData.rows,
+        rowsLength: Array.isArray(rows) ? rows.length : 'not array',
+        jsonDataKeys: Object.keys(jsonData),
+      });
 
       return this.jsonToArrowTable(schema, rows);
     } catch (error) {

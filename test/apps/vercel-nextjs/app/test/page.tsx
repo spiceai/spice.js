@@ -16,7 +16,18 @@ export default function TestPage() {
   );
   const [customQueryResult, setCustomQueryResult] = useState<string>('');
   const [useJsonFormat, setUseJsonFormat] = useState<boolean>(false);
-  const [loading, setLoading] = useState(false);
+  const [nsqlQuery, setNsqlQuery] = useState<string>(
+    'Show me the first 5 rows',
+  );
+  const [nsqlResult, setNsqlResult] = useState<string>('');
+  
+  // Separate loading states for each action
+  const [loadingHealth, setLoadingHealth] = useState(false);
+  const [loadingReady, setLoadingReady] = useState(false);
+  const [loadingRefresh, setLoadingRefresh] = useState(false);
+  const [loadingQuery, setLoadingQuery] = useState(false);
+  const [loadingNsql, setLoadingNsql] = useState(false);
+  
   const [error, setError] = useState<string>('');
 
   // Initialize SpiceClient for browser - recreate when apiKey or endpoint changes
@@ -56,7 +67,7 @@ export default function TestPage() {
   };
 
   const checkHealth = async () => {
-    setLoading(true);
+    setLoadingHealth(true);
     setError('');
     try {
       const isHealthy = await client.isSpiceHealthy();
@@ -66,12 +77,12 @@ export default function TestPage() {
       setError(errorDetails);
       setHealthStatus('❌ Error');
     } finally {
-      setLoading(false);
+      setLoadingHealth(false);
     }
   };
 
   const checkReady = async () => {
-    setLoading(true);
+    setLoadingReady(true);
     setError('');
     try {
       const isReady = await client.isSpiceReady();
@@ -81,12 +92,12 @@ export default function TestPage() {
       setError(errorDetails);
       setReadyStatus('❌ Error');
     } finally {
-      setLoading(false);
+      setLoadingReady(false);
     }
   };
 
   const runRefresh = async () => {
-    setLoading(true);
+    setLoadingRefresh(true);
     setError('');
     setRefreshResult('');
     try {
@@ -101,12 +112,12 @@ export default function TestPage() {
       setError(errorDetails);
       setRefreshResult('');
     } finally {
-      setLoading(false);
+      setLoadingRefresh(false);
     }
   };
 
   const runCustomQuery = async () => {
-    setLoading(true);
+    setLoadingQuery(true);
     setError('');
     setCustomQueryResult('');
     try {
@@ -128,7 +139,24 @@ export default function TestPage() {
       setError(fullError);
       setCustomQueryResult('');
     } finally {
-      setLoading(false);
+      setLoadingQuery(false);
+    }
+  };
+
+  const runNsql = async () => {
+    setLoadingNsql(true);
+    setError('');
+    setNsqlResult('');
+    try {
+      const result = await client.nsql(nsqlQuery);
+      setNsqlResult(JSON.stringify(result, null, 2));
+    } catch (err) {
+      const errorDetails = getErrorDetails(err, 'NSQL query');
+      const fullError = `Natural language query: ${nsqlQuery}\n\n${errorDetails}`;
+      setError(fullError);
+      setNsqlResult('');
+    } finally {
+      setLoadingNsql(false);
     }
   };
 
@@ -319,21 +347,21 @@ export default function TestPage() {
             </p>
             <button
               onClick={checkHealth}
-              disabled={loading}
+              disabled={loadingHealth}
               style={{
                 background: '#0070f3',
                 color: 'white',
                 border: 'none',
                 padding: '10px 20px',
                 borderRadius: '5px',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.6 : 1,
+                cursor: loadingHealth ? 'not-allowed' : 'pointer',
+                opacity: loadingHealth ? 0.6 : 1,
                 fontSize: '14px',
                 fontWeight: '600',
                 width: '100%',
               }}
             >
-              {loading ? 'Checking...' : 'Check Health'}
+              {loadingHealth ? 'Checking...' : 'Check Health'}
             </button>
             <div
               style={{
@@ -354,21 +382,21 @@ export default function TestPage() {
             </p>
             <button
               onClick={checkReady}
-              disabled={loading}
+              disabled={loadingReady}
               style={{
                 background: '#0070f3',
                 color: 'white',
                 border: 'none',
                 padding: '10px 20px',
                 borderRadius: '5px',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.6 : 1,
+                cursor: loadingReady ? 'not-allowed' : 'pointer',
+                opacity: loadingReady ? 0.6 : 1,
                 fontSize: '14px',
                 fontWeight: '600',
                 width: '100%',
               }}
             >
-              {loading ? 'Checking...' : 'Check Ready'}
+              {loadingReady ? 'Checking...' : 'Check Ready'}
             </button>
             <div
               style={{
@@ -404,20 +432,20 @@ export default function TestPage() {
           </p>
           <button
             onClick={runRefresh}
-            disabled={loading}
+            disabled={loadingRefresh}
             style={{
               background: '#0070f3',
               color: 'white',
               border: 'none',
               padding: '10px 20px',
               borderRadius: '5px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.6 : 1,
+              cursor: loadingRefresh ? 'not-allowed' : 'pointer',
+              opacity: loadingRefresh ? 0.6 : 1,
               fontSize: '14px',
               fontWeight: '600',
             }}
           >
-            {loading ? 'Refreshing...' : 'Refresh Dataset'}
+            {loadingRefresh ? 'Refreshing...' : 'Refresh Dataset'}
           </button>
           {refreshResult && (
             <pre
@@ -518,20 +546,20 @@ export default function TestPage() {
 
           <button
             onClick={runCustomQuery}
-            disabled={loading || !customQuery.trim()}
+            disabled={loadingQuery || !customQuery.trim()}
             style={{
-              background: loading || !customQuery.trim() ? '#ccc' : '#0070f3',
+              background: loadingQuery || !customQuery.trim() ? '#ccc' : '#0070f3',
               color: 'white',
               border: 'none',
               padding: '12px 24px',
               borderRadius: '5px',
               cursor:
-                loading || !customQuery.trim() ? 'not-allowed' : 'pointer',
+                loadingQuery || !customQuery.trim() ? 'not-allowed' : 'pointer',
               fontSize: '14px',
               fontWeight: '600',
             }}
           >
-            {loading ? 'Executing...' : '▶ Execute Query'}
+            {loadingQuery ? 'Executing...' : '▶ Execute Query'}
           </button>
 
           {customQueryResult && (
@@ -551,6 +579,89 @@ export default function TestPage() {
             </pre>
           )}
         </div>
+      </div>
+
+      <div
+        style={{
+          background: '#fff',
+          padding: '20px',
+          borderRadius: '8px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        }}
+      >
+        <h2
+          style={{
+            marginTop: 0,
+            marginBottom: '15px',
+            fontSize: '18px',
+            color: '#333',
+          }}
+        >
+          Natural Language Query (NSQL)
+        </h2>
+        <div style={{ marginBottom: '15px' }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: '#555',
+            }}
+          >
+            Natural Language Query:
+          </label>
+          <textarea
+            value={nsqlQuery}
+            onChange={(e) => setNsqlQuery(e.target.value)}
+            placeholder="e.g., Show me the first 5 rows"
+            style={{
+              width: '100%',
+              padding: '10px',
+              borderRadius: '5px',
+              border: '1px solid #ddd',
+              fontSize: '14px',
+              fontFamily: 'monospace',
+              minHeight: '60px',
+              resize: 'vertical',
+            }}
+          />
+        </div>
+
+        <button
+          onClick={runNsql}
+          disabled={loadingNsql || !nsqlQuery.trim()}
+          style={{
+            background: loadingNsql || !nsqlQuery.trim() ? '#ccc' : '#10b981',
+            color: 'white',
+            border: 'none',
+            padding: '12px 24px',
+            borderRadius: '5px',
+            cursor:
+              loadingNsql || !nsqlQuery.trim() ? 'not-allowed' : 'pointer',
+            fontSize: '14px',
+            fontWeight: '600',
+          }}
+        >
+          {loadingNsql ? 'Processing...' : '🤖 Ask Natural Language Question'}
+        </button>
+
+        {nsqlResult && (
+          <pre
+            style={{
+              marginTop: '15px',
+              background: '#fff',
+              padding: '15px',
+              borderRadius: '5px',
+              overflow: 'auto',
+              fontSize: '12px',
+              border: '1px solid #ddd',
+              maxHeight: '400px',
+            }}
+          >
+            {nsqlResult}
+          </pre>
+        )}
       </div>
 
       <div
