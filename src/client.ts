@@ -19,7 +19,14 @@ import {
   Ticket,
   getIpcMessage,
 } from './flight';
-import { RefreshOverrides, type SpiceClientConfig } from './interfaces';
+import {
+  type SpiceClientConfig,
+  type SqlJsonResponse,
+  type RefreshAccelerationOptions,
+  type RefreshAccelerationResponse,
+  type NsqlOptions,
+  type NsqlResponse,
+} from './interfaces';
 
 import * as retry from './retry';
 import { getUserAgent } from './user-agent';
@@ -344,20 +351,7 @@ class SpiceClient {
    * @param queryText - The SQL query to execute
    * @returns Promise resolving to an object containing row_count, schema, data, and execution_time_ms
    */
-  async sqlJson(queryText: string): Promise<{
-    row_count: number;
-    schema: {
-      fields: Array<{
-        name: string;
-        data_type: string;
-        nullable: boolean;
-        dict_id: number;
-        dict_is_ordered: boolean;
-      }>;
-    };
-    data: any[];
-    execution_time_ms: number;
-  }> {
+  async sqlJson(queryText: string): Promise<SqlJsonResponse> {
     const startTime = Date.now();
     const allRows: any[] = [];
     let schema: any = null;
@@ -407,25 +401,8 @@ class SpiceClient {
    */
   async nsql(
     query: string,
-    options?: {
-      datasets?: string[] | null;
-      model?: string;
-      sample_data_enabled?: boolean;
-    },
-  ): Promise<{
-    row_count: number;
-    schema: {
-      fields: Array<{
-        name: string;
-        data_type: string;
-        nullable: boolean;
-        dict_id: number;
-        dict_is_ordered: boolean;
-      }>;
-    };
-    data: any[];
-    sql: string;
-  }> {
+    options?: NsqlOptions,
+  ): Promise<NsqlResponse> {
     if (!this._httpUrl) {
       throw new Error('HTTP URL is required for NSQL operation');
     }
@@ -450,20 +427,7 @@ class SpiceClient {
     }
 
     const result = await response.json();
-    return result as {
-      row_count: number;
-      schema: {
-        fields: Array<{
-          name: string;
-          data_type: string;
-          nullable: boolean;
-          dict_id: number;
-          dict_is_ordered: boolean;
-        }>;
-      };
-      data: any[];
-      sql: string;
-    };
+    return result as NsqlResponse;
   }
 
   private async doQueryRequest(
@@ -634,33 +598,6 @@ class SpiceClient {
     this._maxRetries = maxRetries;
   }
 
-  public async refreshDataset(
-    dataset: string,
-    refresh_overrides?: RefreshOverrides,
-  ): Promise<void> {
-    const overrides: RefreshOverrides = {
-      refresh_sql: refresh_overrides?.refresh_sql || undefined,
-      refresh_mode: refresh_overrides?.refresh_mode || undefined,
-      refresh_jitter_max: refresh_overrides?.refresh_jitter_max || undefined,
-    };
-
-    const body = JSON.stringify(overrides);
-
-    const response = await this.fetchInternal(
-      'POST',
-      `/v1/datasets/${dataset}/acceleration/refresh`,
-      undefined,
-      body,
-    );
-
-    if (response.status !== 201) {
-      const responseText = await response.text();
-      throw new Error(
-        `Failed to refresh dataset ${dataset}. Status code: ${response.status}, Response: ${responseText}`,
-      );
-    }
-  }
-
   /**
    * Triggers an on-demand refresh for an accelerated dataset.
    * @param dataset - The name of the dataset to refresh
@@ -669,12 +606,8 @@ class SpiceClient {
    */
   async refreshAcceleration(
     dataset: string,
-    options?: {
-      refresh_sql?: string;
-      refresh_mode?: 'disabled' | 'full' | 'append' | 'changes';
-      refresh_jitter_max?: string;
-    },
-  ): Promise<{ message: string }> {
+    options?: RefreshAccelerationOptions,
+  ): Promise<RefreshAccelerationResponse> {
     if (!this._httpUrl) {
       throw new Error('HTTP URL is required for refresh operation');
     }

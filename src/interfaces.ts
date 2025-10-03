@@ -1,34 +1,3 @@
-export interface QueryCompletionNotification {
-  name: string;
-  type: 'webhook';
-  uri: string;
-}
-
-export interface AsyncQueryRequest {
-  sql: string;
-  notifications: QueryCompletionNotification[];
-}
-
-export interface AsyncQueryResponse {
-  queryId: string;
-}
-
-export interface QueryCompleteNotification {
-  appId: number;
-  queryId: string;
-  requestTime: string;
-  completionTime: string;
-  state: string;
-  sql: string;
-  rowCount: 3;
-}
-
-export interface QueryResultsResponse {
-  rowCount: number;
-  schema: { name: 'string'; type: { name: string } }[];
-  rows: any[];
-}
-
 export interface SpiceClientConfig {
   apiKey?: string;
   httpUrl?: string;
@@ -38,10 +7,31 @@ export interface SpiceClientConfig {
   customHeaders?: { [key: string]: string };
 }
 
-export interface RefreshOverrides {
+export interface SchemaField {
+  name: string;
+  data_type: string;
+  nullable: boolean;
+  dict_id: number;
+  dict_is_ordered: boolean;
+}
+
+export interface SqlJsonResponse {
+  row_count: number;
+  schema: {
+    fields: SchemaField[];
+  };
+  data: any[];
+  execution_time_ms: number;
+}
+
+export interface RefreshAccelerationOptions {
   refresh_sql?: string;
   refresh_mode?: 'disabled' | 'full' | 'append' | 'changes';
   refresh_jitter_max?: string;
+}
+
+export interface RefreshAccelerationResponse {
+  message: string;
 }
 
 export interface NsqlOptions {
@@ -53,14 +43,12 @@ export interface NsqlOptions {
 export interface NsqlResponse {
   row_count: number;
   schema: {
-    fields: Array<{
-      name: string;
-      data_type: string;
-      nullable: boolean;
-      dict_id: number;
-      dict_is_ordered: boolean;
-    }>;
+    fields: SchemaField[];
   };
   data: any[];
   sql: string;
 }
+
+// Legacy interface for backward compatibility
+/** @deprecated Use RefreshAccelerationOptions instead */
+export interface RefreshOverrides extends RefreshAccelerationOptions {}

@@ -18,8 +18,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.nodever }}
-      - run: yarn install
-      - run: yarn build
+      - run: npm install
+      - run: npm run build
 
       - name: Setup Vercel endpoint
         id: vercel
