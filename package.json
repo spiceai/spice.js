@@ -30,6 +30,8 @@
   "author": "Spice AI, Inc. <webmaster@spice.ai>",
   "license": "MIT",
   "dependencies": {
+    "@types/node-fetch": "^2.6.12",
+    "@types/retry": "^0.12.5",
     "apache-arrow": "21.0.0"
   },
   "optionalDependencies": {
@@ -42,8 +44,6 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^18.19.129",
-    "@types/node-fetch": "^2.6.12",
-    "@types/retry": "^0.12.5",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "dotenv": "^17.2.3",
