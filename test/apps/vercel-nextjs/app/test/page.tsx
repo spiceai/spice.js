@@ -22,6 +22,39 @@ export default function TestPage() {
   // Initialize SpiceClient for browser - recreate when apiKey or endpoint changes
   const client = useMemo(() => new SpiceClient(apiKey || undefined), [apiKey]);
 
+  // Helper function to extract detailed error information
+  const getErrorDetails = (err: unknown, context: string): string => {
+    const details: string[] = [`❌ ${context} failed\n`];
+
+    if (err instanceof Error) {
+      details.push(`Error: ${err.message}`);
+
+      if (err.stack) {
+        details.push(`\nStack trace:\n${err.stack}`);
+      }
+
+      // Check for fetch/network errors
+      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        details.push(
+          '\n⚠️ Network error - check your connection and endpoint URL',
+        );
+      }
+    } else if (typeof err === 'object' && err !== null) {
+      details.push(`Error object: ${JSON.stringify(err, null, 2)}`);
+    } else {
+      details.push(`Unknown error: ${String(err)}`);
+    }
+
+    // Add environment info
+    details.push(`\n📍 Environment:`);
+    details.push(`  • Browser: ${navigator.userAgent}`);
+    details.push(`  • Endpoint: ${client['_httpUrl'] || 'Not set'}`);
+    details.push(`  • API Key: ${apiKey ? '✓ Configured' : '✗ Not set'}`);
+    details.push(`  • Timestamp: ${new Date().toISOString()}`);
+
+    return details.join('\n');
+  };
+
   const checkHealth = async () => {
     setLoading(true);
     setError('');
@@ -29,9 +62,8 @@ export default function TestPage() {
       const isHealthy = await client.isSpiceHealthy();
       setHealthStatus(isHealthy ? '✅ Healthy' : '❌ Not Healthy');
     } catch (err) {
-      setError(
-        `Health check failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      );
+      const errorDetails = getErrorDetails(err, 'Health check');
+      setError(errorDetails);
       setHealthStatus('❌ Error');
     } finally {
       setLoading(false);
@@ -45,9 +77,8 @@ export default function TestPage() {
       const isReady = await client.isSpiceReady();
       setReadyStatus(isReady ? '✅ Ready' : '❌ Not Ready');
     } catch (err) {
-      setError(
-        `Ready check failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      );
+      const errorDetails = getErrorDetails(err, 'Ready check');
+      setError(errorDetails);
       setReadyStatus('❌ Error');
     } finally {
       setLoading(false);
@@ -63,9 +94,11 @@ export default function TestPage() {
       const result = await client.refreshAcceleration('eth.recent_blocks');
       setRefreshResult(JSON.stringify(result, null, 2));
     } catch (err) {
-      setError(
-        `Refresh failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      const errorDetails = getErrorDetails(
+        err,
+        'Dataset refresh (eth.recent_blocks)',
       );
+      setError(errorDetails);
       setRefreshResult('');
     } finally {
       setLoading(false);
@@ -88,9 +121,11 @@ export default function TestPage() {
         setCustomQueryResult(JSON.stringify(rows, null, 2));
       }
     } catch (err) {
-      setError(
-        `Custom query failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      );
+      const method = useJsonFormat ? 'sqlJson' : 'sql';
+      const errorDetails = getErrorDetails(err, `Custom query (${method})`);
+      // Add query context to error
+      const fullError = `Query: ${customQuery}\n\n${errorDetails}`;
+      setError(fullError);
       setCustomQueryResult('');
     } finally {
       setLoading(false);
@@ -195,16 +230,159 @@ export default function TestPage() {
         <div
           style={{
             background: '#fee',
-            border: '1px solid #fcc',
-            padding: '15px',
+            border: '2px solid #c00',
             borderRadius: '8px',
             marginBottom: '20px',
-            color: '#c00',
+            overflow: 'hidden',
           }}
         >
-          <strong>Error:</strong> {error}
+          <div
+            style={{
+              background: '#c00',
+              color: 'white',
+              padding: '12px 15px',
+              fontWeight: '600',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <span>🚨 Test Failure - Diagnostic Information</span>
+            <button
+              onClick={() => setError('')}
+              style={{
+                background: 'transparent',
+                border: '1px solid white',
+                color: 'white',
+                padding: '4px 12px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+          <pre
+            style={{
+              margin: 0,
+              padding: '15px',
+              color: '#c00',
+              fontSize: '12px',
+              fontFamily: 'monospace',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              overflowX: 'auto',
+              maxHeight: '400px',
+              overflowY: 'auto',
+            }}
+          >
+            {error}
+          </pre>
+          <div
+            style={{
+              padding: '10px 15px',
+              background: '#fff5f5',
+              fontSize: '12px',
+              color: '#666',
+              borderTop: '1px solid #fcc',
+            }}
+          >
+            💡 <strong>Tip:</strong> Copy this error information when reporting
+            issues or debugging.
+          </div>
         </div>
       )}
+
+      <div
+        style={{
+          border: '1px solid #ddd',
+          borderRadius: '8px',
+          padding: '20px',
+          marginBottom: '20px',
+        }}
+      >
+        <h2 style={{ marginTop: 0, marginBottom: '15px' }}>
+          Health & Readiness Checks
+        </h2>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '20px',
+          }}
+        >
+          <div>
+            <h3 style={{ marginTop: 0, fontSize: '18px' }}>Health Check</h3>
+            <p style={{ fontSize: '14px', color: '#666', marginTop: '8px' }}>
+              Tests the /health endpoint
+            </p>
+            <button
+              onClick={checkHealth}
+              disabled={loading}
+              style={{
+                background: '#0070f3',
+                color: 'white',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '5px',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.6 : 1,
+                fontSize: '14px',
+                fontWeight: '600',
+                width: '100%',
+              }}
+            >
+              {loading ? 'Checking...' : 'Check Health'}
+            </button>
+            <div
+              style={{
+                marginTop: '15px',
+                fontSize: '18px',
+                fontWeight: '600',
+                textAlign: 'center',
+              }}
+            >
+              {healthStatus}
+            </div>
+          </div>
+
+          <div>
+            <h3 style={{ marginTop: 0, fontSize: '18px' }}>Ready Check</h3>
+            <p style={{ fontSize: '14px', color: '#666', marginTop: '8px' }}>
+              Tests the /v1/ready endpoint
+            </p>
+            <button
+              onClick={checkReady}
+              disabled={loading}
+              style={{
+                background: '#0070f3',
+                color: 'white',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '5px',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.6 : 1,
+                fontSize: '14px',
+                fontWeight: '600',
+                width: '100%',
+              }}
+            >
+              {loading ? 'Checking...' : 'Check Ready'}
+            </button>
+            <div
+              style={{
+                marginTop: '15px',
+                fontSize: '18px',
+                fontWeight: '600',
+                textAlign: 'center',
+              }}
+            >
+              {readyStatus}
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div
         style={{
@@ -213,76 +391,6 @@ export default function TestPage() {
           marginBottom: '20px',
         }}
       >
-        <div
-          style={{
-            border: '1px solid #ddd',
-            borderRadius: '8px',
-            padding: '20px',
-          }}
-        >
-          <h2 style={{ marginTop: 0 }}>Health Check</h2>
-          <p style={{ fontSize: '14px', color: '#666' }}>
-            Tests the /health endpoint
-          </p>
-          <button
-            onClick={checkHealth}
-            disabled={loading}
-            style={{
-              background: '#0070f3',
-              color: 'white',
-              border: 'none',
-              padding: '10px 20px',
-              borderRadius: '5px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.6 : 1,
-              fontSize: '14px',
-              fontWeight: '600',
-            }}
-          >
-            {loading ? 'Checking...' : 'Check Health'}
-          </button>
-          <div
-            style={{ marginTop: '15px', fontSize: '18px', fontWeight: '600' }}
-          >
-            Status: {healthStatus}
-          </div>
-        </div>
-
-        <div
-          style={{
-            border: '1px solid #ddd',
-            borderRadius: '8px',
-            padding: '20px',
-          }}
-        >
-          <h2 style={{ marginTop: 0 }}>Ready Check</h2>
-          <p style={{ fontSize: '14px', color: '#666' }}>
-            Tests the /v1/ready endpoint
-          </p>
-          <button
-            onClick={checkReady}
-            disabled={loading}
-            style={{
-              background: '#0070f3',
-              color: 'white',
-              border: 'none',
-              padding: '10px 20px',
-              borderRadius: '5px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.6 : 1,
-              fontSize: '14px',
-              fontWeight: '600',
-            }}
-          >
-            {loading ? 'Checking...' : 'Check Ready'}
-          </button>
-          <div
-            style={{ marginTop: '15px', fontSize: '18px', fontWeight: '600' }}
-          >
-            Status: {readyStatus}
-          </div>
-        </div>
-
         <div
           style={{
             border: '1px solid #ddd',
