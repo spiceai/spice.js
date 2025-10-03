@@ -107,14 +107,12 @@ jobs:
         id: vercel-endpoint
         run: |
           BRANCH_NAME="${{ github.head_ref || github.ref_name }}"
-          AUTHOR="${{ github.event.pull_request.user.login || github.actor }}"
 
           # Replace / with - and convert to lowercase for Vercel format
           BRANCH_SLUG=$(echo "$BRANCH_NAME" | sed 's/\//-/g' | tr '[:upper:]' '[:lower:]')
-          AUTHOR_SLUG=$(echo "$AUTHOR" | tr '[:upper:]' '[:lower:]')
 
-          # Construct the Vercel endpoint
-          VERCEL_ENDPOINT="https://spice-js-git-${BRANCH_SLUG}-${AUTHOR_SLUG}.vercel.app/api"
+          # Construct the Vercel endpoint using organization name 'spice'
+          VERCEL_ENDPOINT="https://spice-js-git-${BRANCH_SLUG}-spice.vercel.app"
 
           echo "vercel_endpoint=${VERCEL_ENDPOINT}" >> $GITHUB_OUTPUT
           echo "Constructed Vercel endpoint: ${VERCEL_ENDPOINT}"
@@ -158,11 +156,13 @@ jobs:
           SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }} # spice.ai/spiceai/spice-js
           HTTP_URL: ${{ secrets.HTTP_URL || 'https://data.spiceai.io' }}
           FLIGHT_URL: ${{ secrets.FLIGHT_URL || 'flight.spiceai.io:443' }}
-          VERCEL_ENDPOINT: ${{ secrets.VERCEL_ENDPOINT || steps.vercel-endpoint.outputs.vercel_endpoint }}
+          VERCEL_ENDPOINT: ${{ secrets.VERCEL_ENDPOINT || steps.vercel-endpoint.outputs.vercel_endpoint }}/api
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
       - name: Stop spice and check logs
         if: always()
         run: |
+          killall spice || true
+          cat test/scripts/spice.log
           killall spice || true
           cat test/scripts/spice.log
