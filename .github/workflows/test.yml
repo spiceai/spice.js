@@ -137,7 +137,7 @@ jobs:
 
       - name: Running cloud tests
         run: |
-          npm run test -- test/cloud.test.ts
+          npm run test:node -- test/cloud.test.ts
         env:
           SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }} # spice.ai/spiceai/spice-js
           HTTP_URL: ${{ secrets.HTTP_URL || 'https://data.spiceai.io' }}
