@@ -27,6 +27,16 @@ export async function POST(request: NextRequest) {
     const apiKey = request.headers.get('X-API-KEY');
     const key = apiKey || process.env.SPICEAI_API_KEY;
 
+    console.log(
+      '[SQL API] API key source:',
+      apiKey ? 'X-API-KEY header' : 'SPICEAI_API_KEY env var',
+    );
+    console.log('[SQL API] API key present:', !!key);
+    console.log(
+      '[SQL API] API key format:',
+      key ? `${key.substring(0, 10)}...` : 'N/A',
+    );
+
     if (!key) {
       console.error('[SQL API] Error: Missing API key');
       return new Response(
@@ -45,6 +55,7 @@ export async function POST(request: NextRequest) {
     console.log('[SQL API] Initializing SpiceClient...');
     // Initialize SpiceClient
     const client = new SpiceClient(key);
+    console.log('[SQL API] SpiceClient initialized successfully');
 
     // Create a streaming response
     const encoder = new TextEncoder();
@@ -54,6 +65,10 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         try {
           console.log('[SQL API] Starting query execution...');
+          console.log(
+            '[SQL API] Query:',
+            sql.substring(0, 100) + (sql.length > 100 ? '...' : ''),
+          );
           // Send initial metadata
           controller.enqueue(
             encoder.encode(
@@ -121,12 +136,17 @@ export async function POST(request: NextRequest) {
             '[SQL API] Error stack:',
             error instanceof Error ? error.stack : 'No stack trace',
           );
+          console.error('[SQL API] Error code:', (error as any)?.code);
+          console.error('[SQL API] Error details:', (error as any)?.details);
+          console.error('[SQL API] Error metadata:', (error as any)?.metadata);
           // Send error as final message
           controller.enqueue(
             encoder.encode(
               JSON.stringify({
                 type: 'error',
                 error: error instanceof Error ? error.message : 'Unknown error',
+                code: (error as any)?.code,
+                details: (error as any)?.details,
                 metadata: {
                   executionTime: Date.now() - startTime,
                 },
