@@ -38,7 +38,8 @@ describe('local', () => {
       const result = await client.refreshAcceleration(
         'test_postgresql_table_accelerated',
         {
-          refresh_sql: 'SELECT * FROM test_postgresql_table WHERE id > 0',
+          refresh_sql:
+            'SELECT * FROM test_postgresql_table_accelerated WHERE id > 0',
           refresh_mode: 'full',
         },
       );
