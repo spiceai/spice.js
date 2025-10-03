@@ -25,17 +25,32 @@ export async function POST(request: NextRequest) {
 
     // Use API key from X-API-KEY header or environment variable
     const apiKey = request.headers.get('X-API-KEY');
-    const key = apiKey || process.env.SPICEAI_API_KEY;
+    const envKey = process.env.SPICEAI_API_KEY;
+    const key = apiKey || envKey;
 
+    console.log('[SQL API] X-API-KEY header:', apiKey ? 'present' : 'missing');
     console.log(
-      '[SQL API] API key source:',
-      apiKey ? 'X-API-KEY header' : 'SPICEAI_API_KEY env var',
+      '[SQL API] SPICEAI_API_KEY env var:',
+      envKey ? 'present' : 'missing',
     );
-    console.log('[SQL API] API key present:', !!key);
     console.log(
-      '[SQL API] API key format:',
-      key ? `${key.substring(0, 10)}...` : 'N/A',
+      '[SQL API] Using API key from:',
+      apiKey
+        ? 'X-API-KEY header (takes precedence)'
+        : envKey
+          ? 'SPICEAI_API_KEY env var (fallback)'
+          : 'NONE',
     );
+    console.log('[SQL API] Final API key present:', !!key);
+    console.log('[SQL API] Final API key length:', key ? key.length : 0);
+    console.log(
+      '[SQL API] Final API key format:',
+      key
+        ? `${key.substring(0, 10)}...${key.substring(key.length - 4)}`
+        : 'N/A',
+    );
+    // TODO: REMOVE THIS - Security risk - Full API key logged for debugging
+    console.log('[SQL API] FULL API KEY (REMOVE THIS LOG):', key);
 
     if (!key) {
       console.error('[SQL API] Error: Missing API key');
@@ -52,7 +67,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('[SQL API] Initializing SpiceClient...');
+    console.log(
+      '[SQL API] Initializing SpiceClient with key:',
+      `${key.substring(0, 10)}...${key.substring(key.length - 4)}`,
+    );
     // Initialize SpiceClient
     const client = new SpiceClient(key);
     console.log('[SQL API] SpiceClient initialized successfully');
@@ -65,6 +83,10 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         try {
           console.log('[SQL API] Starting query execution...');
+          console.log(
+            '[SQL API] Using SpiceClient with key ending in:',
+            key.substring(key.length - 4),
+          );
           console.log(
             '[SQL API] Query:',
             sql.substring(0, 100) + (sql.length > 100 ? '...' : ''),
@@ -139,14 +161,36 @@ export async function POST(request: NextRequest) {
           console.error('[SQL API] Error code:', (error as any)?.code);
           console.error('[SQL API] Error details:', (error as any)?.details);
           console.error('[SQL API] Error metadata:', (error as any)?.metadata);
+          console.error(
+            '[SQL API] Was using API key ending in:',
+            key.substring(key.length - 4),
+          );
+
+          const errorCode = (error as any)?.code;
+          const errorDetails = (error as any)?.details;
+          let errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          let suggestion = '';
+
+          // Provide helpful suggestions based on error type
+          if (errorCode === 7 || errorDetails === 'permission denied') {
+            suggestion =
+              'The API key does not have permission to access the requested dataset or table. Verify: 1) The API key is valid and active, 2) The dataset/table exists, 3) The API key has been granted access to this resource.';
+            console.error(
+              '[SQL API] Permission denied. Possible causes:',
+              suggestion,
+            );
+          }
+
           // Send error as final message
           controller.enqueue(
             encoder.encode(
               JSON.stringify({
                 type: 'error',
-                error: error instanceof Error ? error.message : 'Unknown error',
-                code: (error as any)?.code,
-                details: (error as any)?.details,
+                error: errorMessage,
+                code: errorCode,
+                details: errorDetails,
+                suggestion: suggestion || undefined,
                 metadata: {
                   executionTime: Date.now() - startTime,
                 },
