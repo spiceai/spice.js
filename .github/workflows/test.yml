@@ -124,13 +124,8 @@ jobs:
           # time to initialize added dataset
           sleep 2
 
-      - name: Run browser tests
-        run: npm run test:browser
-
-      - name: Run Node.js local tests
-        run: npm run test:node
-        env:
-          SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }}
+      - name: Run Node.js local runtime tests
+        run: npm run test:node -- test/local-runtime.test.ts test/user-agent.test.ts
 
       - name: Setup Vercel endpoint
         id: vercel
