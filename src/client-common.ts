@@ -165,8 +165,11 @@ export class SpiceClient {
       'POST',
       '/v1/sql',
       undefined,
-      JSON.stringify({ sql: queryText, parameters: [] }),
-      { Accept: 'application/vnd.spiceai.sql.v1+json' },
+      queryText,
+      {
+        'Content-Type': 'text/plain',
+        Accept: 'application/vnd.spiceai.sql.v1+json',
+      },
     );
 
     if (!response.ok) {
