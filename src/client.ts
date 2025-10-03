@@ -399,10 +399,7 @@ class SpiceClient {
    * @param options - Optional configuration for the NSQL request
    * @returns Promise resolving to the query results with the generated SQL
    */
-  async nsql(
-    query: string,
-    options?: NsqlOptions,
-  ): Promise<NsqlResponse> {
+  async nsql(query: string, options?: NsqlOptions): Promise<NsqlResponse> {
     if (!this._httpUrl) {
       throw new Error('HTTP URL is required for NSQL operation');
     }
