@@ -38,8 +38,8 @@ jobs:
 
       - name: Install requirements
         run: |
-          yarn install
-          yarn build
+          npm install
+          npm run build
 
       - name: Install PostgreSQL (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -99,7 +99,7 @@ jobs:
 
       - name: Running tests
         run: |
-          yarn test
+          npm run test
         env:
           SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }}
 

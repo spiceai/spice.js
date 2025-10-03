@@ -172,10 +172,16 @@ class SpiceClient {
       this._apiKey = apiKey;
       this._httpUrl = httpUrl || 'http://127.0.0.1:8090';
       this._flightUrl = flightUrl || '127.0.0.1:50051';
-      this._flightTlsEnabled =
-        flightTlsEnabled !== undefined
-          ? flightTlsEnabled
-          : !this._flightUrl.includes('127.0.0.1');
+
+      // More explicit TLS check to avoid false positives
+      const isLocalhost =
+        this._flightUrl.startsWith('127.0.0.1:') ||
+        this._flightUrl === '127.0.0.1' ||
+        this._flightUrl.startsWith('localhost:') ||
+        this._flightUrl === 'localhost';
+
+      this._flightTlsEnabled = !isLocalhost;
+
       // Prepend the user-supplied user agent (if any) with the default user agent
       this._userAgent = userAgent
         ? `${userAgent} ${getUserAgent()}`
