@@ -58,6 +58,7 @@ describe('Browser SpiceClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
+        text: jest.fn().mockResolvedValue('ok'),
       });
 
       const result = await client.isSpiceHealthy();
@@ -74,6 +75,7 @@ describe('Browser SpiceClient', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 500,
+        text: jest.fn().mockResolvedValue('error'),
       });
 
       const result = await client.isSpiceHealthy();
@@ -96,7 +98,7 @@ describe('Browser SpiceClient', () => {
         headers: {
           get: jest.fn(),
         },
-        text: jest.fn().mockResolvedValue('OK'),
+        text: jest.fn().mockResolvedValue('ready'),
         json: jest.fn().mockResolvedValue({}),
       });
 
