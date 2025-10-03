@@ -418,7 +418,11 @@ export class SpiceClient {
 
     try {
       const response = await this.fetchInternal('GET', '/v1/ready');
-      return response.ok;
+      if (!response.ok) {
+        return false;
+      }
+      const text = await response.text();
+      return text.trim().toLowerCase() === 'ready';
     } catch (error) {
       return false;
     }
@@ -446,7 +450,11 @@ export class SpiceClient {
         headers,
       });
 
-      return response.ok;
+      if (!response.ok) {
+        return false;
+      }
+      const text = await response.text();
+      return text.trim().toLowerCase() === 'ok';
     } catch (error) {
       return false;
     }
