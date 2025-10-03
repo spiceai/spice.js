@@ -1,0 +1,104 @@
+name: 'Setup Vercel Endpoint'
+description: 'Constructs Vercel endpoint URL and waits for it to be ready'
+inputs:
+  vercel-endpoint-override:
+    description: 'Override Vercel endpoint URL (optional)'
+    required: false
+    default: ''
+  vercel-bypass-secret:
+    description: 'Vercel protection bypass secret'
+    required: false
+    default: ''
+  branch-name:
+    description: 'Branch name to construct endpoint from'
+    required: true
+  max-attempts:
+    description: 'Maximum number of attempts to wait for deployment'
+    required: false
+    default: '30'
+  wait-interval:
+    description: 'Time in seconds to wait between attempts'
+    required: false
+    default: '10'
+outputs:
+  vercel-endpoint:
+    description: 'The Vercel endpoint URL'
+    value: ${{ steps.set-endpoint.outputs.endpoint }}
+  vercel-api-endpoint:
+    description: 'The Vercel API endpoint URL (endpoint + /api)'
+    value: ${{ steps.set-endpoint.outputs.api-endpoint }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Construct Vercel endpoint
+      id: construct
+      shell: bash
+      run: |
+        BRANCH_NAME="${{ inputs.branch-name }}"
+
+        # Replace / with - and convert to lowercase for Vercel format
+        BRANCH_SLUG=$(echo "$BRANCH_NAME" | sed 's/\//-/g' | tr '[:upper:]' '[:lower:]')
+
+        # Construct the Vercel endpoint using organization name 'spice'
+        VERCEL_ENDPOINT="https://spice-js-git-${BRANCH_SLUG}-spice.vercel.app"
+
+        echo "constructed_endpoint=${VERCEL_ENDPOINT}" >> $GITHUB_OUTPUT
+        echo "Constructed Vercel endpoint: ${VERCEL_ENDPOINT}"
+
+    - name: Set final endpoint
+      id: set-endpoint
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.vercel-endpoint-override }}" ]; then
+          FINAL_ENDPOINT="${{ inputs.vercel-endpoint-override }}"
+          echo "Using override endpoint: ${FINAL_ENDPOINT}"
+        else
+          FINAL_ENDPOINT="${{ steps.construct.outputs.constructed_endpoint }}"
+          echo "Using constructed endpoint: ${FINAL_ENDPOINT}"
+        fi
+        
+        echo "endpoint=${FINAL_ENDPOINT}" >> $GITHUB_OUTPUT
+        echo "api-endpoint=${FINAL_ENDPOINT}/api" >> $GITHUB_OUTPUT
+
+    - name: Wait for Vercel deployment to be ready
+      shell: bash
+      env:
+        VERCEL_BYPASS_SECRET: ${{ inputs.vercel-bypass-secret }}
+        VERCEL_ENDPOINT: ${{ steps.set-endpoint.outputs.endpoint }}
+        MAX_ATTEMPTS: ${{ inputs.max-attempts }}
+        WAIT_INTERVAL: ${{ inputs.wait-interval }}
+      run: |
+        HEALTH_URL="${VERCEL_ENDPOINT}/health"
+
+        echo "Waiting for Vercel endpoint to be ready: ${HEALTH_URL}"
+
+        ATTEMPT=0
+
+        # Prepare curl header args if bypass secret is set
+        CURL_HEADERS=""
+        if [ -n "${VERCEL_BYPASS_SECRET}" ]; then
+          CURL_HEADERS="-H 'x-vercel-protection-bypass: ${VERCEL_BYPASS_SECRET}'"
+        fi
+
+        while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+          ATTEMPT=$((ATTEMPT + 1))
+          echo "Attempt ${ATTEMPT}/${MAX_ATTEMPTS}: Checking ${HEALTH_URL}"
+          
+          # Get both status code and response body
+          RESPONSE=$(eval "curl -s -w '\n%{http_code}' ${CURL_HEADERS} '${HEALTH_URL}'" || echo -e "\n000")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -q "ok"; then
+            echo "✓ Vercel endpoint is ready (HTTP ${HTTP_CODE}, body contains 'ok')"
+            exit 0
+          fi
+          
+          echo "  HTTP ${HTTP_CODE}, body: ${BODY} - Not ready yet, waiting ${WAIT_INTERVAL} seconds..."
+          sleep $WAIT_INTERVAL
+        done
+
+        echo "✗ Vercel endpoint did not become ready after ${MAX_ATTEMPTS} attempts"
+        echo "  This may indicate the deployment is not available or the branch/author format is incorrect"
+        exit 1

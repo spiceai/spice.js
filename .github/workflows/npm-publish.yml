@@ -20,13 +20,27 @@ jobs:
           node-version: ${{ matrix.nodever }}
       - run: yarn install
       - run: yarn build
+
+      - name: Setup Vercel endpoint
+        id: vercel
+        uses: ./.github/actions/setup-vercel-endpoint
+        with:
+          vercel-endpoint-override: ${{ secrets.VERCEL_ENDPOINT }}
+          vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          branch-name: ${{ github.ref_name }}
+
       - run: |
-          yarn test -t 'cloud'
+          npm run test -t 'cloud'
         env:
+          SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }}
           API_KEY: ${{ secrets.API_KEY }}
           RELAY_KEY: ${{ secrets.RELAY_KEY }}
           RELAY_SECRET: ${{ secrets.RELAY_SECRET }}
           RELAY_URL: ${{ secrets.RELAY_URL }}
+          HTTP_URL: ${{ secrets.HTTP_URL || 'https://data.spiceai.io' }}
+          FLIGHT_URL: ${{ secrets.FLIGHT_URL || 'flight.spiceai.io:443' }}
+          VERCEL_ENDPOINT: ${{ steps.vercel.outputs.vercel-api-endpoint }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
   publish-npm:
     needs: build

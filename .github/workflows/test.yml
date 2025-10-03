@@ -103,59 +103,13 @@ jobs:
         env:
           SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }}
 
-      - name: Construct Vercel endpoint
-        id: vercel-endpoint
-        run: |
-          BRANCH_NAME="${{ github.head_ref || github.ref_name }}"
-
-          # Replace / with - and convert to lowercase for Vercel format
-          BRANCH_SLUG=$(echo "$BRANCH_NAME" | sed 's/\//-/g' | tr '[:upper:]' '[:lower:]')
-
-          # Construct the Vercel endpoint using organization name 'spice'
-          VERCEL_ENDPOINT="https://spice-js-git-${BRANCH_SLUG}-spice.vercel.app"
-
-          echo "vercel_endpoint=${VERCEL_ENDPOINT}" >> $GITHUB_OUTPUT
-          echo "Constructed Vercel endpoint: ${VERCEL_ENDPOINT}"
-
-      - name: Wait for Vercel deployment to be ready
-        env:
-          VERCEL_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-        run: |
-          VERCEL_ENDPOINT="${{ secrets.VERCEL_ENDPOINT || steps.vercel-endpoint.outputs.vercel_endpoint }}"
-          HEALTH_URL="${VERCEL_ENDPOINT}/health"
-
-          echo "Waiting for Vercel endpoint to be ready: ${HEALTH_URL}"
-
-          MAX_ATTEMPTS=30
-          ATTEMPT=0
-
-          # Prepare curl header args if bypass secret is set
-          CURL_HEADERS=""
-          if [ -n "${VERCEL_BYPASS_SECRET}" ]; then
-            CURL_HEADERS="-H 'x-vercel-protection-bypass: ${VERCEL_BYPASS_SECRET}'"
-          fi
-
-          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-            ATTEMPT=$((ATTEMPT + 1))
-            echo "Attempt ${ATTEMPT}/${MAX_ATTEMPTS}: Checking ${HEALTH_URL}"
-            
-            # Get both status code and response body
-            RESPONSE=$(eval "curl -s -w '\n%{http_code}' ${CURL_HEADERS} '${HEALTH_URL}'" || echo -e "\n000")
-            HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
-            BODY=$(echo "$RESPONSE" | sed '$d')
-            
-            if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -q "ok"; then
-              echo "✓ Vercel endpoint is ready (HTTP ${HTTP_CODE}, body contains 'ok')"
-              exit 0
-            fi
-            
-            echo "  HTTP ${HTTP_CODE}, body: ${BODY} - Not ready yet, waiting 10 seconds..."
-            sleep 10
-          done
-
-          echo "✗ Vercel endpoint did not become ready after ${MAX_ATTEMPTS} attempts"
-          echo "  This may indicate the deployment is not available or the branch/author format is incorrect"
-          exit 1
+      - name: Setup Vercel endpoint
+        id: vercel
+        uses: ./.github/actions/setup-vercel-endpoint
+        with:
+          vercel-endpoint-override: ${{ secrets.VERCEL_ENDPOINT }}
+          vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          branch-name: ${{ github.head_ref || github.ref_name }}
 
       - name: Running cloud tests
         run: |
@@ -164,13 +118,11 @@ jobs:
           SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }} # spice.ai/spiceai/spice-js
           HTTP_URL: ${{ secrets.HTTP_URL || 'https://data.spiceai.io' }}
           FLIGHT_URL: ${{ secrets.FLIGHT_URL || 'flight.spiceai.io:443' }}
-          VERCEL_ENDPOINT: ${{ secrets.VERCEL_ENDPOINT || steps.vercel-endpoint.outputs.vercel_endpoint }}/api
+          VERCEL_ENDPOINT: ${{ steps.vercel.outputs.vercel-api-endpoint }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
       - name: Stop spice and check logs
         if: always()
         run: |
-          killall spice || true
-          cat test/scripts/spice.log
           killall spice || true
           cat test/scripts/spice.log
