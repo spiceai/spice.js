@@ -227,7 +227,7 @@ class SpiceClient {
       if (!proto?.FlightService) {
         throw new Error('Invalid proto file structure');
       }
-      
+
       flightProto = proto;
       grpcAvailable = true;
       this._useGrpc = true;
