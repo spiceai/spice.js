@@ -57,7 +57,7 @@ runs:
           FINAL_ENDPOINT="${{ steps.construct.outputs.constructed_endpoint }}"
           echo "Using constructed endpoint: ${FINAL_ENDPOINT}"
         fi
-        
+
         echo "endpoint=${FINAL_ENDPOINT}" >> $GITHUB_OUTPUT
         echo "api-endpoint=${FINAL_ENDPOINT}/api" >> $GITHUB_OUTPUT
 
