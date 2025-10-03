@@ -188,7 +188,8 @@ export class SpiceClient {
         .split('\n')
         .filter((line: string) => line.trim());
 
-      if (lines.length > 0) {
+      if (lines.length > 1) {
+        // Multiple lines = streaming response
         const allRows: any[] = [];
         let schema: any = null;
 
@@ -229,35 +230,39 @@ export class SpiceClient {
         });
         return this.jsonToArrowTable(schema || [], allRows);
       }
-    }
 
-    // Fallback: try to parse entire body as single JSON
-    try {
-      const jsonData: any = await response.json();
+      // Single line or entire response = parse as single JSON object
+      // Note: body was already read with response.text() above
+      try {
+        const jsonData: any = JSON.parse(body);
 
-      if (!jsonData) {
-        throw new Error('Empty response body');
+        if (!jsonData) {
+          throw new Error('Empty response body');
+        }
+
+        // Handle schema - it may be an object with fields property or an array
+        const schema = jsonData.schema?.fields || jsonData.schema || [];
+        const rows = jsonData.rows || [];
+
+        console.log('[DEBUG] Non-streaming response:', {
+          hasSchema: !!jsonData.schema,
+          schemaType: typeof jsonData.schema,
+          schemaLength: Array.isArray(schema) ? schema.length : 'not array',
+          hasRows: !!jsonData.rows,
+          rowsLength: Array.isArray(rows) ? rows.length : 'not array',
+          jsonDataKeys: Object.keys(jsonData),
+        });
+
+        return this.jsonToArrowTable(schema, rows);
+      } catch (error) {
+        throw new Error(
+          `Failed to parse query response: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
       }
-
-      // Handle schema - it may be an object with fields property or an array
-      const schema = jsonData.schema?.fields || jsonData.schema || [];
-      const rows = jsonData.rows || [];
-
-      console.log('[DEBUG] Non-streaming response:', {
-        hasSchema: !!jsonData.schema,
-        schemaType: typeof jsonData.schema,
-        schemaLength: Array.isArray(schema) ? schema.length : 'not array',
-        hasRows: !!jsonData.rows,
-        rowsLength: Array.isArray(rows) ? rows.length : 'not array',
-        jsonDataKeys: Object.keys(jsonData),
-      });
-
-      return this.jsonToArrowTable(schema, rows);
-    } catch (error) {
-      throw new Error(
-        `Failed to parse query response: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
     }
+
+    // Should not reach here
+    throw new Error('Unexpected response format');
   }
 
   private jsonToArrowTable(schema: any[], rows: any[]): Table {
