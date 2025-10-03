@@ -54,7 +54,7 @@ const main = async () => {
   // });
 
   const table = await spiceClient.sql(
-    'SELECT trip_distance, total_amount FROM taxi_trips ORDER BY trip_distance DESC LIMIT 10;',
+    'SELECT trip_distance, total_amount FROM taxi_trips ORDER BY trip_distance DESC LIMIT 10;'
   );
   console.table(table.toArray());
 };
@@ -105,6 +105,47 @@ The response includes:
 - `data`: Array of row objects
 - `execution_time_ms`: Query execution time in milliseconds
 
+#### `isSpiceHealthy()` - Check Spice runtime health
+
+The `isSpiceHealthy()` method checks if the Spice runtime is healthy. This endpoint is **unauthenticated** and does not require an API key.
+
+```js
+const isHealthy = await spiceClient.isSpiceHealthy();
+if (isHealthy) {
+  console.log('✅ Spice runtime is healthy');
+} else {
+  console.log('❌ Spice runtime is unhealthy');
+}
+```
+
+#### `isSpiceReady()` - Check if Spice is ready
+
+The `isSpiceReady()` method checks if the Spice runtime is ready to accept requests. This endpoint is **authenticated** and requires an API key if configured on the Spice runtime.
+
+```js
+const isReady = await spiceClient.isSpiceReady();
+if (isReady) {
+  console.log('✅ Spice is ready to accept queries');
+} else {
+  console.log('❌ Spice is not ready yet');
+}
+
+// Example: Wait for Spice to be ready before querying
+async function waitForSpice(maxAttempts = 10) {
+  for (let i = 0; i < maxAttempts; i++) {
+    if (await spiceClient.isSpiceReady()) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  return false;
+}
+
+if (await waitForSpice()) {
+  const result = await spiceClient.sql('SELECT * FROM my_table');
+}
+```
+
 #### `refreshAcceleration(dataset: string, options?)` - Trigger dataset refresh
 
 The `refreshAcceleration()` method triggers an on-demand refresh for an accelerated dataset.
@@ -135,7 +176,7 @@ The `nsql()` method converts natural language queries into SQL and executes them
 ```js
 // Basic natural language query
 const result = await spiceClient.nsql(
-  'Show me the top 5 customers by total sales',
+  'Show me the top 5 customers by total sales'
 );
 
 console.log('Generated SQL:', result.sql);
@@ -149,7 +190,7 @@ const result = await spiceClient.nsql(
     datasets: ['taxi_trips'], // Limit to specific datasets
     model: 'nql', // Specify the model (default: 'nql')
     sample_data_enabled: true, // Include sample data in context (default: true)
-  },
+  }
 );
 
 // Access the generated SQL

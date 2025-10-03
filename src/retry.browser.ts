@@ -1,0 +1,60 @@
+/**
+ * Retry logic for browser environments (no gRPC)
+ */
+
+//default max retry value
+const FLIGHT_QUERY_MAX_RETRIES = 3;
+const SPICE_NO_RETRY = '_SPICE_NO_RETRY';
+
+function dontRetry(err: any) {
+  err[SPICE_NO_RETRY] = true;
+}
+
+function shouldRetryOperationForError(err: any): boolean {
+  // error marked as permanent so operation should not be retried
+  if (err && err[SPICE_NO_RETRY]) {
+    return false;
+  }
+
+  // For HTTP errors, retry on 5xx server errors and some 4xx
+  if (err && err.status) {
+    const status = err.status;
+    // Retry on 5xx server errors, 408 Request Timeout, and 429 Too Many Requests
+    return status >= 500 || status === 408 || status === 429;
+  }
+
+  return false;
+}
+
+async function retryWithExponentialBackoff<Type>(
+  operation: any,
+  maxRetries: number
+): Promise<Type> {
+  if (maxRetries < 0) {
+    throw new Error('maxRetries must be greater than or equal to 0');
+  }
+
+  let lastError: any;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (err: any) {
+      lastError = err;
+
+      const shouldRetry = shouldRetryOperationForError(err);
+
+      if (!shouldRetry || attempt === maxRetries) {
+        throw err;
+      }
+
+      // Exponential backoff with factor 1.5
+      const delay = Math.pow(1.5, attempt) * 1000;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+
+export { FLIGHT_QUERY_MAX_RETRIES, dontRetry, retryWithExponentialBackoff };

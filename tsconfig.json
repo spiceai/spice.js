@@ -1,14 +1,27 @@
 {
   "compilerOptions": {
     "strict": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "noImplicitAny": true,
+    "alwaysStrict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
     "module": "commonjs",
     "target": "ES2017",
     "esModuleInterop": true,
     "moduleResolution": "node",
-    "declaration": true, // generate .d.ts files
+    "declaration": true,
     "sourceMap": true,
     "jsx": "react",
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/client.ts", "src/retry.ts", "src/user-agent.ts"]
 }

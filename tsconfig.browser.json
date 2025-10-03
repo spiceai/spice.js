@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist/browser",
+    "module": "esnext",
+    "target": "ES2017",
+    "lib": ["ES2017", "DOM", "DOM.Iterable"],
+    "moduleResolution": "node",
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/**/*.node.ts",
+    "src/platform/node.ts",
+    "src/grpc/client.node.ts",
+    "src/index.node.ts",
+    "src/retry.node.ts",
+    "src/client.ts",
+    "src/user-agent.ts",
+    "src/retry.ts"
+  ]
+}

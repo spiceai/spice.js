@@ -1,12 +1,28 @@
 {
   "name": "@spiceai/spice",
   "description": "JS + TS SDK for spice.ai",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "engines": {
     "node": ">=20.0.0"
   },
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/node/index.node.js",
+  "types": "dist/node/index.node.d.ts",
+  "browser": "dist/browser/index.browser.js",
+  "exports": {
+    ".": {
+      "node": {
+        "require": "./dist/node/index.node.js",
+        "import": "./dist/node/index.node.js",
+        "types": "./dist/node/index.node.d.ts"
+      },
+      "browser": {
+        "import": "./dist/browser/index.browser.js",
+        "require": "./dist/browser/index.browser.js",
+        "types": "./dist/browser/index.browser.d.ts"
+      },
+      "default": "./dist/node/index.node.js"
+    }
+  },
   "files": [
     "dist"
   ],
@@ -14,36 +30,46 @@
   "author": "Spice AI, Inc. <webmaster@spice.ai>",
   "license": "MIT",
   "dependencies": {
+    "apache-arrow": "21.0.0"
+  },
+  "optionalDependencies": {
     "@grpc/grpc-js": "1.14.0",
     "@grpc/proto-loader": "0.7.13",
+    "node-fetch": "^2",
+    "protobufjs": "^7.5.4",
+    "retry": "^0.13.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "^18.19.129",
     "@types/node-fetch": "^2.6.12",
     "@types/retry": "^0.12.5",
-    "apache-arrow": "21.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "dotenv": "^17.2.3",
+    "eslint": "^8.57.0",
     "glob": "^11.0.3",
-    "node-fetch": "^2",
-    "protobufjs": "^7.5.4",
-    "retry": "^0.13.1",
+    "jest": "^30.2.0",
+    "nodemon": "^3.0.2",
+    "ts-jest": "^29.4.4",
+    "ts-node": "^10.9.1",
     "typescript": "^5.7.2"
   },
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist', {recursive: true, force: true})\"",
     "prebuild": "npm run clean",
-    "build": "tsc",
-    "postbuild": "node -e \"require('fs').mkdirSync('dist/proto', {recursive: true}); require('fs').copyFileSync('proto/Flight.proto', 'dist/proto/Flight.proto')\"",
-    "run": "node dist/index.js",
+    "build": "npm run build:node && npm run build:browser && npm run postbuild",
+    "build:node": "tsc -p tsconfig.node.json",
+    "build:browser": "tsc -p tsconfig.browser.json",
+    "postbuild": "node scripts/postbuild.js",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.browser.json --noEmit",
+    "run": "node dist/node/index.node.js",
     "pretest": "npm run build",
     "test": "jest",
     "dev": "npx nodemon --exec ts-node ./test/index.ts --watch test --ext .ts",
     "preversion": "npm run build"
-  },
-  "devDependencies": {
-    "@types/jest": "^30.0.0",
-    "dotenv": "^17.2.3",
-    "jest": "^30.2.0",
-    "nodemon": "^3.0.2",
-    "ts-jest": "^29.4.4",
-    "ts-node": "^10.9.1"
   },
   "overrides": {
     "test-exclude": {
