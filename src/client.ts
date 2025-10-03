@@ -227,7 +227,7 @@ class SpiceClient {
       if (!proto?.FlightService) {
         throw new Error('Invalid proto file structure');
       }
-
+      
       flightProto = proto;
       grpcAvailable = true;
       this._useGrpc = true;
@@ -605,6 +605,59 @@ class SpiceClient {
     dataset: string,
     options?: RefreshAccelerationOptions,
   ): Promise<RefreshAccelerationResponse> {
+    if (!this._httpUrl) {
+      throw new Error('HTTP URL is required for refresh operation');
+    }
+
+    const url = `${this._httpUrl}/v1/datasets/${encodeURIComponent(dataset)}/acceleration/refresh`;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'User-Agent': this._userAgent,
+    };
+
+    if (this._apiKey) {
+      headers['X-API-Key'] = this._apiKey;
+    }
+
+    if (this._customHeaders) {
+      Object.assign(headers, this._customHeaders);
+    }
+
+    const body = JSON.stringify(options || {});
+
+    const response = await this.fetchInternal(
+      'POST',
+      `/v1/datasets/${encodeURIComponent(dataset)}/acceleration/refresh`,
+      undefined,
+      body,
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to refresh dataset '${dataset}': ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    return await response.json();
+  }
+
+  /**
+   * Triggers an on-demand refresh for an accelerated dataset.
+   * @param dataset - The name of the dataset to refresh
+   * @param options - Optional refresh configuration
+   * @returns Promise resolving to the refresh response message
+   */
+  async refreshAcceleration(
+    dataset: string,
+    options?: {
+      refresh_sql?: string;
+      refresh_mode?: 'disabled' | 'full' | 'append' | 'changes';
+      refresh_jitter_max?: string;
+    },
+  ): Promise<{ message: string }> {
     if (!this._httpUrl) {
       throw new Error('HTTP URL is required for refresh operation');
     }
