@@ -20,14 +20,14 @@ export default function TestPage() {
     'Show me the first 5 rows',
   );
   const [nsqlResult, setNsqlResult] = useState<string>('');
-  
+
   // Separate loading states for each action
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [loadingReady, setLoadingReady] = useState(false);
   const [loadingRefresh, setLoadingRefresh] = useState(false);
   const [loadingQuery, setLoadingQuery] = useState(false);
   const [loadingNsql, setLoadingNsql] = useState(false);
-  
+
   const [error, setError] = useState<string>('');
 
   // Initialize SpiceClient for browser - recreate when apiKey or endpoint changes
@@ -548,7 +548,8 @@ export default function TestPage() {
             onClick={runCustomQuery}
             disabled={loadingQuery || !customQuery.trim()}
             style={{
-              background: loadingQuery || !customQuery.trim() ? '#ccc' : '#0070f3',
+              background:
+                loadingQuery || !customQuery.trim() ? '#ccc' : '#0070f3',
               color: 'white',
               border: 'none',
               padding: '12px 24px',
