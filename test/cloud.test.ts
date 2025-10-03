@@ -45,34 +45,22 @@ describe('cloud', () => {
 
   describe('Health Checks', () => {
     test('isSpiceHealthy should return true for cloud endpoint', async () => {
-      console.log('[TEST] Checking cloud endpoint health...');
       const isHealthy = await cloudClient.isSpiceHealthy();
-      console.log('[TEST] Cloud isSpiceHealthy result:', isHealthy);
       expect(isHealthy).toBe(true);
     });
 
     test('isSpiceReady should return true for cloud endpoint', async () => {
-      console.log('[TEST] Checking cloud endpoint ready...');
       const isReady = await cloudClient.isSpiceReady();
-      console.log('[TEST] Cloud isSpiceReady result:', isReady);
       expect(isReady).toBe(true);
     });
 
     test('Vercel endpoint isSpiceHealthy should work', async () => {
-      console.log('[TEST] Checking Vercel endpoint health...');
-      console.log('[TEST] Vercel HTTP URL:', vercelClient['_httpUrl']);
-      console.log('[TEST] Vercel custom headers:', vercelCustomHeaders);
       const isHealthy = await vercelClient.isSpiceHealthy();
-      console.log('[TEST] Vercel isSpiceHealthy result:', isHealthy);
       expect(isHealthy).toBe(true);
     });
 
     test('Vercel endpoint isSpiceReady should work', async () => {
-      console.log('[TEST] Checking Vercel endpoint ready...');
-      console.log('[TEST] Vercel HTTP URL:', vercelClient['_httpUrl']);
-      console.log('[TEST] Vercel custom headers:', vercelCustomHeaders);
       const isReady = await vercelClient.isSpiceReady();
-      console.log('[TEST] Vercel isSpiceReady result:', isReady);
       expect(isReady).toBe(true);
     });
   });

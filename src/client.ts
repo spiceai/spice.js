@@ -527,7 +527,8 @@ class SpiceClient {
 
             // Extract schema from first response
             if (!schema && jsonData.schema) {
-              schema = jsonData.schema;
+              // Handle schema - it may be an object with fields property or an array
+              schema = jsonData.schema.fields || jsonData.schema;
             }
 
             // Accumulate rows
@@ -555,7 +556,8 @@ class SpiceClient {
 
     // Fallback: try to parse entire body as single JSON
     const jsonData: any = await response.json();
-    const schema = jsonData.schema || [];
+    // Handle schema - it may be an object with fields property or an array
+    const schema = jsonData.schema?.fields || jsonData.schema || [];
     const rows = jsonData.rows || [];
 
     return this.jsonToArrowTable(schema, rows);

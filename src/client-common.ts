@@ -198,7 +198,8 @@ export class SpiceClient {
 
             // Extract schema from first response
             if (!schema && jsonData.schema) {
-              schema = jsonData.schema;
+              // Handle schema - it may be an object with fields property or an array
+              schema = jsonData.schema.fields || jsonData.schema;
             }
 
             // Accumulate rows
@@ -232,12 +233,12 @@ export class SpiceClient {
         throw new Error('Empty response body');
       }
 
-      const schema = jsonData.schema || [];
+      // Handle schema - it may be an object with fields property or an array
+      const schema = jsonData.schema?.fields || jsonData.schema || [];
       const rows = jsonData.rows || [];
 
       return this.jsonToArrowTable(schema, rows);
     } catch (error) {
-      console.error('[spice.js] Failed to parse JSON response:', error);
       throw new Error(
         `Failed to parse query response: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
@@ -250,7 +251,6 @@ export class SpiceClient {
 
     // Ensure schema is an array
     if (!Array.isArray(schema)) {
-      console.warn('[spice.js] Schema is not an array:', schema);
       throw new Error('Invalid schema: expected an array');
     }
 
@@ -261,7 +261,6 @@ export class SpiceClient {
 
     // Ensure rows is an array
     if (!Array.isArray(rows)) {
-      console.warn('[spice.js] Rows is not an array:', rows);
       throw new Error('Invalid rows: expected an array');
     }
 
@@ -441,32 +440,13 @@ export class SpiceClient {
     }
 
     try {
-      console.log(
-        '[SpiceClient.isSpiceReady] Checking ready at:',
-        this._httpUrl,
-      );
       const response = await this.fetchInternal('GET', '/v1/ready');
-      console.log(
-        '[SpiceClient.isSpiceReady] Response status:',
-        response.status,
-      );
       if (!response.ok) {
-        const errorText = await response.text();
-        console.log(
-          '[SpiceClient.isSpiceReady] Response not OK. Status:',
-          response.status,
-          'Body:',
-          errorText,
-        );
         return false;
       }
       const text = await response.text();
-      console.log('[SpiceClient.isSpiceReady] Response text:', text);
-      const result = text.trim().toLowerCase() === 'ready';
-      console.log('[SpiceClient.isSpiceReady] Result:', result);
-      return result;
+      return text.trim().toLowerCase() === 'ready';
     } catch (error) {
-      console.log('[SpiceClient.isSpiceReady] Error:', error);
       return false;
     }
   }
@@ -484,17 +464,12 @@ export class SpiceClient {
     try {
       // Don't include API key for health check
       const url = `${this._httpUrl}/health`;
-      console.log('[SpiceClient.isSpiceHealthy] Checking health at:', url);
       const headers: { [key: string]: string } = {
         'User-Agent': this._userAgent,
       };
 
       // Include custom headers if they exist
       if (this._customHeaders) {
-        console.log(
-          '[SpiceClient.isSpiceHealthy] Adding custom headers:',
-          this._customHeaders,
-        );
         Object.assign(headers, this._customHeaders);
       }
 
@@ -503,27 +478,12 @@ export class SpiceClient {
         headers,
       });
 
-      console.log(
-        '[SpiceClient.isSpiceHealthy] Response status:',
-        response.status,
-      );
       if (!response.ok) {
-        const errorText = await response.text();
-        console.log(
-          '[SpiceClient.isSpiceHealthy] Response not OK. Status:',
-          response.status,
-          'Body:',
-          errorText,
-        );
         return false;
       }
       const text = await response.text();
-      console.log('[SpiceClient.isSpiceHealthy] Response text:', text);
-      const result = text.trim().toLowerCase() === 'ok';
-      console.log('[SpiceClient.isSpiceHealthy] Result:', result);
-      return result;
+      return text.trim().toLowerCase() === 'ok';
     } catch (error) {
-      console.log('[SpiceClient.isSpiceHealthy] Error:', error);
       return false;
     }
   }
