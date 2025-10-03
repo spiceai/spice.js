@@ -37,11 +37,18 @@ runs:
       run: |
         BRANCH_NAME="${{ inputs.branch-name }}"
 
-        # Replace / with - and convert to lowercase for Vercel format
-        BRANCH_SLUG=$(echo "$BRANCH_NAME" | sed 's/\//-/g' | tr '[:upper:]' '[:lower:]')
-
-        # Construct the Vercel endpoint using organization name 'spice'
-        VERCEL_ENDPOINT="https://spice-js-git-${BRANCH_SLUG}-spice.vercel.app"
+        # Check if this is a tag (starts with 'v' followed by a number, or just looks like a version)
+        if [[ "$BRANCH_NAME" =~ ^v[0-9] ]] || [[ "$BRANCH_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+          # For tags/releases, use the production Vercel domain
+          VERCEL_ENDPOINT="https://spice-js.vercel.app"
+          echo "Detected tag/release: ${BRANCH_NAME}, using production endpoint"
+        else
+          # For branches, construct the git branch preview URL
+          # Replace / with - and convert to lowercase for Vercel format
+          BRANCH_SLUG=$(echo "$BRANCH_NAME" | sed 's/\//-/g' | tr '[:upper:]' '[:lower:]')
+          VERCEL_ENDPOINT="https://spice-js-git-${BRANCH_SLUG}-spice.vercel.app"
+          echo "Detected branch: ${BRANCH_NAME}, using preview endpoint"
+        fi
 
         echo "constructed_endpoint=${VERCEL_ENDPOINT}" >> $GITHUB_OUTPUT
         echo "Constructed Vercel endpoint: ${VERCEL_ENDPOINT}"
