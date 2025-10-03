@@ -13,27 +13,35 @@ describe('local', () => {
 
   describe('Refresh dataset', () => {
     test('refresh dataset', async () => {
-      const result = await client.refreshAcceleration('test_postgresql_table');
+      const result = await client.refreshAcceleration(
+        'test_postgresql_table_accelerated',
+      );
 
       expect(result).toHaveProperty('message');
       expect(typeof result.message).toBe('string');
     });
 
     test('refresh dataset with options', async () => {
-      const result = await client.refreshAcceleration('test_postgresql_table', {
-        refresh_mode: 'full',
-        refresh_jitter_max: '5s',
-      });
+      const result = await client.refreshAcceleration(
+        'test_postgresql_table_accelerated',
+        {
+          refresh_mode: 'full',
+          refresh_jitter_max: '5s',
+        },
+      );
 
       expect(result).toHaveProperty('message');
       expect(typeof result.message).toBe('string');
     });
 
     test('refresh dataset with custom SQL', async () => {
-      const result = await client.refreshAcceleration('test_postgresql_table', {
-        refresh_sql: 'SELECT * FROM test_postgresql_table WHERE id > 0',
-        refresh_mode: 'full',
-      });
+      const result = await client.refreshAcceleration(
+        'test_postgresql_table_accelerated',
+        {
+          refresh_sql: 'SELECT * FROM test_postgresql_table WHERE id > 0',
+          refresh_mode: 'full',
+        },
+      );
 
       expect(result).toHaveProperty('message');
       expect(typeof result.message).toBe('string');
