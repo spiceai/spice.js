@@ -310,13 +310,87 @@ class SpiceClient {
     return client.DoGet(flightTicket);
   }
 
-  public async query(
+  /**
+   * Executes a SQL query and returns results as Arrow Tables.
+   * @param queryText - The SQL query to execute
+   * @param onData - Optional callback for streaming results
+   * @returns Promise resolving to the final Arrow Table
+   */
+  async sql(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined,
+    onData?: ((data: Table) => void) | undefined,
   ): Promise<Table> {
-    return retry.retryWithExponentialBackoff<Table>(async () => {
-      return this.doQueryRequest(queryText, onData);
-    }, this._maxRetries);
+    return this.doQueryRequest(queryText, onData);
+  }
+
+  /**
+   * @deprecated Use sql() instead. This method will be removed in a future version.
+   */
+  async query(
+    queryText: string,
+    onData?: ((data: Table) => void) | undefined,
+  ): Promise<Table> {
+    return this.sql(queryText, onData);
+  }
+
+  /**
+   * Executes a SQL query and returns results as JSON with schema metadata.
+   * @param queryText - The SQL query to execute
+   * @returns Promise resolving to an object containing row_count, schema, data, and execution_time_ms
+   */
+  async sqlJson(queryText: string): Promise<{
+    row_count: number;
+    schema: {
+      fields: Array<{
+        name: string;
+        data_type: string;
+        nullable: boolean;
+        dict_id: number;
+        dict_is_ordered: boolean;
+      }>;
+    };
+    data: any[];
+    execution_time_ms: number;
+  }> {
+    const startTime = Date.now();
+    const allRows: any[] = [];
+    let schema: any = null;
+
+    await this.sql(queryText, (table) => {
+      // Capture schema from first chunk
+      if (!schema) {
+        schema = {
+          fields: table.schema.fields.map((field) => ({
+            name: field.name,
+            data_type: field.type.toString(),
+            nullable: field.nullable,
+            dict_id: 0,
+            dict_is_ordered: false,
+          })),
+        };
+      }
+
+      // Convert each chunk's rows
+      const resultArray = table.toArray();
+      resultArray.forEach((row: any) => {
+        const plainRow: any = {};
+        for (const key in row) {
+          const value = row[key];
+          // Convert BigInt to string for JSON serialization
+          plainRow[key] = typeof value === 'bigint' ? value.toString() : value;
+        }
+        allRows.push(plainRow);
+      });
+    });
+
+    const executionTime = Date.now() - startTime;
+
+    return {
+      row_count: allRows.length,
+      schema: schema || { fields: [] },
+      data: allRows,
+      execution_time_ms: executionTime,
+    };
   }
 
   private async doQueryRequest(
