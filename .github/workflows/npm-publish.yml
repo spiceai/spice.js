@@ -21,6 +21,9 @@ jobs:
       - run: npm install
       - run: npm run build
 
+      - name: Run browser tests
+        run: npm run test:browser
+
       - name: Setup Vercel endpoint
         id: vercel
         uses: ./.github/actions/setup-vercel-endpoint

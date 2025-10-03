@@ -14,6 +14,33 @@ on:
   workflow_dispatch:
 
 jobs:
+  browser-tests:
+    name: Browser Tests (Node.JS ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - 20
+          - 22
+          - 24
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up NodeJS
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run browser tests
+        run: npm run test:browser
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -35,10 +62,11 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
-      - name: Install requirements
-        run: |
-          npm install
-          npm run build
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
 
       - name: Install PostgreSQL (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -96,9 +124,11 @@ jobs:
           # time to initialize added dataset
           sleep 2
 
-      - name: Running local tests
-        run: |
-          npm run test
+      - name: Run browser tests
+        run: npm run test:browser
+
+      - name: Run Node.js local tests
+        run: npm run test:node
         env:
           SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }}
 
