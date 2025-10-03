@@ -21,8 +21,8 @@ export async function GET(request: NextRequest) {
     console.log('[Vercel /v1/ready] isSpiceReady result:', isReady);
 
     if (isReady) {
-      console.log('[Vercel /v1/ready] Returning 200 OK');
-      return new Response('ok', {
+      console.log('[Vercel /v1/ready] Returning 200 ready');
+      return new Response('ready', {
         status: 200,
         headers: { 'Content-Type': 'text/plain' },
       });
