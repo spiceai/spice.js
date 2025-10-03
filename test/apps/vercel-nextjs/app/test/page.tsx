@@ -10,10 +10,12 @@ export default function TestPage() {
   );
   const [healthStatus, setHealthStatus] = useState<string>('Not checked');
   const [readyStatus, setReadyStatus] = useState<string>('Not checked');
-  const [queryResult, setQueryResult] = useState<string>('');
-  const [sqlResult, setSqlResult] = useState<string>('');
-  const [sqlJsonResult, setSqlJsonResult] = useState<string>('');
   const [refreshResult, setRefreshResult] = useState<string>('');
+  const [customQuery, setCustomQuery] = useState<string>(
+    'SELECT 1 as num, 2 as value',
+  );
+  const [customQueryResult, setCustomQueryResult] = useState<string>('');
+  const [useJsonFormat, setUseJsonFormat] = useState<boolean>(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
 
@@ -52,63 +54,6 @@ export default function TestPage() {
     }
   };
 
-  const runQuery = async () => {
-    setLoading(true);
-    setError('');
-    setQueryResult('');
-    try {
-      const result = await client.query('SELECT 1 as test');
-      // Convert Arrow Table to array of row objects
-      const rows = result.toArray();
-      setQueryResult(JSON.stringify(rows, null, 2));
-    } catch (err) {
-      setError(
-        `Query failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      );
-      setQueryResult('');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const runSql = async () => {
-    setLoading(true);
-    setError('');
-    setSqlResult('');
-    try {
-      const result = await client.sql('SELECT 1 as test, 2 as value');
-      // Convert Arrow Table to array of row objects
-      const rows = result.toArray();
-      setSqlResult(JSON.stringify(rows, null, 2));
-    } catch (err) {
-      setError(
-        `SQL failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      );
-      setSqlResult('');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const runSqlJson = async () => {
-    setLoading(true);
-    setError('');
-    setSqlJsonResult('');
-    try {
-      const result = await client.sqlJson(
-        'SELECT 1 as test, 2 as value, 3 as another',
-      );
-      setSqlJsonResult(JSON.stringify(result, null, 2));
-    } catch (err) {
-      setError(
-        `SQL JSON failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      );
-      setSqlJsonResult('');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const runRefresh = async () => {
     setLoading(true);
     setError('');
@@ -122,6 +67,31 @@ export default function TestPage() {
         `Refresh failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
       );
       setRefreshResult('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const runCustomQuery = async () => {
+    setLoading(true);
+    setError('');
+    setCustomQueryResult('');
+    try {
+      if (useJsonFormat) {
+        // Use sqlJson() for JSON format with metadata
+        const result = await client.sqlJson(customQuery);
+        setCustomQueryResult(JSON.stringify(result, null, 2));
+      } else {
+        // Use sql() for Arrow Table format
+        const result = await client.sql(customQuery);
+        const rows = result.toArray();
+        setCustomQueryResult(JSON.stringify(rows, null, 2));
+      }
+    } catch (err) {
+      setError(
+        `Custom query failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
+      setCustomQueryResult('');
     } finally {
       setLoading(false);
     }
@@ -320,145 +290,6 @@ export default function TestPage() {
             padding: '20px',
           }}
         >
-          <h2 style={{ marginTop: 0 }}>
-            SQL Query{' '}
-            <span style={{ fontSize: '14px', color: '#999' }}>
-              (deprecated)
-            </span>
-          </h2>
-          <p style={{ fontSize: '14px', color: '#666' }}>
-            Runs a simple SQL query using <code>client.query()</code>: SELECT 1
-            as test
-          </p>
-          <button
-            onClick={runQuery}
-            disabled={loading}
-            style={{
-              background: '#0070f3',
-              color: 'white',
-              border: 'none',
-              padding: '10px 20px',
-              borderRadius: '5px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.6 : 1,
-              fontSize: '14px',
-              fontWeight: '600',
-            }}
-          >
-            {loading ? 'Running...' : 'Run Query'}
-          </button>
-          {queryResult && (
-            <pre
-              style={{
-                marginTop: '15px',
-                background: '#f5f5f5',
-                padding: '15px',
-                borderRadius: '5px',
-                overflow: 'auto',
-                fontSize: '12px',
-              }}
-            >
-              {queryResult}
-            </pre>
-          )}
-        </div>
-
-        <div
-          style={{
-            border: '1px solid #ddd',
-            borderRadius: '8px',
-            padding: '20px',
-          }}
-        >
-          <h2 style={{ marginTop: 0 }}>client.sql()</h2>
-          <p style={{ fontSize: '14px', color: '#666' }}>
-            Executes SQL and returns Arrow Table: SELECT 1 as test, 2 as value
-          </p>
-          <button
-            onClick={runSql}
-            disabled={loading}
-            style={{
-              background: '#0070f3',
-              color: 'white',
-              border: 'none',
-              padding: '10px 20px',
-              borderRadius: '5px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.6 : 1,
-              fontSize: '14px',
-              fontWeight: '600',
-            }}
-          >
-            {loading ? 'Running...' : 'Run SQL'}
-          </button>
-          {sqlResult && (
-            <pre
-              style={{
-                marginTop: '15px',
-                background: '#f5f5f5',
-                padding: '15px',
-                borderRadius: '5px',
-                overflow: 'auto',
-                fontSize: '12px',
-              }}
-            >
-              {sqlResult}
-            </pre>
-          )}
-        </div>
-
-        <div
-          style={{
-            border: '1px solid #ddd',
-            borderRadius: '8px',
-            padding: '20px',
-          }}
-        >
-          <h2 style={{ marginTop: 0 }}>client.sqlJson()</h2>
-          <p style={{ fontSize: '14px', color: '#666' }}>
-            Executes SQL and returns JSON with schema metadata: SELECT 1 as
-            test, 2 as value, 3 as another
-          </p>
-          <button
-            onClick={runSqlJson}
-            disabled={loading}
-            style={{
-              background: '#0070f3',
-              color: 'white',
-              border: 'none',
-              padding: '10px 20px',
-              borderRadius: '5px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.6 : 1,
-              fontSize: '14px',
-              fontWeight: '600',
-            }}
-          >
-            {loading ? 'Running...' : 'Run SQL JSON'}
-          </button>
-          {sqlJsonResult && (
-            <pre
-              style={{
-                marginTop: '15px',
-                background: '#f5f5f5',
-                padding: '15px',
-                borderRadius: '5px',
-                overflow: 'auto',
-                fontSize: '12px',
-              }}
-            >
-              {sqlJsonResult}
-            </pre>
-          )}
-        </div>
-
-        <div
-          style={{
-            border: '1px solid #ddd',
-            borderRadius: '8px',
-            padding: '20px',
-          }}
-        >
           <h2 style={{ marginTop: 0 }}>client.refreshAcceleration()</h2>
           <p style={{ fontSize: '14px', color: '#666' }}>
             Triggers dataset refresh: eth.recent_blocks
@@ -492,6 +323,123 @@ export default function TestPage() {
               }}
             >
               {refreshResult}
+            </pre>
+          )}
+        </div>
+
+        <div
+          style={{
+            border: '2px solid #0070f3',
+            borderRadius: '8px',
+            padding: '20px',
+            background: '#f0f9ff',
+          }}
+        >
+          <h2 style={{ marginTop: 0, color: '#0070f3' }}>Custom Query 🔍</h2>
+          <p style={{ fontSize: '14px', color: '#666', marginBottom: '15px' }}>
+            Execute your own SQL query using <code>client.sql()</code> or{' '}
+            <code>client.sqlJson()</code>
+          </p>
+
+          <div style={{ marginBottom: '15px' }}>
+            <label
+              htmlFor="customQuery"
+              style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontSize: '14px',
+                fontWeight: '600',
+              }}
+            >
+              SQL Query:
+            </label>
+            <textarea
+              id="customQuery"
+              value={customQuery}
+              onChange={(e) => setCustomQuery(e.target.value)}
+              placeholder="Enter SQL query..."
+              rows={3}
+              style={{
+                width: '100%',
+                padding: '10px',
+                fontSize: '14px',
+                border: '1px solid #ddd',
+                borderRadius: '5px',
+                fontFamily: 'monospace',
+                resize: 'vertical',
+              }}
+            />
+          </div>
+
+          <div
+            style={{
+              marginBottom: '15px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+            }}
+          >
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                fontSize: '14px',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={useJsonFormat}
+                onChange={(e) => setUseJsonFormat(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              Use{' '}
+              <code
+                style={{
+                  background: '#e0e0e0',
+                  padding: '2px 6px',
+                  borderRadius: '3px',
+                }}
+              >
+                sqlJson()
+              </code>{' '}
+              format (includes metadata)
+            </label>
+          </div>
+
+          <button
+            onClick={runCustomQuery}
+            disabled={loading || !customQuery.trim()}
+            style={{
+              background: loading || !customQuery.trim() ? '#ccc' : '#0070f3',
+              color: 'white',
+              border: 'none',
+              padding: '12px 24px',
+              borderRadius: '5px',
+              cursor:
+                loading || !customQuery.trim() ? 'not-allowed' : 'pointer',
+              fontSize: '14px',
+              fontWeight: '600',
+            }}
+          >
+            {loading ? 'Executing...' : '▶ Execute Query'}
+          </button>
+
+          {customQueryResult && (
+            <pre
+              style={{
+                marginTop: '15px',
+                background: '#fff',
+                padding: '15px',
+                borderRadius: '5px',
+                overflow: 'auto',
+                fontSize: '12px',
+                border: '1px solid #ddd',
+                maxHeight: '400px',
+              }}
+            >
+              {customQueryResult}
             </pre>
           )}
         </div>
