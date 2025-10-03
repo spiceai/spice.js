@@ -39,7 +39,28 @@ export interface SpiceClientConfig {
 }
 
 export interface RefreshOverrides {
-  refresh_sql?: string | null;
-  refresh_mode?: string | null;
-  refresh_jitter_max?: string | null;
+  refresh_sql?: string;
+  refresh_mode?: 'disabled' | 'full' | 'append' | 'changes';
+  refresh_jitter_max?: string;
+}
+
+export interface NsqlOptions {
+  datasets?: string[] | null;
+  model?: string;
+  sample_data_enabled?: boolean;
+}
+
+export interface NsqlResponse {
+  row_count: number;
+  schema: {
+    fields: Array<{
+      name: string;
+      data_type: string;
+      nullable: boolean;
+      dict_id: number;
+      dict_is_ordered: boolean;
+    }>;
+  };
+  data: any[];
+  sql: string;
 }

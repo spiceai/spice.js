@@ -118,6 +118,8 @@ jobs:
           echo "Constructed Vercel endpoint: ${VERCEL_ENDPOINT}"
 
       - name: Wait for Vercel deployment to be ready
+        env:
+          VERCEL_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           VERCEL_ENDPOINT="${{ secrets.VERCEL_ENDPOINT || steps.vercel-endpoint.outputs.vercel_endpoint }}"
           HEALTH_URL="${VERCEL_ENDPOINT}/health"
@@ -127,12 +129,18 @@ jobs:
           MAX_ATTEMPTS=30
           ATTEMPT=0
 
+          # Prepare curl header args if bypass secret is set
+          CURL_HEADERS=""
+          if [ -n "${VERCEL_BYPASS_SECRET}" ]; then
+            CURL_HEADERS="-H 'x-vercel-protection-bypass: ${VERCEL_BYPASS_SECRET}'"
+          fi
+
           while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
             ATTEMPT=$((ATTEMPT + 1))
             echo "Attempt ${ATTEMPT}/${MAX_ATTEMPTS}: Checking ${HEALTH_URL}"
             
             # Get both status code and response body
-            RESPONSE=$(curl -s -w "\n%{http_code}" "${HEALTH_URL}" || echo -e "\n000")
+            RESPONSE=$(eval "curl -s -w '\n%{http_code}' ${CURL_HEADERS} '${HEALTH_URL}'" || echo -e "\n000")
             HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
             BODY=$(echo "$RESPONSE" | sed '$d')
             

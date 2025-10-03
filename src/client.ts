@@ -399,6 +399,73 @@ class SpiceClient {
     };
   }
 
+  /**
+   * Execute a natural language query (NSQL) and return the results with the generated SQL
+   * @param query - The natural language query to convert to SQL
+   * @param options - Optional configuration for the NSQL request
+   * @returns Promise resolving to the query results with the generated SQL
+   */
+  async nsql(
+    query: string,
+    options?: {
+      datasets?: string[] | null;
+      model?: string;
+      sample_data_enabled?: boolean;
+    },
+  ): Promise<{
+    row_count: number;
+    schema: {
+      fields: Array<{
+        name: string;
+        data_type: string;
+        nullable: boolean;
+        dict_id: number;
+        dict_is_ordered: boolean;
+      }>;
+    };
+    data: any[];
+    sql: string;
+  }> {
+    if (!this._httpUrl) {
+      throw new Error('HTTP URL is required for NSQL operation');
+    }
+
+    const request = {
+      query,
+      ...options,
+    };
+
+    const response = await this.fetchInternal(
+      'POST',
+      '/v1/nsql',
+      undefined,
+      JSON.stringify(request),
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `NSQL request failed: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    const result = await response.json();
+    return result as {
+      row_count: number;
+      schema: {
+        fields: Array<{
+          name: string;
+          data_type: string;
+          nullable: boolean;
+          dict_id: number;
+          dict_is_ordered: boolean;
+        }>;
+      };
+      data: any[];
+      sql: string;
+    };
+  }
+
   private async doQueryRequest(
     queryText: string,
     onData: ((data: Table) => void) | undefined = undefined,
@@ -572,9 +639,9 @@ class SpiceClient {
     refresh_overrides?: RefreshOverrides,
   ): Promise<void> {
     const overrides: RefreshOverrides = {
-      refresh_sql: refresh_overrides?.refresh_sql || null,
-      refresh_mode: refresh_overrides?.refresh_mode || null,
-      refresh_jitter_max: refresh_overrides?.refresh_jitter_max || null,
+      refresh_sql: refresh_overrides?.refresh_sql || undefined,
+      refresh_mode: refresh_overrides?.refresh_mode || undefined,
+      refresh_jitter_max: refresh_overrides?.refresh_jitter_max || undefined,
     };
 
     const body = JSON.stringify(overrides);
@@ -592,6 +659,59 @@ class SpiceClient {
         `Failed to refresh dataset ${dataset}. Status code: ${response.status}, Response: ${responseText}`,
       );
     }
+  }
+
+  /**
+   * Triggers an on-demand refresh for an accelerated dataset.
+   * @param dataset - The name of the dataset to refresh
+   * @param options - Optional refresh configuration
+   * @returns Promise resolving to the refresh response message
+   */
+  async refreshAcceleration(
+    dataset: string,
+    options?: {
+      refresh_sql?: string;
+      refresh_mode?: 'disabled' | 'full' | 'append' | 'changes';
+      refresh_jitter_max?: string;
+    },
+  ): Promise<{ message: string }> {
+    if (!this._httpUrl) {
+      throw new Error('HTTP URL is required for refresh operation');
+    }
+
+    const url = `${this._httpUrl}/v1/datasets/${encodeURIComponent(dataset)}/acceleration/refresh`;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'User-Agent': this._userAgent,
+    };
+
+    if (this._apiKey) {
+      headers['X-API-Key'] = this._apiKey;
+    }
+
+    if (this._customHeaders) {
+      Object.assign(headers, this._customHeaders);
+    }
+
+    const body = JSON.stringify(options || {});
+
+    const response = await this.fetchInternal(
+      'POST',
+      `/v1/datasets/${encodeURIComponent(dataset)}/acceleration/refresh`,
+      undefined,
+      body,
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to refresh dataset '${dataset}': ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    return await response.json();
   }
 
   private fetchInternal(
