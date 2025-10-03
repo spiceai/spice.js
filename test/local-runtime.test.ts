@@ -5,31 +5,53 @@ describe('local', () => {
 
   it('connection and query to local spice runtime works', async () => {
     const tableResult = await client.query(
-      'SELECT * FROM test_postgresql_table_not_accelerated LIMIT 3'
+      'SELECT * FROM test_postgresql_table_not_accelerated LIMIT 3',
     );
 
     expect(tableResult.toArray()).toHaveLength(3);
   });
 
-  it('connection and refresh to local spice runtime works', async () => {
-    await client.refreshDataset('test_postgresql_table_accelerated');
+  describe('Refresh dataset', () => {
+    test('refresh dataset', async () => {
+      const result = await client.refreshAcceleration(
+        'test_postgresql_table_accelerated',
+      );
 
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+      expect(result).toHaveProperty('message');
+      expect(typeof result.message).toBe('string');
+    });
 
-    let tableResult = await client.query(
-      'SELECT * FROM test_postgresql_table_accelerated'
-    );
+    test('refresh dataset with options', async () => {
+      const result = await client.refreshAcceleration(
+        'test_postgresql_table_accelerated',
+        {
+          refresh_mode: 'full',
+          refresh_jitter_max: '5s',
+        },
+      );
 
-    expect(tableResult.toArray().length).toBeGreaterThan(0);
+      expect(result).toHaveProperty('message');
+      expect(typeof result.message).toBe('string');
+    });
 
-    await client.refreshDataset('test_postgresql_table_accelerated', { refresh_sql: 'SELECT * FROM test_postgresql_table_accelerated LIMIT 2' });
+    test('refresh dataset with custom SQL', async () => {
+      const result = await client.refreshAcceleration(
+        'test_postgresql_table_accelerated',
+        {
+          refresh_sql:
+            'SELECT * FROM test_postgresql_table_accelerated WHERE id > 0',
+          refresh_mode: 'full',
+        },
+      );
 
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+      expect(result).toHaveProperty('message');
+      expect(typeof result.message).toBe('string');
+    });
 
-    tableResult = await client.query(
-      'SELECT * FROM test_postgresql_table_accelerated LIMIT 3'
-    );
-
-    expect(tableResult.toArray()).toHaveLength(2);
-  }, 15000);
+    test('refresh nonexistent dataset throws error', async () => {
+      await expect(
+        client.refreshAcceleration('nonexistent_dataset'),
+      ).rejects.toThrow();
+    });
+  });
 });

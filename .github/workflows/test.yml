@@ -38,8 +38,8 @@ jobs:
 
       - name: Install requirements
         run: |
-          yarn install
-          yarn build
+          npm install
+          npm run build
 
       - name: Install PostgreSQL (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -97,11 +97,29 @@ jobs:
           # time to initialize added dataset
           sleep 2
 
-      - name: Running tests
+      - name: Running local tests
         run: |
-          yarn test
+          npm run test
         env:
           SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }}
+
+      - name: Setup Vercel endpoint
+        id: vercel
+        uses: ./.github/actions/setup-vercel-endpoint
+        with:
+          vercel-endpoint-override: ${{ secrets.VERCEL_ENDPOINT }}
+          vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          branch-name: ${{ github.head_ref || github.ref_name }}
+
+      - name: Running cloud tests
+        run: |
+          npm run test -- test/cloud.test.ts
+        env:
+          SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }} # spice.ai/spiceai/spice-js
+          HTTP_URL: ${{ secrets.HTTP_URL || 'https://data.spiceai.io' }}
+          FLIGHT_URL: ${{ secrets.FLIGHT_URL || 'flight.spiceai.io:443' }}
+          VERCEL_ENDPOINT: ${{ steps.vercel.outputs.vercel-api-endpoint }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
       - name: Stop spice and check logs
         if: always()
