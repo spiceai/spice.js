@@ -12,14 +12,14 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        nodever: [18, 20, 22, 24]
+        nodever: [20, 22, 24]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.nodever }}
-      - run: yarn install
-      - run: yarn build
+      - run: npm install
+      - run: npm run build
 
       - name: Setup Vercel endpoint
         id: vercel
