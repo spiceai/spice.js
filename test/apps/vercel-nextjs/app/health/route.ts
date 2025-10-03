@@ -2,8 +2,11 @@ import { SpiceClient } from '@spiceai/spice';
 
 export async function GET() {
   try {
-    // Initialize SpiceClient without API key (health endpoint is unauthenticated)
-    const client = new SpiceClient();
+    // Initialize SpiceClient with cloud URL (health endpoint is unauthenticated)
+    // Use cloud URL since local runtime defaults to 127.0.0.1 which won't work in serverless
+    const client = new SpiceClient({
+      httpUrl: 'https://data.spiceai.io',
+    });
 
     const isHealthy = await client.isSpiceHealthy();
 
