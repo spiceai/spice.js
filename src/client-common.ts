@@ -21,7 +21,7 @@ export interface RetryModule {
   dontRetry(err: any): void;
   retryWithExponentialBackoff<T>(
     operation: any,
-    maxRetries: number
+    maxRetries: number,
   ): Promise<T>;
 }
 
@@ -41,7 +41,7 @@ export class SpiceClient {
     params: string | SpiceClientConfig = {},
     platform: PlatformAdapter,
     retry: RetryModule,
-    GrpcClientClass?: typeof GrpcFlightClient
+    GrpcClientClass?: typeof GrpcFlightClient,
   ) {
     this._retry = retry;
     this._maxRetries = retry.FLIGHT_QUERY_MAX_RETRIES;
@@ -90,14 +90,14 @@ export class SpiceClient {
         this._apiKey,
         this._flightUrl,
         this._userAgent,
-        this._flightTlsEnabled
+        this._flightTlsEnabled,
       );
     }
   }
 
   private async doQueryRequest(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined
+    onData: ((data: Table) => void) | undefined = undefined,
   ): Promise<Table> {
     // Try gRPC if available
     if (this._grpcClient) {
@@ -113,7 +113,7 @@ export class SpiceClient {
 
   private async doGrpcQueryRequest(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined
+    onData: ((data: Table) => void) | undefined = undefined,
   ): Promise<Table> {
     if (!this._grpcClient) {
       throw new Error('gRPC client not initialized');
@@ -159,20 +159,20 @@ export class SpiceClient {
 
   private async doHttpQueryRequest(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined
+    onData: ((data: Table) => void) | undefined = undefined,
   ): Promise<Table> {
     const response = await this.fetchInternal(
       'POST',
       '/v1/sql',
       undefined,
       JSON.stringify({ sql: queryText, parameters: [] }),
-      { Accept: 'application/vnd.spiceai.sql.v1+json' }
+      { Accept: 'application/vnd.spiceai.sql.v1+json' },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `HTTP query failed with status ${response.status}: ${errorText}`
+        `HTTP query failed with status ${response.status}: ${errorText}`,
       );
     }
 
@@ -209,7 +209,7 @@ export class SpiceClient {
               if (onData && jsonData.rows.length > 0) {
                 const partialTable = this.jsonToArrowTable(
                   schema || [],
-                  jsonData.rows
+                  jsonData.rows,
                 );
                 onData(partialTable);
               }
@@ -262,11 +262,11 @@ export class SpiceClient {
    */
   async sql(
     queryText: string,
-    onData?: ((data: Table) => void) | undefined
+    onData?: ((data: Table) => void) | undefined,
   ): Promise<Table> {
     return this._retry.retryWithExponentialBackoff<Table>(
       () => this.doQueryRequest(queryText, onData),
-      this._maxRetries
+      this._maxRetries,
     );
   }
 
@@ -275,7 +275,7 @@ export class SpiceClient {
    */
   async query(
     queryText: string,
-    onData?: ((data: Table) => void) | undefined
+    onData?: ((data: Table) => void) | undefined,
   ): Promise<Table> {
     return this.sql(queryText, onData);
   }
@@ -347,13 +347,13 @@ export class SpiceClient {
       'POST',
       '/v1/nsql',
       undefined,
-      JSON.stringify(request)
+      JSON.stringify(request),
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `NSQL request failed: ${response.status} ${response.statusText} - ${errorText}`
+        `NSQL request failed: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -381,7 +381,7 @@ export class SpiceClient {
    */
   async refreshAcceleration(
     dataset: string,
-    options?: RefreshAccelerationOptions
+    options?: RefreshAccelerationOptions,
   ): Promise<RefreshAccelerationResponse> {
     if (!this._httpUrl) {
       throw new Error('HTTP URL is required for refresh operation');
@@ -393,13 +393,13 @@ export class SpiceClient {
       'POST',
       `/v1/datasets/${encodeURIComponent(dataset)}/acceleration/refresh`,
       undefined,
-      body
+      body,
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Failed to refresh dataset '${dataset}': ${response.status} ${response.statusText} - ${errorText}`
+        `Failed to refresh dataset '${dataset}': ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -417,13 +417,32 @@ export class SpiceClient {
     }
 
     try {
+      console.log(
+        '[SpiceClient.isSpiceReady] Checking ready at:',
+        this._httpUrl,
+      );
       const response = await this.fetchInternal('GET', '/v1/ready');
+      console.log(
+        '[SpiceClient.isSpiceReady] Response status:',
+        response.status,
+      );
       if (!response.ok) {
+        const errorText = await response.text();
+        console.log(
+          '[SpiceClient.isSpiceReady] Response not OK. Status:',
+          response.status,
+          'Body:',
+          errorText,
+        );
         return false;
       }
       const text = await response.text();
-      return text.trim().toLowerCase() === 'ready';
+      console.log('[SpiceClient.isSpiceReady] Response text:', text);
+      const result = text.trim().toLowerCase() === 'ready';
+      console.log('[SpiceClient.isSpiceReady] Result:', result);
+      return result;
     } catch (error) {
+      console.log('[SpiceClient.isSpiceReady] Error:', error);
       return false;
     }
   }
@@ -441,21 +460,46 @@ export class SpiceClient {
     try {
       // Don't include API key for health check
       const url = `${this._httpUrl}/health`;
+      console.log('[SpiceClient.isSpiceHealthy] Checking health at:', url);
       const headers: { [key: string]: string } = {
         'User-Agent': this._userAgent,
       };
+
+      // Include custom headers if they exist
+      if (this._customHeaders) {
+        console.log(
+          '[SpiceClient.isSpiceHealthy] Adding custom headers:',
+          this._customHeaders,
+        );
+        Object.assign(headers, this._customHeaders);
+      }
 
       const response = await this._platform.fetch(url, {
         method: 'GET',
         headers,
       });
 
+      console.log(
+        '[SpiceClient.isSpiceHealthy] Response status:',
+        response.status,
+      );
       if (!response.ok) {
+        const errorText = await response.text();
+        console.log(
+          '[SpiceClient.isSpiceHealthy] Response not OK. Status:',
+          response.status,
+          'Body:',
+          errorText,
+        );
         return false;
       }
       const text = await response.text();
-      return text.trim().toLowerCase() === 'ok';
+      console.log('[SpiceClient.isSpiceHealthy] Response text:', text);
+      const result = text.trim().toLowerCase() === 'ok';
+      console.log('[SpiceClient.isSpiceHealthy] Result:', result);
+      return result;
     } catch (error) {
+      console.log('[SpiceClient.isSpiceHealthy] Error:', error);
       return false;
     }
   }
@@ -465,7 +509,7 @@ export class SpiceClient {
     path: string,
     params?: { [key: string]: string },
     body?: string,
-    customHeaders?: { [key: string]: string }
+    customHeaders?: { [key: string]: string },
   ) {
     const url =
       params && Object.keys(params).length
