@@ -225,21 +225,45 @@ export class SpiceClient {
     }
 
     // Fallback: try to parse entire body as single JSON
-    const jsonData: any = await response.json();
-    const schema = jsonData.schema || [];
-    const rows = jsonData.rows || [];
+    try {
+      const jsonData: any = await response.json();
 
-    return this.jsonToArrowTable(schema, rows);
+      if (!jsonData) {
+        throw new Error('Empty response body');
+      }
+
+      const schema = jsonData.schema || [];
+      const rows = jsonData.rows || [];
+
+      return this.jsonToArrowTable(schema, rows);
+    } catch (error) {
+      console.error('[spice.js] Failed to parse JSON response:', error);
+      throw new Error(
+        `Failed to parse query response: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
   }
 
   private jsonToArrowTable(schema: any[], rows: any[]): Table {
     // Convert JSON response to Arrow Table format
     const columns: { [key: string]: any[] } = {};
 
+    // Ensure schema is an array
+    if (!Array.isArray(schema)) {
+      console.warn('[spice.js] Schema is not an array:', schema);
+      throw new Error('Invalid schema: expected an array');
+    }
+
     // Initialize columns
     schema.forEach((col: any) => {
       columns[col.name] = [];
     });
+
+    // Ensure rows is an array
+    if (!Array.isArray(rows)) {
+      console.warn('[spice.js] Rows is not an array:', rows);
+      throw new Error('Invalid rows: expected an array');
+    }
 
     // Populate columns with row data
     rows.forEach((row: any) => {
