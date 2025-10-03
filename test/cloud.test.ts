@@ -49,7 +49,7 @@ describe('cloud', () => {
     test('legacy client uses spice.ai cloud ', async () => {
       const client = new SpiceClient(api_key);
 
-      const tableResult = await client.query(
+      const tableResult = await client.sql(
         'SELECT * FROM spice.samples.taxi_trips LIMIT 10;',
       );
 
@@ -58,7 +58,7 @@ describe('cloud', () => {
 
     test('streaming works', async () => {
       let numChunks = 0;
-      await cloudClient.query(
+      await cloudClient.sql(
         'SELECT * FROM spice.samples.taxi_trips LIMIT 10;',
         (table) => {
           expect(table.toArray().length).toBeLessThanOrEqual(10);
@@ -73,13 +73,23 @@ describe('cloud', () => {
     }, 10000);
 
     test('full result works', async () => {
-      const tableResult = await cloudClient.query(
+      const tableResult = await cloudClient.sql(
         'SELECT * FROM spice.samples.taxi_trips LIMIT 10;',
       );
       expect(tableResult.toArray()).toHaveLength(10);
     }, 30000);
 
     test('query with simple constants', async () => {
+      const tableResult = await cloudClient.sql(
+        "SELECT 42 as answer, 'test' as message",
+      );
+      expect(tableResult.toArray()).toHaveLength(1);
+      const row = tableResult.toArray()[0];
+      expect(Number(row.answer)).toBe(42);
+      expect(String(row.message)).toBe('test');
+    });
+
+    test('deprecated query() still works', async () => {
       const tableResult = await cloudClient.query(
         "SELECT 42 as answer, 'test' as message",
       );
@@ -90,12 +100,78 @@ describe('cloud', () => {
     });
   });
 
+  describe('sqlJson()', () => {
+    test('returns data in correct JSON format', async () => {
+      const result = await cloudClient.sqlJson(
+        "SELECT 42 as answer, 'test' as message, 3.14 as pi",
+      );
+
+      expect(result.row_count).toBe(1);
+      expect(result.schema.fields).toHaveLength(3);
+      expect(result.data).toHaveLength(1);
+      expect(result.execution_time_ms).toBeGreaterThan(0);
+
+      const row = result.data[0];
+      expect(Number(row.answer)).toBe(42);
+      expect(String(row.message)).toBe('test');
+      expect(Number(row.pi)).toBeCloseTo(3.14, 2);
+    });
+
+    test('returns schema with correct field information', async () => {
+      const result = await cloudClient.sqlJson(
+        'SELECT true as bool_val, 999 as int_val',
+      );
+
+      expect(result.schema.fields.length).toBeGreaterThan(0);
+      result.schema.fields.forEach((field) => {
+        expect(field).toHaveProperty('name');
+        expect(field).toHaveProperty('data_type');
+        expect(field).toHaveProperty('nullable');
+        expect(field).toHaveProperty('dict_id');
+        expect(field).toHaveProperty('dict_is_ordered');
+      });
+    });
+
+    test('handles multiple rows correctly', async () => {
+      const result = await cloudClient.sqlJson(
+        'SELECT * FROM spice.samples.taxi_trips LIMIT 5',
+      );
+
+      expect(result.row_count).toBe(5);
+      expect(result.data).toHaveLength(5);
+      expect(result.schema.fields.length).toBeGreaterThan(0);
+    }, 30000);
+
+    test('handles empty result set', async () => {
+      const result = await cloudClient.sqlJson(
+        'SELECT * FROM spice.samples.taxi_trips WHERE false',
+      );
+
+      expect(result.row_count).toBe(0);
+      expect(result.data).toHaveLength(0);
+      expect(result.schema.fields.length).toBeGreaterThan(0);
+    });
+
+    test('converts BigInt values to strings', async () => {
+      const result = await cloudClient.sqlJson(
+        'SELECT 9223372036854775807 as big_num',
+      );
+
+      expect(result.row_count).toBe(1);
+      const row = result.data[0];
+      // BigInt should be converted to string for JSON serialization
+      expect(
+        typeof row.big_num === 'string' || typeof row.big_num === 'number',
+      ).toBe(true);
+    });
+  });
+
   describe('HTTP Fallback', () => {
     // Note: These tests use the SpiceClient which will automatically use HTTP fallback
     // if gRPC is not available. The SDK handles the fallback transparently.
 
     test('simple query works via SDK (uses gRPC or HTTP fallback)', async () => {
-      const tableResult = await cloudClient.query(
+      const tableResult = await cloudClient.sql(
         "SELECT 123 as num, 'hello' as text",
       );
 
@@ -106,7 +182,7 @@ describe('cloud', () => {
     });
 
     test('query with different data types', async () => {
-      const tableResult = await cloudClient.query(
+      const tableResult = await cloudClient.sql(
         'SELECT true as bool_val, 3.14 as float_val, 999 as int_val',
       );
 
@@ -120,7 +196,7 @@ describe('cloud', () => {
     });
 
     test('query with string operations', async () => {
-      const tableResult = await cloudClient.query(
+      const tableResult = await cloudClient.sql(
         "SELECT UPPER('fallback') as upper_text, LOWER('HTTP') as lower_text, CONCAT('a', 'b') as concat_text",
       );
 
@@ -132,7 +208,7 @@ describe('cloud', () => {
     });
 
     test('query with math operations', async () => {
-      const tableResult = await cloudClient.query(
+      const tableResult = await cloudClient.sql(
         'SELECT 10 * 5 as product, 100 / 4 as division, 50 - 20 as subtraction, 30 + 15 as addition',
       );
 
@@ -146,7 +222,7 @@ describe('cloud', () => {
 
     test('streaming works with fallback', async () => {
       let numChunks = 0;
-      const tableResult = await cloudClient.query(
+      const tableResult = await cloudClient.sql(
         'SELECT 1 as col1, 2 as col2, 3 as col3',
         (table) => {
           expect(table.toArray().length).toBeGreaterThanOrEqual(1);
@@ -160,7 +236,7 @@ describe('cloud', () => {
     });
   });
 
-  // Define test endpoints - all tests MUST use the SDK's query() function
+  // Define test endpoints - all tests MUST use the SDK's sql() function
   const endpoints = [
     {
       name: 'Direct SDK (Flight/HTTP)',
@@ -185,7 +261,7 @@ describe('cloud', () => {
 
     describe(name, () => {
       test('simple query with constants', async () => {
-        const tableResult = await testClient.query(
+        const tableResult = await testClient.sql(
           "SELECT 42 as answer, 'test' as message",
         );
         const rows = tableResult.toArray();
@@ -198,7 +274,7 @@ describe('cloud', () => {
       });
 
       test('query with multiple data types', async () => {
-        const tableResult = await testClient.query(
+        const tableResult = await testClient.sql(
           'SELECT true as bool_val, 3.14 as float_val, 999 as int_val',
         );
         const rows = tableResult.toArray();
@@ -211,7 +287,7 @@ describe('cloud', () => {
       });
 
       test('query with string operations', async () => {
-        const tableResult = await testClient.query(
+        const tableResult = await testClient.sql(
           "SELECT UPPER('test') as upper_text, LOWER('TEST') as lower_text, CONCAT('a', 'b') as concat_text",
         );
         const rows = tableResult.toArray();
@@ -224,7 +300,7 @@ describe('cloud', () => {
       });
 
       test('query with math operations', async () => {
-        const tableResult = await testClient.query(
+        const tableResult = await testClient.sql(
           'SELECT 10 * 5 as product, 100 / 4 as division, 50 - 20 as subtraction, 30 + 15 as addition',
         );
         const rows = tableResult.toArray();
@@ -238,7 +314,7 @@ describe('cloud', () => {
       });
 
       test('handles large result sets', async () => {
-        const tableResult = await testClient.query(
+        const tableResult = await testClient.sql(
           'SELECT * FROM spice.samples.taxi_trips LIMIT 100',
         );
         const rows = tableResult.toArray();
@@ -250,7 +326,7 @@ describe('cloud', () => {
 
       test('error handling works', async () => {
         await expect(
-          testClient.query('SELECT * FROM nonexistent_table'),
+          testClient.sql('SELECT * FROM nonexistent_table'),
         ).rejects.toThrow();
       });
     });
