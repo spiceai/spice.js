@@ -377,21 +377,37 @@ export class SpiceClient {
           };
         }
 
-        // Convert Arrow table to JSON
-        // toArray() returns clean row objects with only data fields
-        const rows = table.toArray();
-        for (const row of rows) {
-          // Need to handle BigInt serialization
-          const cleanRow: any = {};
-          for (const key in row) {
-            if (Object.prototype.hasOwnProperty.call(row, key)) {
-              const value = row[key];
-              // Convert BigInt to string for JSON serialization
-              cleanRow[key] =
-                typeof value === 'bigint' ? value.toString() : value;
+        // Convert Arrow table to JSON, preserving native types
+        for (let i = 0; i < table.numRows; i++) {
+          const row: any = {};
+
+          // Iterate through each column/field
+          for (const field of table.schema.fields) {
+            const columnName = field.name;
+            const column = table.getChild(columnName);
+
+            if (column) {
+              let value = column.get(i);
+
+              // Convert BigInt to number if within safe range, otherwise to string
+              if (typeof value === 'bigint') {
+                // Check if BigInt is within JavaScript's safe integer range
+                if (
+                  value >= BigInt(Number.MIN_SAFE_INTEGER) &&
+                  value <= BigInt(Number.MAX_SAFE_INTEGER)
+                ) {
+                  value = Number(value);
+                } else {
+                  // Too large for safe integer, convert to string
+                  value = value.toString();
+                }
+              }
+
+              row[columnName] = value;
             }
           }
-          allRows.push(cleanRow);
+
+          allRows.push(row);
         }
       });
 
