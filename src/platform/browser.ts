@@ -25,7 +25,8 @@ class BrowserPlatformAdapter implements PlatformAdapter {
   }
 
   async fetch(url: string, options: FetchOptions): Promise<FetchResponse> {
-    const response = await window.fetch(url, {
+    // Use globalThis.fetch which works in both browser and test environments
+    const response = await globalThis.fetch(url, {
       method: options.method,
       headers: options.headers,
       body: options.body,

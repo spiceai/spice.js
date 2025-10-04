@@ -171,7 +171,8 @@ describe('Browser SpiceClient', () => {
           method: 'POST',
           headers: expect.objectContaining({
             'Content-Type': 'text/plain',
-            Accept: 'application/vnd.spiceai.sql.v1+json',
+            // Local OSS runtime uses application/json
+            Accept: 'application/json',
           }),
         }),
       );
