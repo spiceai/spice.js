@@ -9,6 +9,7 @@
   },
   "include": ["src/**/*.ts"],
   "exclude": [
+    "src/**/*.test.ts",
     "src/**/*.browser.ts",
     "src/platform/browser.ts",
     "src/grpc/client.browser.ts",

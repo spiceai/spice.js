@@ -10,6 +10,7 @@
   },
   "include": ["src/**/*.ts"],
   "exclude": [
+    "src/**/*.test.ts",
     "src/**/*.node.ts",
     "src/platform/node.ts",
     "src/grpc/client.node.ts",
