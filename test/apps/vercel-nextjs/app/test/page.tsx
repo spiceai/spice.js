@@ -3,6 +3,184 @@
 import { SpiceClient } from '@spiceai/spice';
 import Link from 'next/link';
 import { useState, useMemo } from 'react';
+import * as Diff from 'diff';
+
+// Beautiful Inline Diff Viewer Component with line-by-line comparison
+function DiffViewer({
+  proxyResult,
+  directResult,
+  title,
+}: {
+  proxyResult: any;
+  directResult: any;
+  title?: string;
+}) {
+  const proxyJson = JSON.stringify(proxyResult, null, 2);
+  const directJson = JSON.stringify(directResult, null, 2);
+  const isMatch = proxyJson === directJson;
+
+  // Compute line-by-line diff
+  const diffLines = Diff.diffLines(proxyJson, directJson);
+
+  return (
+    <div
+      style={{
+        marginTop: '15px',
+        border: '1px solid #ddd',
+        borderRadius: '5px',
+        overflow: 'hidden',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+      }}
+    >
+      {title && (
+        <div
+          style={{
+            background: '#f5f5f5',
+            padding: '10px 15px',
+            borderBottom: '1px solid #ddd',
+            fontWeight: '600',
+            fontSize: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <span>{title}</span>
+          <span
+            style={{
+              padding: '4px 12px',
+              borderRadius: '12px',
+              fontSize: '12px',
+              fontWeight: '600',
+              background: isMatch ? '#d1fae5' : '#fee2e2',
+              color: isMatch ? '#065f46' : '#991b1b',
+            }}
+          >
+            {isMatch ? '✓ Identical' : '✗ Differences Found'}
+          </span>
+        </div>
+      )}
+
+      {isMatch ? (
+        // Show single view when results match
+        <div style={{ background: '#f9fafb' }}>
+          <div
+            style={{
+              background: '#d1fae5',
+              padding: '8px 15px',
+              fontSize: '12px',
+              fontWeight: '600',
+              color: '#065f46',
+              borderBottom: '1px solid #a7f3d0',
+            }}
+          >
+            ✓ Both endpoints return identical results
+          </div>
+          <pre
+            style={{
+              margin: 0,
+              padding: '15px',
+              fontSize: '12px',
+              maxHeight: '400px',
+              overflow: 'auto',
+              fontFamily:
+                "'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace",
+              lineHeight: '1.5',
+              background: '#fff',
+            }}
+          >
+            {proxyJson}
+          </pre>
+        </div>
+      ) : (
+        // Show line-by-line diff when results differ
+        <div
+          style={{ background: '#fff', maxHeight: '400px', overflow: 'auto' }}
+        >
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '40px 1fr',
+              fontSize: '12px',
+              fontFamily:
+                "'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace",
+              lineHeight: '1.5',
+            }}
+          >
+            {diffLines.map((part, index) => {
+              const lines = part.value.split('\n');
+              // Remove last empty line if present
+              if (lines[lines.length - 1] === '') {
+                lines.pop();
+              }
+
+              return lines.map((line, lineIndex) => {
+                let background = '#fff';
+                let color = '#333';
+                let marker = ' ';
+                let borderLeft = 'none';
+
+                if (part.added) {
+                  background = '#e6ffed';
+                  color = '#24292e';
+                  marker = '+';
+                  borderLeft = '3px solid #28a745';
+                } else if (part.removed) {
+                  background = '#ffeef0';
+                  color = '#24292e';
+                  marker = '-';
+                  borderLeft = '3px solid #d73a49';
+                }
+
+                return (
+                  <div
+                    key={`${index}-${lineIndex}`}
+                    style={{
+                      display: 'contents',
+                    }}
+                  >
+                    <div
+                      style={{
+                        background,
+                        color: part.added
+                          ? '#28a745'
+                          : part.removed
+                            ? '#d73a49'
+                            : '#666',
+                        padding: '2px 8px',
+                        textAlign: 'center',
+                        fontWeight: '600',
+                        borderLeft,
+                        userSelect: 'none',
+                      }}
+                    >
+                      {marker}
+                    </div>
+                    <div
+                      style={{
+                        background,
+                        color,
+                        padding: '2px 12px',
+                        borderLeft:
+                          part.added || part.removed
+                            ? 'none'
+                            : '1px solid #e1e4e8',
+                        whiteSpace: 'pre',
+                        overflowX: 'auto',
+                      }}
+                    >
+                      {line || ' '}
+                    </div>
+                  </div>
+                );
+              });
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function TestPage() {
   const [apiKey, setApiKey] = useState<string>(
@@ -10,16 +188,19 @@ export default function TestPage() {
   );
   const [healthStatus, setHealthStatus] = useState<string>('Not checked');
   const [readyStatus, setReadyStatus] = useState<string>('Not checked');
-  const [refreshResult, setRefreshResult] = useState<string>('');
+  const [refreshProxyResult, setRefreshProxyResult] = useState<any>(null);
+  const [refreshDirectResult, setRefreshDirectResult] = useState<any>(null);
   const [customQuery, setCustomQuery] = useState<string>(
     'SELECT 1 as num, 2 as value',
   );
-  const [customQueryResult, setCustomQueryResult] = useState<string>('');
+  const [queryProxyResult, setQueryProxyResult] = useState<any>(null);
+  const [queryDirectResult, setQueryDirectResult] = useState<any>(null);
   const [useJsonFormat, setUseJsonFormat] = useState<boolean>(false);
   const [nsqlQuery, setNsqlQuery] = useState<string>(
     'Show me the first 5 rows',
   );
-  const [nsqlResult, setNsqlResult] = useState<string>('');
+  const [nsqlProxyResult, setNsqlProxyResult] = useState<any>(null);
+  const [nsqlDirectResult, setNsqlDirectResult] = useState<any>(null);
 
   // Separate loading states for each action
   const [loadingHealth, setLoadingHealth] = useState(false);
@@ -167,7 +348,8 @@ export default function TestPage() {
   const runRefresh = async () => {
     setLoadingRefresh(true);
     setError('');
-    setRefreshResult('');
+    setRefreshProxyResult(null);
+    setRefreshDirectResult(null);
     try {
       // Call both endpoints in parallel
       const [proxyResult, directResult] = await Promise.allSettled([
@@ -175,41 +357,24 @@ export default function TestPage() {
         directClient.refreshAcceleration('eth.recent_blocks'),
       ]);
 
-      const comparison: any = {
-        proxy: {
-          endpoint: '/api',
-          status: proxyResult.status,
-          result:
-            proxyResult.status === 'fulfilled'
-              ? proxyResult.value
-              : proxyResult.reason?.toString(),
-        },
-        direct: {
-          endpoint: 'https://data.spiceai.io',
-          status: directResult.status,
-          result:
-            directResult.status === 'fulfilled'
-              ? directResult.value
-              : directResult.reason?.toString(),
-        },
-        match:
-          proxyResult.status === directResult.status &&
-          JSON.stringify(
-            proxyResult.status === 'fulfilled' ? proxyResult.value : null,
-          ) ===
-            JSON.stringify(
-              directResult.status === 'fulfilled' ? directResult.value : null,
-            ),
-      };
-
-      setRefreshResult(JSON.stringify(comparison, null, 2));
+      setRefreshProxyResult(
+        proxyResult.status === 'fulfilled'
+          ? proxyResult.value
+          : { error: proxyResult.reason?.toString() },
+      );
+      setRefreshDirectResult(
+        directResult.status === 'fulfilled'
+          ? directResult.value
+          : { error: directResult.reason?.toString() },
+      );
     } catch (err) {
       const errorDetails = getErrorDetails(
         err,
         'Dataset refresh (eth.recent_blocks)',
       );
       setError(errorDetails);
-      setRefreshResult('');
+      setRefreshProxyResult(null);
+      setRefreshDirectResult(null);
     } finally {
       setLoadingRefresh(false);
     }
@@ -218,7 +383,8 @@ export default function TestPage() {
   const runCustomQuery = async () => {
     setLoadingQuery(true);
     setError('');
-    setCustomQueryResult('');
+    setQueryProxyResult(null);
+    setQueryDirectResult(null);
     try {
       if (useJsonFormat) {
         // Use sqlJson() for JSON format with metadata
@@ -227,34 +393,16 @@ export default function TestPage() {
           directClient.sqlJson(customQuery),
         ]);
 
-        const comparison: any = {
-          proxy: {
-            endpoint: '/api',
-            status: proxyResult.status,
-            result:
-              proxyResult.status === 'fulfilled'
-                ? proxyResult.value
-                : proxyResult.reason?.toString(),
-          },
-          direct: {
-            endpoint: 'https://data.spiceai.io',
-            status: directResult.status,
-            result:
-              directResult.status === 'fulfilled'
-                ? directResult.value
-                : directResult.reason?.toString(),
-          },
-          match:
-            proxyResult.status === directResult.status &&
-            JSON.stringify(
-              proxyResult.status === 'fulfilled' ? proxyResult.value : null,
-            ) ===
-              JSON.stringify(
-                directResult.status === 'fulfilled' ? directResult.value : null,
-              ),
-        };
-
-        setCustomQueryResult(JSON.stringify(comparison, null, 2));
+        setQueryProxyResult(
+          proxyResult.status === 'fulfilled'
+            ? proxyResult.value
+            : { error: proxyResult.reason?.toString() },
+        );
+        setQueryDirectResult(
+          directResult.status === 'fulfilled'
+            ? directResult.value
+            : { error: directResult.reason?.toString() },
+        );
       } else {
         // Use sql() for Arrow Table format
         const [proxyResult, directResult] = await Promise.allSettled([
@@ -271,31 +419,22 @@ export default function TestPage() {
             ? directResult.value.toArray()
             : null;
 
-        const comparison: any = {
-          proxy: {
-            endpoint: '/api',
-            status: proxyResult.status,
-            rowCount: proxyRows?.length || 0,
-            result:
-              proxyRows ||
-              (proxyResult.status === 'rejected'
+        setQueryProxyResult(
+          proxyRows || {
+            error:
+              proxyResult.status === 'rejected'
                 ? proxyResult.reason?.toString()
-                : null),
+                : 'No data',
           },
-          direct: {
-            endpoint: 'https://data.spiceai.io',
-            status: directResult.status,
-            rowCount: directRows?.length || 0,
-            result:
-              directRows ||
-              (directResult.status === 'rejected'
+        );
+        setQueryDirectResult(
+          directRows || {
+            error:
+              directResult.status === 'rejected'
                 ? directResult.reason?.toString()
-                : null),
+                : 'No data',
           },
-          match: JSON.stringify(proxyRows) === JSON.stringify(directRows),
-        };
-
-        setCustomQueryResult(JSON.stringify(comparison, null, 2));
+        );
       }
     } catch (err) {
       const method = useJsonFormat ? 'sqlJson' : 'sql';
@@ -303,7 +442,8 @@ export default function TestPage() {
       // Add query context to error
       const fullError = `Query: ${customQuery}\n\n${errorDetails}`;
       setError(fullError);
-      setCustomQueryResult('');
+      setQueryProxyResult(null);
+      setQueryDirectResult(null);
     } finally {
       setLoadingQuery(false);
     }
@@ -312,7 +452,8 @@ export default function TestPage() {
   const runNsql = async () => {
     setLoadingNsql(true);
     setError('');
-    setNsqlResult('');
+    setNsqlProxyResult(null);
+    setNsqlDirectResult(null);
     try {
       // Call both endpoints in parallel
       const [proxyResult, directResult] = await Promise.allSettled([
@@ -320,39 +461,22 @@ export default function TestPage() {
         directClient.nsql(nsqlQuery),
       ]);
 
-      const comparison: any = {
-        proxy: {
-          endpoint: '/api',
-          status: proxyResult.status,
-          result:
-            proxyResult.status === 'fulfilled'
-              ? proxyResult.value
-              : proxyResult.reason?.toString(),
-        },
-        direct: {
-          endpoint: 'https://data.spiceai.io',
-          status: directResult.status,
-          result:
-            directResult.status === 'fulfilled'
-              ? directResult.value
-              : directResult.reason?.toString(),
-        },
-        match:
-          proxyResult.status === directResult.status &&
-          JSON.stringify(
-            proxyResult.status === 'fulfilled' ? proxyResult.value : null,
-          ) ===
-            JSON.stringify(
-              directResult.status === 'fulfilled' ? directResult.value : null,
-            ),
-      };
-
-      setNsqlResult(JSON.stringify(comparison, null, 2));
+      setNsqlProxyResult(
+        proxyResult.status === 'fulfilled'
+          ? proxyResult.value
+          : { error: proxyResult.reason?.toString() },
+      );
+      setNsqlDirectResult(
+        directResult.status === 'fulfilled'
+          ? directResult.value
+          : { error: directResult.reason?.toString() },
+      );
     } catch (err) {
       const errorDetails = getErrorDetails(err, 'NSQL query');
       const fullError = `Natural language query: ${nsqlQuery}\n\n${errorDetails}`;
       setError(fullError);
-      setNsqlResult('');
+      setNsqlProxyResult(null);
+      setNsqlDirectResult(null);
     } finally {
       setLoadingNsql(false);
     }
@@ -645,19 +769,12 @@ export default function TestPage() {
           >
             {loadingRefresh ? 'Refreshing...' : 'Refresh Dataset'}
           </button>
-          {refreshResult && (
-            <pre
-              style={{
-                marginTop: '15px',
-                background: '#f5f5f5',
-                padding: '15px',
-                borderRadius: '5px',
-                overflow: 'auto',
-                fontSize: '12px',
-              }}
-            >
-              {refreshResult}
-            </pre>
+          {refreshProxyResult && refreshDirectResult && (
+            <DiffViewer
+              proxyResult={refreshProxyResult}
+              directResult={refreshDirectResult}
+              title="Refresh Results"
+            />
           )}
         </div>
 
@@ -761,21 +878,12 @@ export default function TestPage() {
             {loadingQuery ? 'Executing...' : '▶ Execute Query'}
           </button>
 
-          {customQueryResult && (
-            <pre
-              style={{
-                marginTop: '15px',
-                background: '#fff',
-                padding: '15px',
-                borderRadius: '5px',
-                overflow: 'auto',
-                fontSize: '12px',
-                border: '1px solid #ddd',
-                maxHeight: '400px',
-              }}
-            >
-              {customQueryResult}
-            </pre>
+          {queryProxyResult && queryDirectResult && (
+            <DiffViewer
+              proxyResult={queryProxyResult}
+              directResult={queryDirectResult}
+              title={`Query Results (${useJsonFormat ? 'JSON' : 'Arrow Table'})`}
+            />
           )}
         </div>
       </div>
@@ -845,21 +953,12 @@ export default function TestPage() {
           {loadingNsql ? 'Processing...' : '🤖 Ask Natural Language Question'}
         </button>
 
-        {nsqlResult && (
-          <pre
-            style={{
-              marginTop: '15px',
-              background: '#fff',
-              padding: '15px',
-              borderRadius: '5px',
-              overflow: 'auto',
-              fontSize: '12px',
-              border: '1px solid #ddd',
-              maxHeight: '400px',
-            }}
-          >
-            {nsqlResult}
-          </pre>
+        {nsqlProxyResult && nsqlDirectResult && (
+          <DiffViewer
+            proxyResult={nsqlProxyResult}
+            directResult={nsqlDirectResult}
+            title="NSQL Results"
+          />
         )}
       </div>
 
