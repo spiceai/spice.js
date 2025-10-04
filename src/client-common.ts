@@ -406,6 +406,7 @@ export class SpiceClient {
       // gRPC/Arrow mode: Use Arrow and convert to JSON
       const allRows: any[] = [];
       let schema: any = null;
+      let fields: any[] = [];
 
       await this.sql(queryText, (table) => {
         // Capture schema from first chunk
@@ -415,6 +416,7 @@ export class SpiceClient {
               serializeArrowField(field),
             ),
           };
+          fields = table.schema.fields;
         }
 
         // Helper function to recursively convert values, handling nested structures
@@ -431,10 +433,8 @@ export class SpiceClient {
           // Convert Date objects to ISO 8601 strings
           if (value instanceof Date) {
             const isoString = value.toISOString();
-            // Remove timezone suffix if the original type doesn't have timezone
-            return hasTimezone
-              ? isoString
-              : isoString.replace(/\.000Z$/, '').replace(/Z$/, '');
+            // Remove timezone suffix (Z) if the original type doesn't have timezone
+            return hasTimezone ? isoString : isoString.replace(/Z$/, '');
           }
 
           // Convert numeric timestamps/dates to ISO 8601 strings
@@ -446,10 +446,8 @@ export class SpiceClient {
             ) {
               const date = new Date(value);
               const isoString = date.toISOString();
-              // Remove timezone suffix if the original type doesn't have timezone
-              return hasTimezone
-                ? isoString
-                : isoString.replace(/\.000Z$/, '').replace(/Z$/, '');
+              // Remove timezone suffix (Z) if the original type doesn't have timezone
+              return hasTimezone ? isoString : isoString.replace(/Z$/, '');
             }
             return value;
           }
@@ -493,22 +491,21 @@ export class SpiceClient {
           return value;
         };
 
-        // Convert Arrow table to JSON, preserving native types
-        for (let i = 0; i < table.numRows; i++) {
-          const row: any = {};
+        // Use toArray() to properly convert Arrow values to JavaScript objects
+        // This handles Decimal types and other special Arrow representations correctly
+        const rows = table.toArray();
+        for (const row of rows) {
+          const convertedRow: any = {};
 
-          // Iterate through each column/field
-          for (const field of table.schema.fields) {
+          // Apply conversions based on schema information
+          for (const field of fields) {
             const columnName = field.name;
-            const column = table.getChild(columnName);
-
-            if (column) {
-              const value = column.get(i);
-              row[columnName] = convertValue(value, field);
+            if (columnName in row) {
+              convertedRow[columnName] = convertValue(row[columnName], field);
             }
           }
 
-          allRows.push(row);
+          allRows.push(convertedRow);
         }
       });
 

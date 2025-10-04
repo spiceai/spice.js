@@ -13,9 +13,12 @@ on:
 
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   browser-tests:
-    name: Browser Compatibility Tests (using Node.js ${{ matrix.node }} with jsdom)
+    name: Browser Tests (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -42,7 +45,7 @@ jobs:
         run: npm run test:browser
 
   local-runtime-tests:
-    name: Local Runtime Tests on ${{ matrix.os }} with Node.js ${{ matrix.node }}
+    name: Local Runtime (${{ matrix.os }}, Node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -150,7 +153,7 @@ jobs:
           branch-name: ${{ github.head_ref || github.ref_name }}
 
   cloud-tests:
-    name: Cloud Tests on ${{ matrix.os }} with Node.js ${{ matrix.node }}
+    name: Cloud Tests (${{ matrix.os }}, Node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
     needs: vercel-setup
     strategy:
