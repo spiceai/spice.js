@@ -206,15 +206,16 @@ export class SpiceClient {
               schema = jsonData.schema.fields || jsonData.schema;
             }
 
-            // Accumulate rows
-            if (jsonData.rows && Array.isArray(jsonData.rows)) {
-              allRows.push(...jsonData.rows);
+            // Accumulate rows (support both 'rows' and 'data' field names)
+            const rowsData = jsonData.rows || jsonData.data;
+            if (rowsData && Array.isArray(rowsData)) {
+              allRows.push(...rowsData);
 
               // If onData callback is provided, send partial results
-              if (onData && jsonData.rows.length > 0) {
+              if (onData && rowsData.length > 0) {
                 const partialTable = this.jsonToArrowTable(
                   schema || [],
-                  jsonData.rows,
+                  rowsData,
                 );
                 onData(partialTable);
               }
@@ -245,13 +246,14 @@ export class SpiceClient {
 
         // Handle schema - it may be an object with fields property or an array
         const schema = jsonData.schema?.fields || jsonData.schema || [];
-        const rows = jsonData.rows || [];
+        // Support both 'rows' and 'data' field names (sqlJson format uses 'data')
+        const rows = jsonData.rows || jsonData.data || [];
 
         console.log('[DEBUG] Non-streaming response:', {
           hasSchema: !!jsonData.schema,
           schemaType: typeof jsonData.schema,
           schemaLength: Array.isArray(schema) ? schema.length : 'not array',
-          hasRows: !!jsonData.rows,
+          hasRows: !!(jsonData.rows || jsonData.data),
           rowsLength: Array.isArray(rows) ? rows.length : 'not array',
           jsonDataKeys: Object.keys(jsonData),
         });
