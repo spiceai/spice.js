@@ -30,8 +30,8 @@ export default function TestPage() {
 
   const [error, setError] = useState<string>('');
 
-  // Initialize SpiceClient for browser - recreate when apiKey or endpoint changes
-  const client = useMemo(
+  // Initialize SpiceClient instances for both endpoints
+  const proxyClient = useMemo(
     () =>
       new SpiceClient({
         httpUrl: '/api',
@@ -40,8 +40,21 @@ export default function TestPage() {
     [apiKey],
   );
 
+  const directClient = useMemo(
+    () =>
+      new SpiceClient({
+        httpUrl: 'https://data.spiceai.io',
+        apiKey: apiKey || undefined,
+      }),
+    [apiKey],
+  );
+
   // Helper function to extract detailed error information
-  const getErrorDetails = (err: unknown, context: string): string => {
+  const getErrorDetails = (
+    err: unknown,
+    context: string,
+    endpoint?: string,
+  ): string => {
     const details: string[] = [`❌ ${context} failed\n`];
 
     if (err instanceof Error) {
@@ -66,7 +79,9 @@ export default function TestPage() {
     // Add environment info
     details.push(`\n📍 Environment:`);
     details.push(`  • Browser: ${navigator.userAgent}`);
-    details.push(`  • Endpoint: ${client['_httpUrl'] || 'Not set'}`);
+    if (endpoint) {
+      details.push(`  • Endpoint: ${endpoint}`);
+    }
     details.push(`  • API Key: ${apiKey ? '✓ Configured' : '✗ Not set'}`);
     details.push(`  • Timestamp: ${new Date().toISOString()}`);
 
@@ -77,8 +92,31 @@ export default function TestPage() {
     setLoadingHealth(true);
     setError('');
     try {
-      const isHealthy = await client.isSpiceHealthy();
-      setHealthStatus(isHealthy ? '✅ Healthy' : '❌ Not Healthy');
+      // Call both endpoints in parallel
+      const [proxyResult, directResult] = await Promise.allSettled([
+        proxyClient.isSpiceHealthy(),
+        directClient.isSpiceHealthy(),
+      ]);
+
+      const proxyHealthy =
+        proxyResult.status === 'fulfilled' && proxyResult.value;
+      const directHealthy =
+        directResult.status === 'fulfilled' && directResult.value;
+
+      const comparison = [
+        `Proxy (/api): ${proxyHealthy ? '✅ Healthy' : '❌ Not Healthy'}`,
+        `Direct (data.spiceai.io): ${directHealthy ? '✅ Healthy' : '❌ Not Healthy'}`,
+        `Match: ${proxyHealthy === directHealthy ? '✅' : '❌'}`,
+      ];
+
+      if (proxyResult.status === 'rejected') {
+        comparison.push(`\nProxy Error: ${proxyResult.reason}`);
+      }
+      if (directResult.status === 'rejected') {
+        comparison.push(`\nDirect Error: ${directResult.reason}`);
+      }
+
+      setHealthStatus(comparison.join('\n'));
     } catch (err) {
       const errorDetails = getErrorDetails(err, 'Health check');
       setError(errorDetails);
@@ -92,8 +130,31 @@ export default function TestPage() {
     setLoadingReady(true);
     setError('');
     try {
-      const isReady = await client.isSpiceReady();
-      setReadyStatus(isReady ? '✅ Ready' : '❌ Not Ready');
+      // Call both endpoints in parallel
+      const [proxyResult, directResult] = await Promise.allSettled([
+        proxyClient.isSpiceReady(),
+        directClient.isSpiceReady(),
+      ]);
+
+      const proxyReady =
+        proxyResult.status === 'fulfilled' && proxyResult.value;
+      const directReady =
+        directResult.status === 'fulfilled' && directResult.value;
+
+      const comparison = [
+        `Proxy (/api): ${proxyReady ? '✅ Ready' : '❌ Not Ready'}`,
+        `Direct (data.spiceai.io): ${directReady ? '✅ Ready' : '❌ Not Ready'}`,
+        `Match: ${proxyReady === directReady ? '✅' : '❌'}`,
+      ];
+
+      if (proxyResult.status === 'rejected') {
+        comparison.push(`\nProxy Error: ${proxyResult.reason}`);
+      }
+      if (directResult.status === 'rejected') {
+        comparison.push(`\nDirect Error: ${directResult.reason}`);
+      }
+
+      setReadyStatus(comparison.join('\n'));
     } catch (err) {
       const errorDetails = getErrorDetails(err, 'Ready check');
       setError(errorDetails);
@@ -108,9 +169,40 @@ export default function TestPage() {
     setError('');
     setRefreshResult('');
     try {
-      // Use a test dataset - this may fail if the dataset doesn't exist
-      const result = await client.refreshAcceleration('eth.recent_blocks');
-      setRefreshResult(JSON.stringify(result, null, 2));
+      // Call both endpoints in parallel
+      const [proxyResult, directResult] = await Promise.allSettled([
+        proxyClient.refreshAcceleration('eth.recent_blocks'),
+        directClient.refreshAcceleration('eth.recent_blocks'),
+      ]);
+
+      const comparison: any = {
+        proxy: {
+          endpoint: '/api',
+          status: proxyResult.status,
+          result:
+            proxyResult.status === 'fulfilled'
+              ? proxyResult.value
+              : proxyResult.reason?.toString(),
+        },
+        direct: {
+          endpoint: 'https://data.spiceai.io',
+          status: directResult.status,
+          result:
+            directResult.status === 'fulfilled'
+              ? directResult.value
+              : directResult.reason?.toString(),
+        },
+        match:
+          proxyResult.status === directResult.status &&
+          JSON.stringify(
+            proxyResult.status === 'fulfilled' ? proxyResult.value : null,
+          ) ===
+            JSON.stringify(
+              directResult.status === 'fulfilled' ? directResult.value : null,
+            ),
+      };
+
+      setRefreshResult(JSON.stringify(comparison, null, 2));
     } catch (err) {
       const errorDetails = getErrorDetails(
         err,
@@ -130,13 +222,80 @@ export default function TestPage() {
     try {
       if (useJsonFormat) {
         // Use sqlJson() for JSON format with metadata
-        const result = await client.sqlJson(customQuery);
-        setCustomQueryResult(JSON.stringify(result, null, 2));
+        const [proxyResult, directResult] = await Promise.allSettled([
+          proxyClient.sqlJson(customQuery),
+          directClient.sqlJson(customQuery),
+        ]);
+
+        const comparison: any = {
+          proxy: {
+            endpoint: '/api',
+            status: proxyResult.status,
+            result:
+              proxyResult.status === 'fulfilled'
+                ? proxyResult.value
+                : proxyResult.reason?.toString(),
+          },
+          direct: {
+            endpoint: 'https://data.spiceai.io',
+            status: directResult.status,
+            result:
+              directResult.status === 'fulfilled'
+                ? directResult.value
+                : directResult.reason?.toString(),
+          },
+          match:
+            proxyResult.status === directResult.status &&
+            JSON.stringify(
+              proxyResult.status === 'fulfilled' ? proxyResult.value : null,
+            ) ===
+              JSON.stringify(
+                directResult.status === 'fulfilled' ? directResult.value : null,
+              ),
+        };
+
+        setCustomQueryResult(JSON.stringify(comparison, null, 2));
       } else {
         // Use sql() for Arrow Table format
-        const result = await client.sql(customQuery);
-        const rows = result.toArray();
-        setCustomQueryResult(JSON.stringify(rows, null, 2));
+        const [proxyResult, directResult] = await Promise.allSettled([
+          proxyClient.sql(customQuery),
+          directClient.sql(customQuery),
+        ]);
+
+        const proxyRows =
+          proxyResult.status === 'fulfilled'
+            ? proxyResult.value.toArray()
+            : null;
+        const directRows =
+          directResult.status === 'fulfilled'
+            ? directResult.value.toArray()
+            : null;
+
+        const comparison: any = {
+          proxy: {
+            endpoint: '/api',
+            status: proxyResult.status,
+            rowCount: proxyRows?.length || 0,
+            result:
+              proxyRows ||
+              (proxyResult.status === 'rejected'
+                ? proxyResult.reason?.toString()
+                : null),
+          },
+          direct: {
+            endpoint: 'https://data.spiceai.io',
+            status: directResult.status,
+            rowCount: directRows?.length || 0,
+            result:
+              directRows ||
+              (directResult.status === 'rejected'
+                ? directResult.reason?.toString()
+                : null),
+          },
+          match: JSON.stringify(proxyRows) === JSON.stringify(directRows),
+        };
+
+        setCustomQueryResult(JSON.stringify(comparison, null, 2));
       }
     } catch (err) {
       const method = useJsonFormat ? 'sqlJson' : 'sql';
@@ -155,8 +314,40 @@ export default function TestPage() {
     setError('');
     setNsqlResult('');
     try {
-      const result = await client.nsql(nsqlQuery);
-      setNsqlResult(JSON.stringify(result, null, 2));
+      // Call both endpoints in parallel
+      const [proxyResult, directResult] = await Promise.allSettled([
+        proxyClient.nsql(nsqlQuery),
+        directClient.nsql(nsqlQuery),
+      ]);
+
+      const comparison: any = {
+        proxy: {
+          endpoint: '/api',
+          status: proxyResult.status,
+          result:
+            proxyResult.status === 'fulfilled'
+              ? proxyResult.value
+              : proxyResult.reason?.toString(),
+        },
+        direct: {
+          endpoint: 'https://data.spiceai.io',
+          status: directResult.status,
+          result:
+            directResult.status === 'fulfilled'
+              ? directResult.value
+              : directResult.reason?.toString(),
+        },
+        match:
+          proxyResult.status === directResult.status &&
+          JSON.stringify(
+            proxyResult.status === 'fulfilled' ? proxyResult.value : null,
+          ) ===
+            JSON.stringify(
+              directResult.status === 'fulfilled' ? directResult.value : null,
+            ),
+      };
+
+      setNsqlResult(JSON.stringify(comparison, null, 2));
     } catch (err) {
       const errorDetails = getErrorDetails(err, 'NSQL query');
       const fullError = `Natural language query: ${nsqlQuery}\n\n${errorDetails}`;
