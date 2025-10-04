@@ -16,6 +16,14 @@ class BrowserPlatformAdapter implements PlatformAdapter {
     return `spice.js/${VERSION} (Browser)`;
   }
 
+  getPlatformName(): string {
+    // Use browser's navigator API to get platform information
+    if (typeof navigator !== 'undefined') {
+      return navigator.userAgent;
+    }
+    return 'Browser';
+  }
+
   async fetch(url: string, options: FetchOptions): Promise<FetchResponse> {
     const response = await window.fetch(url, {
       method: options.method,

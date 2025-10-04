@@ -17,6 +17,11 @@ export interface PlatformAdapter {
    * Check if gRPC is supported on this platform
    */
   supportsGrpc(): boolean;
+
+  /**
+   * Get the platform name (e.g., "Node.js", "Browser")
+   */
+  getPlatformName(): string;
 }
 
 export interface FetchOptions {

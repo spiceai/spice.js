@@ -7,10 +7,14 @@ import { SpiceClient } from '../../src/index.browser';
 
 describe('Browser SpiceClient', () => {
   let client: SpiceClient;
+  let consoleLogSpy: jest.SpyInstance;
 
   beforeEach(() => {
     // Mock fetch for browser environment
     global.fetch = jest.fn();
+
+    // Spy on console.log to suppress output during tests
+    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
 
     client = new SpiceClient({
       httpUrl: 'http://localhost:8090',
@@ -32,6 +36,25 @@ describe('Browser SpiceClient', () => {
         httpUrl: 'http://custom.example.com:8090',
       });
       expect(customClient).toBeInstanceOf(SpiceClient);
+    });
+
+    test('should log configuration on initialization', () => {
+      consoleLogSpy.mockRestore();
+      const logSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      new SpiceClient({
+        httpUrl: 'http://localhost:8090',
+        apiKey: 'test-key',
+      });
+
+      expect(logSpy).toHaveBeenCalled();
+      const logOutput = logSpy.mock.calls[0][0];
+      expect(logOutput).toContain('Spice.js initialized');
+      expect(logOutput).toContain('Platform:'); // Will show browser name (Chrome, Firefox, etc.)
+      expect(logOutput).toContain('HTTP only');
+      expect(logOutput).toContain('Auth: API Key configured');
+
+      logSpy.mockRestore();
     });
 
     test('should create client with API key', () => {

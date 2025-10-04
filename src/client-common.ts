@@ -41,6 +41,7 @@ export class SpiceClient {
   private _platform: PlatformAdapter;
   private _grpcClient: GrpcFlightClient | null = null;
   private _retry: RetryModule;
+  private _isSpiceCloud: boolean = false;
 
   public constructor(
     params: string | SpiceClientConfig = {},
@@ -89,6 +90,9 @@ export class SpiceClient {
       this._customHeaders = customHeaders;
     }
 
+    // Determine if this is Spice Cloud endpoint (compute once)
+    this._isSpiceCloud = this._httpUrl.includes('.spiceai.io');
+
     // Initialize gRPC client if platform supports it
     if (platform.supportsGrpc() && GrpcClientClass) {
       this._grpcClient = new GrpcClientClass(
@@ -98,6 +102,55 @@ export class SpiceClient {
         this._flightTlsEnabled,
       );
     }
+
+    // Log runtime configuration
+    this.logConfiguration();
+  }
+
+  private logConfiguration(): void {
+    const platformName = this._platform.getPlatformName();
+    const supportsGrpc = this._platform.supportsGrpc();
+
+    // Determine transport mode
+    let transportMode: string;
+    if (supportsGrpc && this._grpcClient) {
+      transportMode = `Arrow Flight (gRPC) with HTTP fallback`;
+    } else if (supportsGrpc && !this._grpcClient) {
+      transportMode = 'HTTP only (gRPC client not initialized)';
+    } else {
+      transportMode = 'HTTP only';
+    }
+
+    // Determine endpoint (use cached value)
+    const endpoint = this._isSpiceCloud
+      ? 'Spice Cloud (data.spiceai.io)'
+      : this._httpUrl;
+
+    // Build configuration message
+    const configLines = [
+      `🌶️  Spice.js initialized`,
+      `   Platform: ${platformName}`,
+      `   Transport: ${transportMode}`,
+      `   Endpoint: ${endpoint}`,
+    ];
+
+    if (this._grpcClient && this._flightUrl) {
+      configLines.push(
+        `   Flight URL: ${this._flightUrl}${this._flightTlsEnabled ? ' (TLS)' : ''}`,
+      );
+    }
+
+    if (this._apiKey) {
+      configLines.push(`   Auth: API Key configured`);
+    }
+
+    if (this._customHeaders && Object.keys(this._customHeaders).length > 0) {
+      configLines.push(
+        `   Custom Headers: ${Object.keys(this._customHeaders).length} header(s)`,
+      );
+    }
+
+    console.log(configLines.join('\n'));
   }
 
   private async doQueryRequest(
@@ -166,11 +219,8 @@ export class SpiceClient {
     queryText: string,
     onData: ((data: Table) => void) | undefined = undefined,
   ): Promise<Table> {
-    // Determine if this is data.spiceai.io endpoint
-    const isSpiceCloud = this._httpUrl.includes('data.spiceai.io');
-
-    // Use appropriate Accept header based on endpoint
-    const acceptHeader = isSpiceCloud
+    // Use appropriate Accept header based on endpoint (use cached value)
+    const acceptHeader = this._isSpiceCloud
       ? 'application/vnd.spiceai.sql.v1+json' // data.spiceai.io returns schema with 'data' field
       : 'application/json'; // OSS returns plain JSON array
 
@@ -202,11 +252,11 @@ export class SpiceClient {
 
     // Handle streaming responses (multiple JSON objects)
     if (lines.length > 1) {
-      return this.parseStreamingResponse(lines, onData, isSpiceCloud);
+      return this.parseStreamingResponse(lines, onData, this._isSpiceCloud);
     }
 
     // Handle single response
-    return this.parseSingleResponse(body, onData, isSpiceCloud);
+    return this.parseSingleResponse(body, onData, this._isSpiceCloud);
   }
 
   private parseStreamingResponse(
