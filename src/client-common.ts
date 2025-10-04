@@ -92,10 +92,13 @@ function wrapTableForDecimalConversion(table: Table): Table {
         f.type.toString().startsWith('Date'),
     );
     const listFields = table.schema.fields.filter(
-      (f) => f.type.toString().startsWith('List<') || f.type.toString() === 'List',
+      (f) =>
+        f.type.toString().startsWith('List<') || f.type.toString() === 'List',
     );
     const structFields = table.schema.fields.filter(
-      (f) => f.type.toString().startsWith('Struct<') || f.type.toString() === 'Struct',
+      (f) =>
+        f.type.toString().startsWith('Struct<') ||
+        f.type.toString() === 'Struct',
     );
 
     // If no special fields, return rows as-is to avoid unnecessary processing
