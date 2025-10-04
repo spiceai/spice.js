@@ -299,10 +299,13 @@ describe('SpiceClient Response Parsing - Unit Tests', () => {
       });
 
       let chunkCount = 0;
-      const result = await client.sql('SELECT * FROM pulls LIMIT 5', (table) => {
-        chunkCount++;
-        expect(table).toBeInstanceOf(Table);
-      });
+      const result = await client.sql(
+        'SELECT * FROM pulls LIMIT 5',
+        (table) => {
+          chunkCount++;
+          expect(table).toBeInstanceOf(Table);
+        },
+      );
 
       expect(result).toBeInstanceOf(Table);
       // Should have called onData for each chunk

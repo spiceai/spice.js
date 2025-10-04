@@ -1,6 +1,6 @@
 /**
  * Documentation and comparison of Spice API response formats
- * 
+ *
  * This file serves as both documentation and test suite for understanding
  * the two different response formats supported by the Spice API.
  */
@@ -11,13 +11,13 @@ describe('Response Format Documentation', () => {
   describe('Format Comparison', () => {
     /**
      * The Spice API supports two response formats based on the Accept header:
-     * 
+     *
      * 1. Legacy Format (Accept: application/json)
      *    - Uses `rowCount` field
      *    - Schema is an array with `type` objects: [{ name: "col", type: { name: "VARCHAR" } }]
      *    - Data is in `rows` field
      *    - Type names: VARCHAR, BIGINT, LIST, TIMESTAMP
-     * 
+     *
      * 2. New Format (Accept: application/vnd.spiceai.sql.v1+json)
      *    - Uses `row_count` field
      *    - Schema has `fields` property: { fields: [{ name: "col", data_type: "Utf8" }] }
@@ -34,9 +34,7 @@ describe('Response Format Documentation', () => {
           { name: 'additions', type: { name: 'BIGINT' } },
           { name: 'assignees', type: { name: 'LIST' } },
         ],
-        rows: [
-          { repo: 'spiceai/spiceai', additions: 2, assignees: ['user1'] },
-        ],
+        rows: [{ repo: 'spiceai/spiceai', additions: 2, assignees: ['user1'] }],
       };
 
       expect(legacyFormat).toHaveProperty('rowCount');
