@@ -3,8 +3,8 @@
   "compilerOptions": {
     "outDir": "dist/browser",
     "module": "esnext",
-    "target": "ES2017",
-    "lib": ["ES2017", "DOM", "DOM.Iterable"],
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "moduleResolution": "node",
     "skipLibCheck": true
   },

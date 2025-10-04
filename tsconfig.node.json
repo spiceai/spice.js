@@ -3,8 +3,8 @@
   "compilerOptions": {
     "outDir": "dist/node",
     "module": "commonjs",
-    "target": "ES2017",
-    "lib": ["ES2017"],
+    "target": "ES2023",
+    "lib": ["ES2023"],
     "skipLibCheck": true
   },
   "include": ["src/**/*.ts"],
