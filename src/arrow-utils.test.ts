@@ -101,14 +101,16 @@ describe('arrow-utils', () => {
         data_type: 'bool',
         nullable: true,
       });
-      expect(result.rows).toEqual(input);
+      expect(result.data).toEqual(input);
     });
 
     it('should handle empty arrays', () => {
       const result = convertToSqlV1Format([]);
       expect(result).toEqual({
         schema: { fields: [] },
-        rows: [],
+        data: [],
+        row_count: 0,
+        execution_time_ms: 0,
       });
     });
 
@@ -116,7 +118,9 @@ describe('arrow-utils', () => {
       const result = convertToSqlV1Format({});
       expect(result).toEqual({
         schema: { fields: [] },
-        rows: [],
+        data: [],
+        row_count: 0,
+        execution_time_ms: 0,
       });
     });
 
@@ -152,7 +156,7 @@ describe('arrow-utils', () => {
       const result = convertToSqlV1Format(input, true);
 
       expect(result.schema).toEqual(input.schema);
-      expect(result.rows).toEqual(input.rows);
+      expect(result.data).toEqual(input.rows);
     });
 
     it('should handle OSS format (plain array)', () => {
@@ -164,7 +168,7 @@ describe('arrow-utils', () => {
       const result = convertToSqlV1Format(input, false);
 
       expect(result.schema.fields).toHaveLength(2);
-      expect(result.rows).toEqual(input);
+      expect(result.data).toEqual(input);
     });
 
     it('should handle SQL v1 format with data field', () => {
@@ -176,7 +180,7 @@ describe('arrow-utils', () => {
       const result = convertToSqlV1Format(input);
 
       expect(result.schema).toEqual(input.schema);
-      expect(result.rows).toEqual(input.data);
+      expect(result.data).toEqual(input.data);
     });
 
     it('should handle Spice Cloud application/json format with schema array', () => {
@@ -205,7 +209,7 @@ describe('arrow-utils', () => {
         data_type: 'BIGINT',
         nullable: true,
       });
-      expect(result.rows).toEqual(input.rows);
+      expect(result.data).toEqual(input.rows);
     });
   });
 
@@ -377,14 +381,14 @@ describe('arrow-utils', () => {
 
       // Convert to SQL v1 format
       const sqlV1 = convertToSqlV1Format(apiResponse);
-      expect(sqlV1.rows).toHaveLength(3);
+      expect(sqlV1.data).toHaveLength(3);
 
       // Normalize schema
       const schema = normalizeSchema(sqlV1.schema);
       expect(schema).toHaveLength(4);
 
       // Convert to Arrow table
-      const table = jsonToArrowTable(schema, sqlV1.rows);
+      const table = jsonToArrowTable(schema, sqlV1.data);
       expect(table.numRows).toBe(3);
       expect(table.numCols).toBe(4);
 

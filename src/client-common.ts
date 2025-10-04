@@ -279,12 +279,12 @@ export class SpiceClient {
         }
 
         // Accumulate rows
-        if (sqlV1.rows.length > 0) {
-          allRows.push(...sqlV1.rows);
+        if (sqlV1.data.length > 0) {
+          allRows.push(...sqlV1.data);
 
           // Send partial results if callback provided
           if (onData) {
-            const partialTable = jsonToArrowTable(schema, sqlV1.rows);
+            const partialTable = jsonToArrowTable(schema, sqlV1.data);
             onData(partialTable);
           }
         }
@@ -305,7 +305,7 @@ export class SpiceClient {
       const jsonData = JSON.parse(body);
       const sqlV1 = convertToSqlV1Format(jsonData, isSpiceAI);
       const schema = normalizeSchema(sqlV1.schema);
-      const rows = sqlV1.rows;
+      const rows = sqlV1.data;
 
       // Send results via callback if provided
       if (onData && rows.length > 0) {

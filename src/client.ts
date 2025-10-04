@@ -524,7 +524,7 @@ class SpiceClient {
     // Convert to SQL v1 format if needed
     const sqlV1Response = convertToSqlV1Format(jsonData);
     const schema = normalizeSchema(sqlV1Response.schema);
-    const rows = sqlV1Response.rows;
+    const rows = sqlV1Response.data;
 
     // If onData callback is provided, send the results as Arrow Table
     if (onData && rows.length > 0) {
