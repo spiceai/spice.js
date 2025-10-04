@@ -17,7 +17,7 @@ describe('local', () => {
 
   it('connection and query to local spice runtime works', async () => {
     const tableResult = await client.query(
-      'SELECT * FROM test_postgresql_table_not_accelerated LIMIT 3',
+      'SELECT * FROM test_postgresql_table_not_accelerated LIMIT 3'
     );
 
     const rows = tableResult.toArray();
@@ -38,7 +38,7 @@ describe('local', () => {
   describe('Refresh dataset', () => {
     test('refresh dataset', async () => {
       const result = await client.refreshAcceleration(
-        'test_postgresql_table_accelerated',
+        'test_postgresql_table_accelerated'
       );
 
       expect(result).toHaveProperty('message');
@@ -51,7 +51,7 @@ describe('local', () => {
         {
           refresh_mode: 'full',
           refresh_jitter_max: '5s',
-        },
+        }
       );
 
       expect(result).toHaveProperty('message');
@@ -65,7 +65,7 @@ describe('local', () => {
           refresh_sql:
             'SELECT * FROM test_postgresql_table_accelerated WHERE id > 0',
           refresh_mode: 'full',
-        },
+        }
       );
 
       expect(result).toHaveProperty('message');
@@ -74,7 +74,7 @@ describe('local', () => {
 
     test('refresh nonexistent dataset throws error', async () => {
       await expect(
-        client.refreshAcceleration('nonexistent_dataset'),
+        client.refreshAcceleration('nonexistent_dataset')
       ).rejects.toThrow();
     });
   });
@@ -241,7 +241,7 @@ describe('local', () => {
 
       // Arrow returns as string as well since it exceeds safe integer range
       expect(largeArrowRows[0].large_int.toString()).toBe(
-        largeJsonRows[0].large_int,
+        largeJsonRows[0].large_int
       );
     });
 
@@ -275,7 +275,7 @@ describe('local', () => {
           : new Date(arrowRows[0].timestamp_column).toISOString();
       expect(arrowTimestamp).toBe(jsonRows[0].timestamp_column);
       expect(jsonRows[0].timestamp_column).toMatch(
-        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/
       );
 
       // Date columns should also match
@@ -289,13 +289,13 @@ describe('local', () => {
 
       // Verify the schema shows the correct types
       const timestampField = jsonResult.schema.fields.find(
-        (f: any) => f.name === 'timestamp_column',
+        (f: any) => f.name === 'timestamp_column'
       );
       expect(timestampField).toBeDefined();
       expect(timestampField!.data_type).toHaveProperty('Timestamp');
 
       const dateField = jsonResult.schema.fields.find(
-        (f: any) => f.name === 'date_column',
+        (f: any) => f.name === 'date_column'
       );
       expect(dateField).toBeDefined();
       expect(dateField!.data_type).toBe('Date32');
@@ -303,7 +303,7 @@ describe('local', () => {
 
     test('should include proper schema information in sqlJson response', async () => {
       const result = await flightOnlyClient.sqlJson(
-        'SELECT id, text_column, int4_column FROM test_postgresql_table_not_accelerated LIMIT 1',
+        'SELECT id, text_column, int4_column FROM test_postgresql_table_not_accelerated LIMIT 1'
       );
 
       // Verify schema structure
@@ -320,7 +320,7 @@ describe('local', () => {
       expect(idField!.nullable).toBe(false);
 
       const textField = result.schema.fields.find(
-        (f: any) => f.name === 'text_column',
+        (f: any) => f.name === 'text_column'
       );
       expect(textField).toBeDefined();
       expect(textField!.name).toBe('text_column');
@@ -328,7 +328,7 @@ describe('local', () => {
       expect(textField!.nullable).toBe(true);
 
       const intField = result.schema.fields.find(
-        (f: any) => f.name === 'int4_column',
+        (f: any) => f.name === 'int4_column'
       );
       expect(intField).toBeDefined();
       expect(intField!.name).toBe('int4_column');
@@ -345,7 +345,7 @@ describe('local', () => {
         (table) => {
           batches.push(table);
           totalRows += table.numRows;
-        },
+        }
       );
 
       // Verify we received batches
@@ -385,7 +385,7 @@ describe('local', () => {
 
       // Query should fail with gRPC error (since flightOnly means no HTTP fallback)
       await expect(invalidClient.query('SELECT 1')).rejects.toThrow(
-        /UNAVAILABLE|flightOnly mode is enabled/,
+        /UNAVAILABLE|flightOnly mode is enabled/
       );
     });
 
@@ -435,10 +435,10 @@ describe('local', () => {
 
       // Verify schema includes computed columns
       expect(
-        jsonResult.schema.fields.some((f: any) => f.name === 'category'),
+        jsonResult.schema.fields.some((f: any) => f.name === 'category')
       ).toBe(true);
       expect(
-        jsonResult.schema.fields.some((f: any) => f.name === 'doubled_value'),
+        jsonResult.schema.fields.some((f: any) => f.name === 'doubled_value')
       ).toBe(true);
     });
 
