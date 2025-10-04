@@ -644,7 +644,7 @@ class SpiceClient {
 
     const headers = new Headers([
       ['Content-Type', 'application/json'],
-      ['Accept-Encoding', 'zstd, br, gzip, deflate'],
+      ['Accept-Encoding', 'gzip, deflate'],
       ['User-Agent', this._userAgent],
     ]);
 

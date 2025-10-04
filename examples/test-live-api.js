@@ -118,7 +118,7 @@ async function testHttpEndpoint() {
     console.log('  Headers:');
     console.log('    Content-Type: application/json');
     console.log('    Accept: application/vnd.spiceai.sql.v1+json');
-    console.log('    Accept-Encoding: zstd, br, gzip, deflate');
+    console.log('    Accept-Encoding: gzip, deflate');
     console.log('');
 
     // Test 1: Simple query
@@ -130,7 +130,7 @@ async function testHttpEndpoint() {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/vnd.spiceai.sql.v1+json',
-        'Accept-Encoding': 'zstd, br, gzip, deflate',
+        'Accept-Encoding': 'gzip, deflate',
         'X-API-Key': API_KEY,
       },
       body: JSON.stringify({
@@ -171,7 +171,7 @@ async function testHttpEndpoint() {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/vnd.spiceai.sql.v1+json',
-        'Accept-Encoding': 'zstd, br, gzip, deflate',
+        'Accept-Encoding': 'gzip, deflate',
         'X-API-Key': API_KEY,
       },
       body: JSON.stringify({

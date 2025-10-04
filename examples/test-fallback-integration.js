@@ -116,7 +116,7 @@ async function testHttpHeaders(apiKey) {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/vnd.spiceai.sql.v1+json',
-        'Accept-Encoding': 'zstd, br, gzip, deflate',
+        'Accept-Encoding': 'gzip, deflate',
         'X-API-Key': apiKey,
       },
       body: JSON.stringify({
