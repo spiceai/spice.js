@@ -1,4 +1,5 @@
 import { Table, tableFromArrays, tableFromJSON } from 'apache-arrow';
+import { SqlV1JsonResponse } from './interfaces';
 
 /**
  * Infers the Arrow data type from a JavaScript value
@@ -19,7 +20,7 @@ export function inferDataType(value: any): string {
  * Converts a plain JSON response to SQL v1 format
  *
  * Handles different response formats:
- * - data.spiceai.io with application/json: schema array with 'rows' field
+ * - data.spiceai.io with application/json: schema array with 'rows' field (legacy)
  * - data.spiceai.io with application/vnd.spiceai.sql.v1+json: schema object with 'data' field
  * - OSS with application/json: plain array of objects
  * - OSS with application/vnd.spiceai.sql.v1+json: schema object with 'data' field
@@ -30,10 +31,7 @@ export function inferDataType(value: any): string {
 export function convertToSqlV1Format(
   jsonData: any,
   _isSpiceAI: boolean = false,
-): {
-  schema: { fields: any[] };
-  rows: any[];
-} {
+): SqlV1JsonResponse {
   // Handle Spice Cloud application/json format with schema as array
   if (
     jsonData.schema &&
@@ -45,11 +43,16 @@ export function convertToSqlV1Format(
       name: field.name,
       data_type: field.type?.name || 'utf8',
       nullable: true,
+      dict_id: 0,
+      dict_is_ordered: false,
+      metadata: {},
     }));
 
     return {
       schema: { fields },
-      rows: jsonData.rows || jsonData.data,
+      data: jsonData.data || jsonData.rows, // Prefer 'data' (SQL v1), fallback to 'rows' (legacy)
+      row_count: (jsonData.data || jsonData.rows).length,
+      execution_time_ms: jsonData.execution_time_ms || 0,
     };
   }
 
@@ -59,9 +62,12 @@ export function convertToSqlV1Format(
     jsonData.schema.fields &&
     (jsonData.rows || jsonData.data)
   ) {
+    const data = jsonData.data || jsonData.rows;
     return {
       schema: jsonData.schema,
-      rows: jsonData.rows || jsonData.data,
+      data: data, // Prefer 'data' (SQL v1), fallback to 'rows' (legacy)
+      row_count: jsonData.row_count || data.length,
+      execution_time_ms: jsonData.execution_time_ms || 0,
     };
   }
 
@@ -70,7 +76,9 @@ export function convertToSqlV1Format(
     if (jsonData.length === 0) {
       return {
         schema: { fields: [] },
-        rows: [],
+        data: [],
+        row_count: 0,
+        execution_time_ms: 0,
       };
     }
 
@@ -81,19 +89,26 @@ export function convertToSqlV1Format(
         name: key,
         data_type: inferDataType(firstRow[key]),
         nullable: true,
+        dict_id: 0,
+        dict_is_ordered: false,
+        metadata: {},
       })),
     };
 
     return {
       schema,
-      rows: jsonData,
+      data: jsonData,
+      row_count: jsonData.length,
+      execution_time_ms: 0,
     };
   }
 
   // Return empty result for any other format
   return {
     schema: { fields: [] },
-    rows: [],
+    data: [],
+    row_count: 0,
+    execution_time_ms: 0,
   };
 }
 

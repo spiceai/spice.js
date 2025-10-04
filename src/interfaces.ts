@@ -15,7 +15,7 @@ export interface SchemaField {
   dict_is_ordered: boolean;
 }
 
-export interface SqlJsonResponse {
+export interface SqlV1JsonResponse {
   row_count: number;
   schema: {
     fields: SchemaField[];

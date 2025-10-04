@@ -16,7 +16,7 @@ export class SpiceClient extends SpiceClientCommon {
 export type {
   SpiceClientConfig,
   SchemaField,
-  SqlJsonResponse,
+  SqlV1JsonResponse as SqlJsonResponse,
   RefreshAccelerationOptions,
   RefreshAccelerationResponse,
   NsqlOptions,

@@ -7,7 +7,7 @@ import type { PlatformAdapter } from './platform/types';
 import { FlightData, FlightStatus, getIpcMessage } from './flight';
 import {
   type SpiceClientConfig,
-  type SqlJsonResponse,
+  type SqlV1JsonResponse,
   type RefreshAccelerationOptions,
   type RefreshAccelerationResponse,
   type NsqlOptions,
@@ -353,7 +353,7 @@ export class SpiceClient {
    * @param queryText - The SQL query to execute
    * @returns Promise resolving to an object containing row_count, schema, data, and execution_time_ms
    */
-  async sqlJson(queryText: string): Promise<SqlJsonResponse> {
+  async sqlJson(queryText: string): Promise<SqlV1JsonResponse> {
     const startTime = Date.now();
 
     // Check if we should use gRPC/Arrow

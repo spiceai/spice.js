@@ -21,7 +21,7 @@ import {
 } from './flight';
 import {
   type SpiceClientConfig,
-  type SqlJsonResponse,
+  type SqlV1JsonResponse,
   type RefreshAccelerationOptions,
   type RefreshAccelerationResponse,
   type NsqlOptions,
@@ -357,7 +357,7 @@ class SpiceClient {
    * @param queryText - The SQL query to execute
    * @returns Promise resolving to an object containing row_count, schema, data, and execution_time_ms
    */
-  async sqlJson(queryText: string): Promise<SqlJsonResponse> {
+  async sqlJson(queryText: string): Promise<SqlV1JsonResponse> {
     const startTime = Date.now();
     const allRows: any[] = [];
     let schema: any = null;
@@ -501,7 +501,7 @@ class SpiceClient {
   private async doHttpQueryRequest(
     queryText: string,
     onData: ((data: Table) => void) | undefined = undefined,
-  ): Promise<SqlJsonResponse> {
+  ): Promise<SqlV1JsonResponse> {
     const startTime = Date.now();
 
     const response = await this.fetchInternal(

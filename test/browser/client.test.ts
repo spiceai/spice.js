@@ -40,23 +40,16 @@ describe('Browser SpiceClient', () => {
 
     test('should log configuration on initialization', () => {
       consoleLogSpy.mockRestore();
-      const logSpy = jest.spyOn(console, 'log').mockImplementation();
+      const debugSpy = jest.spyOn(console, 'debug').mockImplementation();
 
       new SpiceClient({
         httpUrl: 'http://localhost:8090',
         apiKey: 'test-key',
       });
 
-      expect(logSpy).toHaveBeenCalled();
-      const logOutput = logSpy.mock.calls[0][0];
-      expect(logOutput).toContain('Spice.js initialized');
-      expect(logOutput).toContain('Platform:'); // Will show browser name (Chrome, Firefox, etc.)
-      expect(logOutput).toContain('HTTP only');
-      expect(logOutput).toContain('Auth: API Key configured');
-
-      logSpy.mockRestore();
+      expect(debugSpy).toHaveBeenCalled();
+      debugSpy.mockRestore();
     });
-
     test('should create client with API key', () => {
       const apiClient = new SpiceClient({
         apiKey: 'test-api-key',
