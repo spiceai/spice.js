@@ -161,33 +161,75 @@ export function normalizeSchema(schema: any): any[] {
 }
 
 /**
- * Serializes an Arrow Field to JSON format matching Cloud API schema
- * Handles complex types like List, Struct, Map recursively
+ * Converts Arrow type to JSON format matching Cloud API schema
  */
-export function serializeArrowField(field: any): any {
-  const type = field.type;
+function serializeArrowType(type: any): any {
+  // Use toString() to reliably identify types across minified/non-minified builds
+  const typeStr = type.toString();
   const typeName = type.constructor.name;
 
-  // For simple types, use string representation
-  if (!type.children || type.children.length === 0) {
+  // Handle Timestamp types: { Timestamp: ['Millisecond', null] }
+  // Check for Timestamp in string representation since constructor.name may vary
+  if (typeStr.startsWith('Timestamp<') || typeName === 'Timestamp_' || typeName === 'Timestamp') {
+    const unit = type.unit; // 0=Second, 1=Millisecond, 2=Microsecond, 3=Nanosecond
+    const unitNames = ['Second', 'Millisecond', 'Microsecond', 'Nanosecond'];
+    const unitName = unitNames[unit] || 'Millisecond';
+    return { Timestamp: [unitName, type.timezone || null] };
+  }
+
+  // Handle List types: { List: { name: 'item', data_type: ..., nullable: true } }
+  // Check for List in string representation and presence of children
+  if ((typeStr.startsWith('List<') || typeName === 'List') && type.children && type.children.length > 0) {
+    const childField = type.children[0];
     return {
-      name: field.name,
-      data_type: type.toString(),
-      nullable: field.nullable,
-      dict_id: 0,
-      dict_is_ordered: false,
-      metadata: {},
+      List: {
+        name: childField.name || 'item',
+        data_type: serializeArrowType(childField.type),
+        nullable: childField.nullable !== false,
+      },
     };
   }
 
-  // For complex types (List, Struct, Map, etc.), create nested structure
-  // Match Cloud API format
-  const dataType: any = {};
-  dataType[typeName] = serializeArrowField(type.children[0]);
+  // Handle Struct types: { Struct: [...fields...] }
+  // Check for Struct in string representation and presence of children
+  if ((typeStr.startsWith('Struct<') || typeName === 'Struct') && type.children && type.children.length > 0) {
+    return {
+      Struct: type.children.map((child: any) => ({
+        name: child.name,
+        data_type: serializeArrowType(child.type),
+        nullable: child.nullable !== false,
+      })),
+    };
+  }
 
+  // Handle Map types
+  // Check for Map in string representation and presence of children
+  if ((typeStr.startsWith('Map<') || typeName === 'Map') && type.children && type.children.length > 0) {
+    const entries = type.children[0]; // Map has a single child 'entries' struct
+    if (entries.type.children && entries.type.children.length === 2) {
+      return {
+        Map: {
+          keys: serializeArrowType(entries.type.children[0].type),
+          values: serializeArrowType(entries.type.children[1].type),
+          sorted: type.keysSorted || false,
+        },
+      };
+    }
+  }
+
+  // For simple types, return the string representation
+  // (e.g., "Int64", "Float64", "Utf8", "Bool", etc.)
+  return type.toString();
+}
+
+/**
+ * Serializes an Arrow Field to JSON format matching Cloud API schema
+ * Handles complex types like List, Struct, Map, Timestamp recursively
+ */
+export function serializeArrowField(field: any): any {
   return {
     name: field.name,
-    data_type: dataType,
+    data_type: serializeArrowType(field.type),
     nullable: field.nullable,
     dict_id: 0,
     dict_is_ordered: false,

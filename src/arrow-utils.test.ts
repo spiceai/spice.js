@@ -62,7 +62,9 @@ describe('arrow-utils', () => {
       const result = convertToSqlV1Format(input);
       expect(result).toEqual({
         schema: { fields: [{ name: 'id', data_type: 'int64' }] },
-        rows: [[1], [2]],
+        data: [[1], [2]],
+        row_count: 2,
+        execution_time_ms: 0,
       });
     });
 
@@ -74,7 +76,9 @@ describe('arrow-utils', () => {
       const result = convertToSqlV1Format(input);
       expect(result).toEqual({
         schema: { fields: [{ name: 'id', data_type: 'int64' }] },
-        rows: [[1], [2]],
+        data: [[1], [2]],
+        row_count: 2,
+        execution_time_ms: 0,
       });
     });
 
@@ -90,16 +94,25 @@ describe('arrow-utils', () => {
         name: 'id',
         data_type: 'int64',
         nullable: true,
+        dict_id: 0,
+        dict_is_ordered: false,
+        metadata: {},
       });
       expect(result.schema.fields).toContainEqual({
         name: 'name',
         data_type: 'utf8',
         nullable: true,
+        dict_id: 0,
+        dict_is_ordered: false,
+        metadata: {},
       });
       expect(result.schema.fields).toContainEqual({
         name: 'active',
         data_type: 'bool',
         nullable: true,
+        dict_id: 0,
+        dict_is_ordered: false,
+        metadata: {},
       });
       expect(result.data).toEqual(input);
     });
@@ -203,11 +216,17 @@ describe('arrow-utils', () => {
         name: 'repo',
         data_type: 'VARCHAR',
         nullable: true,
+        dict_id: 0,
+        dict_is_ordered: false,
+        metadata: {},
       });
       expect(result.schema.fields[1]).toEqual({
         name: 'number',
         data_type: 'BIGINT',
         nullable: true,
+        dict_id: 0,
+        dict_is_ordered: false,
+        metadata: {},
       });
       expect(result.data).toEqual(input.rows);
     });
@@ -408,6 +427,95 @@ describe('arrow-utils', () => {
       expect(result[2].name).toBe(apiResponse[2].name);
       expect(result[2].score).toBeCloseTo(apiResponse[2].score, 2);
       expect(result[2].active).toBe(apiResponse[2].active);
+    });
+  });
+
+  describe('serializeArrowField', () => {
+    it('should serialize simple types as strings', () => {
+      const { serializeArrowField } = require('./arrow-utils');
+      const { Int64 } = require('apache-arrow');
+
+      const int64Field = { name: 'id', type: new Int64(), nullable: false };
+      const result = serializeArrowField(int64Field);
+
+      expect(result.name).toBe('id');
+      expect(result.data_type).toBe('Int64');
+      expect(result.nullable).toBe(false);
+      expect(result.dict_id).toBe(0);
+      expect(result.dict_is_ordered).toBe(false);
+    });
+
+    it('should serialize Timestamp types with unit and timezone', () => {
+      const { serializeArrowField } = require('./arrow-utils');
+      const { Timestamp, TimeUnit } = require('apache-arrow');
+
+      // TimeUnit.MILLISECOND = 1
+      const timestampField = {
+        name: 'created_at',
+        type: new Timestamp(TimeUnit.MILLISECOND, null),
+        nullable: true,
+      };
+
+      const result = serializeArrowField(timestampField);
+
+      expect(result.name).toBe('created_at');
+      expect(result.data_type).toEqual({ Timestamp: ['Millisecond', null] });
+      expect(result.nullable).toBe(true);
+    });
+
+    it('should serialize List types with nested structure', () => {
+      const { serializeArrowField } = require('./arrow-utils');
+      const { List, Field, Utf8 } = require('apache-arrow');
+
+      const listField = {
+        name: 'tags',
+        type: new List(new Field('item', new Utf8(), true)),
+        nullable: true,
+      };
+
+      const result = serializeArrowField(listField);
+
+      expect(result.name).toBe('tags');
+      expect(result.data_type).toEqual({
+        List: {
+          name: 'item',
+          data_type: 'Utf8',
+          nullable: true,
+        },
+      });
+      expect(result.nullable).toBe(true);
+    });
+
+    it('should serialize Struct types with multiple fields', () => {
+      const { serializeArrowField } = require('./arrow-utils');
+      const { Struct, Field, Utf8, Int64 } = require('apache-arrow');
+
+      const structField = {
+        name: 'user',
+        type: new Struct([
+          new Field('name', new Utf8(), true),
+          new Field('age', new Int64(), true),
+        ]),
+        nullable: false,
+      };
+      const result = serializeArrowField(structField);
+
+      expect(result.name).toBe('user');
+      expect(result.data_type).toEqual({
+        Struct: [
+          {
+            name: 'name',
+            data_type: 'Utf8',
+            nullable: true,
+          },
+          {
+            name: 'age',
+            data_type: 'Int64',
+            nullable: true,
+          },
+        ],
+      });
+      expect(result.nullable).toBe(false);
     });
   });
 });
