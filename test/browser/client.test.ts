@@ -67,7 +67,7 @@ describe('Browser SpiceClient', () => {
         'http://localhost:8090/health',
         expect.objectContaining({
           method: 'GET',
-        })
+        }),
       );
     });
 
@@ -84,7 +84,7 @@ describe('Browser SpiceClient', () => {
 
     test('isSpiceHealthy should return false on network error', async () => {
       (global.fetch as jest.Mock).mockRejectedValueOnce(
-        new Error('Network error')
+        new Error('Network error'),
       );
 
       const result = await client.isSpiceHealthy();
@@ -147,9 +147,10 @@ describe('Browser SpiceClient', () => {
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'Content-Type': 'application/json',
+            'Content-Type': 'text/plain',
+            Accept: 'application/vnd.spiceai.sql.v1+json',
           }),
-        })
+        }),
       );
     });
 
@@ -214,7 +215,7 @@ describe('Browser SpiceClient', () => {
       // Verify HTTP endpoint was called
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/v1/sql'),
-        expect.any(Object)
+        expect.any(Object),
       );
     });
 
@@ -242,7 +243,7 @@ describe('Browser SpiceClient', () => {
           headers: expect.objectContaining({
             'User-Agent': expect.stringContaining('spice.js'),
           }),
-        })
+        }),
       );
     });
   });
@@ -274,7 +275,7 @@ describe('Browser SpiceClient', () => {
         'http://localhost:8090/v1/nsql',
         expect.objectContaining({
           method: 'POST',
-        })
+        }),
       );
     });
 
@@ -325,7 +326,7 @@ describe('Browser SpiceClient', () => {
       });
 
       await expect(
-        client.refreshAcceleration('nonexistent_dataset')
+        client.refreshAcceleration('nonexistent_dataset'),
       ).rejects.toThrow();
     });
   });
@@ -369,7 +370,7 @@ describe('Browser SpiceClient', () => {
           headers: expect.objectContaining({
             'X-API-Key': 'test-api-key-123',
           }),
-        })
+        }),
       );
     });
 
@@ -422,7 +423,7 @@ describe('Browser SpiceClient', () => {
             'X-Custom-Header': 'custom-value',
             'X-Another-Header': 'another-value',
           }),
-        })
+        }),
       );
     });
   });
