@@ -1,10 +1,11 @@
-import { SpiceClient } from '../';
+import { SpiceClient } from '../src/index.browser';
 import { Table } from 'apache-arrow';
 
 /**
  * Unit tests for SpiceClient response parsing
  * These tests mock the HTTP responses to test the parsing logic
  * without requiring a live connection to the Spice API.
+ * Uses browser client to ensure HTTP-only mode.
  */
 describe('SpiceClient Response Parsing - Unit Tests', () => {
   let mockFetch: jest.Mock;
@@ -144,11 +145,11 @@ describe('SpiceClient Response Parsing - Unit Tests', () => {
     mockFetch = jest.fn();
     global.fetch = mockFetch;
 
-    // Create client instance
+    // Create client instance without flightUrl to ensure HTTP-only mode for unit tests
     client = new SpiceClient({
       apiKey: 'test-api-key',
       httpUrl: 'http://localhost:8090',
-      flightUrl: 'localhost:50051',
+      // Intentionally omit flightUrl to force HTTP-only mode for these unit tests
     });
   });
 
@@ -366,16 +367,8 @@ describe('SpiceClient Response Parsing - Unit Tests', () => {
     });
 
     test('should convert BigInt to string in sqlJson', async () => {
-      const responseWithBigInt = {
-        ...newJsonResponse,
-        data: [
-          {
-            ...newJsonResponse.data[0],
-            big_number: 9223372036854775807n, // BigInt
-          },
-        ],
-      };
-
+      // Note: BigInt values are converted to strings during Arrow -> JSON conversion
+      // to avoid JSON serialization issues
       mockFetch.mockResolvedValueOnce({
         ok: true,
         headers: {

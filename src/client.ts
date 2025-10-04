@@ -376,16 +376,21 @@ class SpiceClient {
       }
 
       // Convert each chunk's rows
-      const resultArray = table.toArray();
-      resultArray.forEach((row: any) => {
-        const plainRow: any = {};
+      // toArray() returns clean row objects with only data fields
+      const rows = table.toArray();
+      for (const row of rows) {
+        // Need to handle BigInt serialization
+        const cleanRow: any = {};
         for (const key in row) {
-          const value = row[key];
-          // Convert BigInt to string for JSON serialization
-          plainRow[key] = typeof value === 'bigint' ? value.toString() : value;
+          if (Object.prototype.hasOwnProperty.call(row, key)) {
+            const value = row[key];
+            // Convert BigInt to string for JSON serialization
+            cleanRow[key] =
+              typeof value === 'bigint' ? value.toString() : value;
+          }
         }
-        allRows.push(plainRow);
-      });
+        allRows.push(cleanRow);
+      }
     });
 
     const executionTime = Date.now() - startTime;

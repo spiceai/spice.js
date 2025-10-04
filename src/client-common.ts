@@ -381,19 +381,21 @@ export class SpiceClient {
         }
 
         // Convert Arrow table to JSON
-        const resultArray = table.toArray();
-        resultArray.forEach((row: any) => {
-          const plainRow: any = {};
+        // toArray() returns clean row objects with only data fields
+        const rows = table.toArray();
+        for (const row of rows) {
+          // Need to handle BigInt serialization
+          const cleanRow: any = {};
           for (const key in row) {
             if (Object.prototype.hasOwnProperty.call(row, key)) {
               const value = row[key];
               // Convert BigInt to string for JSON serialization
-              plainRow[key] =
+              cleanRow[key] =
                 typeof value === 'bigint' ? value.toString() : value;
             }
           }
-          allRows.push(plainRow);
-        });
+          allRows.push(cleanRow);
+        }
       });
 
       const executionTime = Date.now() - startTime;
@@ -423,7 +425,17 @@ export class SpiceClient {
         );
       }
 
-      return await response.json();
+      const jsonData = await response.json();
+      const executionTime = Date.now() - startTime;
+
+      // Response is already in V1 format, just ensure proper structure
+      return {
+        row_count:
+          jsonData.row_count || (jsonData.data || jsonData.rows || []).length,
+        schema: jsonData.schema || { fields: [] },
+        data: jsonData.data || jsonData.rows || [],
+        execution_time_ms: executionTime,
+      };
     }
   }
 

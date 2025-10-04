@@ -3,20 +3,21 @@
  * Ensures proper behavior in both gRPC/Arrow and HTTP modes
  */
 
-import { SpiceClient } from '../src/index.node';
+import { SpiceClient as BrowserClient } from '../src/index.browser';
+import { SpiceClient as NodeClient } from '../src/index.node';
 
 describe('sqlJson() Transport Mode Awareness', () => {
   describe('HTTP Mode Type Preservation', () => {
-    let httpClient: SpiceClient;
+    let httpClient: BrowserClient;
 
     beforeEach(() => {
-      // Create client that will use HTTP only (no gRPC available in tests)
-      httpClient = new SpiceClient({
-        httpUrl: 'http://localhost:8090',
-      });
-
       // Mock fetch for HTTP requests
       global.fetch = jest.fn();
+
+      // Create client that will use HTTP only (browser client has no gRPC)
+      httpClient = new BrowserClient({
+        httpUrl: 'http://localhost:8090',
+      });
     });
 
     afterEach(() => {
@@ -41,6 +42,7 @@ describe('sqlJson() Transport Mode Awareness', () => {
         ok: true,
         status: 200,
         text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+        json: jest.fn().mockResolvedValue(mockResponse),
       });
 
       const result = await httpClient.sqlJson('SELECT * FROM test');
@@ -68,6 +70,7 @@ describe('sqlJson() Transport Mode Awareness', () => {
         ok: true,
         status: 200,
         text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+        json: jest.fn().mockResolvedValue(mockResponse),
       });
 
       const result = await httpClient.sqlJson('SELECT active FROM test');
@@ -95,6 +98,7 @@ describe('sqlJson() Transport Mode Awareness', () => {
         ok: true,
         status: 200,
         text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+        json: jest.fn().mockResolvedValue(mockResponse),
       });
 
       const result = await httpClient.sqlJson('SELECT * FROM test');
@@ -123,6 +127,7 @@ describe('sqlJson() Transport Mode Awareness', () => {
         ok: true,
         status: 200,
         text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+        json: jest.fn().mockResolvedValue(mockResponse),
       });
 
       const result = await httpClient.sqlJson('SELECT * FROM test');
@@ -155,6 +160,7 @@ describe('sqlJson() Transport Mode Awareness', () => {
         ok: true,
         status: 200,
         text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+        json: jest.fn().mockResolvedValue(mockResponse),
       });
 
       const result = await httpClient.sqlJson('SELECT * FROM test');
@@ -181,6 +187,7 @@ describe('sqlJson() Transport Mode Awareness', () => {
         ok: true,
         status: 200,
         text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+        json: jest.fn().mockResolvedValue(mockResponse),
       });
 
       const result = await httpClient.sqlJson('SELECT 123 as test');
@@ -196,7 +203,7 @@ describe('sqlJson() Transport Mode Awareness', () => {
           method: 'POST',
           headers: expect.objectContaining({
             'Content-Type': 'text/plain',
-            Accept: 'application/json',
+            Accept: 'application/vnd.spiceai.sql.v1+json',
           }),
         }),
       );
@@ -214,10 +221,10 @@ describe('sqlJson() Transport Mode Awareness', () => {
       return;
     }
 
-    let cloudClient: SpiceClient;
+    let cloudClient: NodeClient;
 
     beforeAll(() => {
-      cloudClient = new SpiceClient(apiKey);
+      cloudClient = new NodeClient(apiKey);
     });
 
     test('should preserve number types in gRPC/Arrow mode', async () => {
