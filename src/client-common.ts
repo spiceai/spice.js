@@ -348,49 +348,83 @@ export class SpiceClient {
 
   /**
    * Executes a SQL query and returns results as JSON with schema metadata.
+   * Uses gRPC/Arrow if available, otherwise falls back to HTTP.
    * @param queryText - The SQL query to execute
    * @returns Promise resolving to an object containing row_count, schema, data, and execution_time_ms
    */
   async sqlJson(queryText: string): Promise<SqlJsonResponse> {
     const startTime = Date.now();
-    const allRows: any[] = [];
-    let schema: any = null;
 
-    await this.sql(queryText, (table) => {
-      // Capture schema from first chunk
-      if (!schema) {
-        schema = {
-          fields: table.schema.fields.map((field) => ({
-            name: field.name,
-            data_type: field.type.toString(),
-            nullable: field.nullable,
-            dict_id: 0,
-            dict_is_ordered: false,
-          })),
-        };
+    // Check if we should use gRPC/Arrow
+    let useGrpc = false;
+    if (this._grpcClient) {
+      useGrpc = await this._grpcClient.ensureInitialized();
+    }
+
+    if (useGrpc) {
+      // gRPC/Arrow mode: Use Arrow and convert to JSON
+      const allRows: any[] = [];
+      let schema: any = null;
+
+      await this.sql(queryText, (table) => {
+        // Capture schema from first chunk
+        if (!schema) {
+          schema = {
+            fields: table.schema.fields.map((field) => ({
+              name: field.name,
+              data_type: field.type.toString(),
+              nullable: field.nullable,
+              dict_id: 0,
+              dict_is_ordered: false,
+            })),
+          };
+        }
+
+        // Convert Arrow table to JSON
+        const resultArray = table.toArray();
+        resultArray.forEach((row: any) => {
+          const plainRow: any = {};
+          for (const key in row) {
+            if (Object.prototype.hasOwnProperty.call(row, key)) {
+              const value = row[key];
+              // Convert BigInt to string for JSON serialization
+              plainRow[key] =
+                typeof value === 'bigint' ? value.toString() : value;
+            }
+          }
+          allRows.push(plainRow);
+        });
+      });
+
+      const executionTime = Date.now() - startTime;
+      return {
+        row_count: allRows.length,
+        schema: schema || { fields: [] },
+        data: allRows,
+        execution_time_ms: executionTime,
+      };
+    } else {
+      // HTTP mode: Get JSON directly without Arrow conversion to preserve types
+      const response = await this.fetchInternal(
+        'POST',
+        '/v1/sql',
+        undefined,
+        queryText,
+        {
+          'Content-Type': 'text/plain',
+          Accept: 'application/vnd.spiceai.sql.v1+json',
+        },
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `HTTP query failed with status ${response.status}: ${errorText}`,
+        );
       }
 
-      // Convert each chunk's rows
-      const resultArray = table.toArray();
-      resultArray.forEach((row: any) => {
-        const plainRow: any = {};
-        for (const key in row) {
-          const value = row[key];
-          // Convert BigInt to string for JSON serialization
-          plainRow[key] = typeof value === 'bigint' ? value.toString() : value;
-        }
-        allRows.push(plainRow);
-      });
-    });
-
-    const executionTime = Date.now() - startTime;
-
-    return {
-      row_count: allRows.length,
-      schema: schema || { fields: [] },
-      data: allRows,
-      execution_time_ms: executionTime,
-    };
+      return await response.json();
+    }
   }
 
   /**

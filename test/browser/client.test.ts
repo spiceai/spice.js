@@ -214,6 +214,76 @@ describe('Browser SpiceClient', () => {
       expect(result).toHaveProperty('data');
       expect(result).toHaveProperty('execution_time_ms');
     });
+
+    test('should preserve numeric types in HTTP mode (sqlJson)', async () => {
+      // Test that numbers stay as numbers, not converted to strings
+      const mockResponse = {
+        schema: {
+          fields: [
+            { name: 'num', data_type: 'Int32', nullable: true },
+            { name: 'value', data_type: 'Float64', nullable: true },
+          ],
+        },
+        data: [
+          { num: 1, value: 2.5 },
+          { num: 3, value: 4.7 },
+        ],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {
+          get: jest.fn().mockReturnValue('application/json'),
+        },
+        text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+        json: jest.fn().mockResolvedValue(mockResponse),
+      });
+
+      const result = await client.sqlJson('SELECT 1 as num, 2.5 as value');
+
+      // Verify types are preserved
+      expect(result.data).toHaveLength(2);
+      expect(typeof result.data[0].num).toBe('number');
+      expect(typeof result.data[0].value).toBe('number');
+      expect(result.data[0].num).toBe(1);
+      expect(result.data[0].value).toBe(2.5);
+      // Ensure they're NOT strings
+      expect(result.data[0].num).not.toBe('1');
+      expect(result.data[0].value).not.toBe('2.5');
+    });
+
+    test('should handle array-based rows in HTTP mode (sqlJson)', async () => {
+      // Test with array-based rows (not object-based)
+      const mockResponse = {
+        schema: [
+          { name: 'id', data_type: 'Int32' },
+          { name: 'name', data_type: 'Utf8' },
+        ],
+        rows: [
+          [1, 'Alice'],
+          [2, 'Bob'],
+        ],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {
+          get: jest.fn().mockReturnValue('application/json'),
+        },
+        text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+        json: jest.fn().mockResolvedValue(mockResponse),
+      });
+
+      const result = await client.sqlJson('SELECT * FROM users');
+
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0]).toEqual([1, 'Alice']);
+      expect(result.data[1]).toEqual([2, 'Bob']);
+      // Verify number is not converted to string
+      expect(typeof result.data[0][0]).toBe('number');
+    });
   });
 
   describe('Browser-Specific Behavior', () => {
