@@ -34,9 +34,22 @@ export interface RetryModule {
 /**
  * Helper function to recursively convert Arrow structures to plain JavaScript
  */
-function convertArrowValue(value: any): any {
+function convertArrowValue(value: any, field?: any): any {
   if (value === null || value === undefined) {
     return value;
+  }
+
+  // Handle Date objects - check if field has timezone info
+  if (value instanceof Date) {
+    const hasTimezone = field?.type?.timezone != null;
+    let isoString = value.toISOString();
+    // Remove .000 milliseconds if present (before removing Z)
+    isoString = isoString.replace(/\.000Z$/, 'Z');
+    // Only remove 'Z' suffix if no timezone specified
+    if (!hasTimezone) {
+      isoString = isoString.replace(/Z$/, '');
+    }
+    return isoString;
   }
 
   // Check if it's an Arrow Vector (has toArray method and length property)
@@ -49,7 +62,9 @@ function convertArrowValue(value: any): any {
   ) {
     // Convert Arrow Vector to JavaScript array
     const arr = value.toArray();
-    return arr.map((item: any) => convertArrowValue(item));
+    // Pass field.type.children[0] for list element types
+    const childField = field?.type?.children?.[0];
+    return arr.map((item: any) => convertArrowValue(item, childField));
   }
 
   // Handle plain objects recursively (for Struct types)
@@ -60,8 +75,14 @@ function convertArrowValue(value: any): any {
     !Array.isArray(value)
   ) {
     const converted: any = {};
+    // Get field mapping for struct children
+    const fieldMap = field?.type?.children
+      ? new Map(field.type.children.map((f: any) => [f.name, f]))
+      : null;
+
     for (const key in value) {
-      converted[key] = convertArrowValue(value[key]);
+      const childField = fieldMap?.get(key);
+      converted[key] = convertArrowValue(value[key], childField);
     }
     return converted;
   }
@@ -180,7 +201,7 @@ function wrapTableForDecimalConversion(table: Table): Table {
       for (const field of listFields.concat(structFields)) {
         const value = row[field.name];
         if (value !== null && value !== undefined) {
-          const converted = convertArrowValue(value);
+          const converted = convertArrowValue(value, field);
           // Only update if conversion actually changed the value
           if (converted !== value) {
             ensureConvertedRow();
