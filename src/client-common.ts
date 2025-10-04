@@ -31,6 +31,98 @@ export interface RetryModule {
   ): Promise<T>;
 }
 
+/**
+ * Wraps an Arrow Table to handle type conversions in toArray()
+ * - Decimal types: Converts DecimalBigNum objects to numbers
+ * - Timestamp types: Converts Date objects to ISO 8601 strings (without Z for timestamps without timezone)
+ */
+function wrapTableForDecimalConversion(table: Table): Table {
+  const originalToArray = table.toArray.bind(table);
+
+  // Override toArray to convert special types
+  (table as any).toArray = function () {
+    const rows = originalToArray();
+
+    // Check which fields need conversion
+    const decimalFields = table.schema.fields.filter((f) =>
+      f.type.toString().startsWith('Decimal'),
+    );
+    const timestampFields = table.schema.fields.filter(
+      (f) =>
+        f.type.toString().startsWith('Timestamp') ||
+        f.type.toString().startsWith('Date'),
+    );
+
+    if (decimalFields.length === 0 && timestampFields.length === 0) {
+      return rows; // No special fields, return as-is
+    }
+
+    // Convert values in each row
+    return rows.map((row: any) => {
+      let hasConversions = false;
+      let convertedRow = row;
+
+      // Convert decimal values
+      for (const field of decimalFields) {
+        const value = row[field.name];
+        if (
+          value !== null &&
+          value !== undefined &&
+          value.constructor?.name === 'DecimalBigNum'
+        ) {
+          if (!hasConversions) {
+            convertedRow = { ...row };
+            hasConversions = true;
+          }
+          try {
+            const decimalStr = value.toString();
+            const scale = field.type.scale || 0;
+            convertedRow[field.name] =
+              scale > 0
+                ? parseFloat(decimalStr) / Math.pow(10, scale)
+                : parseFloat(decimalStr);
+          } catch (error) {
+            convertedRow[field.name] = value.toString();
+          }
+        }
+      }
+
+      // Convert timestamp/date values to ISO 8601 strings
+      for (const field of timestampFields) {
+        const value = row[field.name];
+        if (value !== null && value !== undefined) {
+          const hasTimezone = field.type.timezone != null;
+          if (value instanceof Date) {
+            if (!hasConversions) {
+              convertedRow = { ...row };
+              hasConversions = true;
+            }
+            const isoString = value.toISOString();
+            // Remove 'Z' suffix for timestamps without timezone
+            convertedRow[field.name] = hasTimezone
+              ? isoString
+              : isoString.replace(/Z$/, '');
+          } else if (typeof value === 'number') {
+            if (!hasConversions) {
+              convertedRow = { ...row };
+              hasConversions = true;
+            }
+            // Handle numeric timestamps
+            const date = new Date(value);
+            const isoString = date.toISOString();
+            convertedRow[field.name] = hasTimezone
+              ? isoString
+              : isoString.replace(/Z$/, '');
+          }
+        }
+      }
+
+      return convertedRow;
+    });
+  };
+
+  return table;
+}
 export class SpiceClient {
   private _apiKey?: string;
   private _flightUrl: string;
@@ -220,13 +312,16 @@ export class SpiceClient {
           schema = ipcMessage;
         } else if (onData) {
           isDataAlreadySent = true;
-          onData(tableFromIPC([schema, ipcMessage]));
+          const chunkTable = wrapTableForDecimalConversion(
+            tableFromIPC([schema, ipcMessage]),
+          );
+          onData(chunkTable);
         }
       });
 
       return new Promise((resolve, reject) => {
         resultStream.on('status', (_response: FlightStatus) => {
-          const table = tableFromIPC(chunks);
+          const table = wrapTableForDecimalConversion(tableFromIPC(chunks));
           resolve(table);
         });
 
@@ -310,7 +405,9 @@ export class SpiceClient {
 
           // Send partial results if callback provided
           if (onData) {
-            const partialTable = jsonToArrowTable(schema, sqlV1.data);
+            const partialTable = wrapTableForDecimalConversion(
+              jsonToArrowTable(schema, sqlV1.data),
+            );
             onData(partialTable);
           }
         }
@@ -319,7 +416,7 @@ export class SpiceClient {
       }
     }
 
-    return jsonToArrowTable(schema, allRows);
+    return wrapTableForDecimalConversion(jsonToArrowTable(schema, allRows));
   }
 
   private parseSingleResponse(
@@ -339,7 +436,7 @@ export class SpiceClient {
         onData(table);
       }
 
-      return jsonToArrowTable(schema, rows);
+      return wrapTableForDecimalConversion(jsonToArrowTable(schema, rows));
     } catch (error) {
       throw new Error(
         `Failed to parse query response: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -429,6 +526,29 @@ export class SpiceClient {
           // Get type information
           const typeStr = field.type.toString();
           const hasTimezone = field.type.timezone != null;
+
+          // Handle Apache Arrow Decimal types (DecimalBigNum)
+          // These need to be converted using their scale factor
+          if (
+            typeStr.startsWith('Decimal') &&
+            value.constructor?.name === 'DecimalBigNum'
+          ) {
+            try {
+              // Get the string representation and scale
+              const decimalStr = value.toString();
+              const scale = field.type.scale || 0;
+
+              // Apply the scale to get the actual decimal value
+              if (scale > 0) {
+                const scaled = parseFloat(decimalStr) / Math.pow(10, scale);
+                return scaled;
+              }
+              return parseFloat(decimalStr);
+            } catch (error) {
+              // If conversion fails, return as string
+              return value.toString();
+            }
+          }
 
           // Convert Date objects to ISO 8601 strings
           if (value instanceof Date) {
