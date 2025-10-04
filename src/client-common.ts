@@ -43,6 +43,7 @@ export class SpiceClient {
   private _grpcClient: GrpcFlightClient | null = null;
   private _retry: RetryModule;
   private _isSpiceCloud: boolean = false;
+  private _flightOnly: boolean = false;
 
   public constructor(
     params: string | SpiceClientConfig = {},
@@ -60,6 +61,7 @@ export class SpiceClient {
       this._httpUrl = 'https://data.spiceai.io';
       this._flightUrl = 'flight.spiceai.io:443';
       this._userAgent = platform.getUserAgent();
+      this._flightOnly = false;
     } else {
       const {
         apiKey,
@@ -68,11 +70,13 @@ export class SpiceClient {
         flightTlsEnabled,
         userAgent,
         customHeaders,
+        flightOnly,
       } = params;
 
       this._apiKey = apiKey;
       this._httpUrl = httpUrl || 'http://127.0.0.1:8090';
       this._flightUrl = flightUrl || '127.0.0.1:50051';
+      this._flightOnly = flightOnly || false;
 
       // More explicit TLS check to avoid false positives
       const isLocalhost =
@@ -92,7 +96,13 @@ export class SpiceClient {
     }
 
     // Determine if this is Spice Cloud endpoint (compute once)
-    this._isSpiceCloud = this._httpUrl.includes('.spiceai.io');
+    try {
+      const url = new URL(this._httpUrl);
+      const hostname = url.hostname.toLowerCase();
+      this._isSpiceCloud = hostname.endsWith('.spiceai.io');
+    } catch {
+      this._isSpiceCloud = false;
+    }
 
     // Initialize gRPC client if platform supports it
     if (platform.supportsGrpc() && GrpcClientClass) {
@@ -115,7 +125,9 @@ export class SpiceClient {
     // Determine transport mode
     let transportMode: string;
     if (supportsGrpc && this._grpcClient) {
-      transportMode = `Arrow Flight (gRPC) with HTTP fallback`;
+      transportMode = this._flightOnly
+        ? `Arrow Flight (gRPC) only`
+        : `Arrow Flight (gRPC) with HTTP fallback`;
     } else if (supportsGrpc && !this._grpcClient) {
       transportMode = 'HTTP only (gRPC client not initialized)';
     } else {
@@ -164,6 +176,20 @@ export class SpiceClient {
       if (useGrpc) {
         return this.doGrpcQueryRequest(queryText, onData);
       }
+
+      // If flightOnly mode is enabled and gRPC failed, throw error
+      if (this._flightOnly) {
+        throw new Error(
+          'gRPC Arrow Flight connection failed and flightOnly mode is enabled. Cannot fallback to HTTP.',
+        );
+      }
+    }
+
+    // If flightOnly mode is enabled but no gRPC client, throw error
+    if (this._flightOnly) {
+      throw new Error(
+        'flightOnly mode is enabled but gRPC client is not available on this platform',
+      );
     }
 
     // Fallback to HTTP
@@ -360,6 +386,20 @@ export class SpiceClient {
     let useGrpc = false;
     if (this._grpcClient) {
       useGrpc = await this._grpcClient.ensureInitialized();
+
+      // If flightOnly mode is enabled and gRPC failed, throw error
+      if (!useGrpc && this._flightOnly) {
+        throw new Error(
+          'gRPC Arrow Flight connection failed and flightOnly mode is enabled. Cannot fallback to HTTP.',
+        );
+      }
+    }
+
+    // If flightOnly mode is enabled but no gRPC client, throw error
+    if (this._flightOnly && !useGrpc) {
+      throw new Error(
+        'flightOnly mode is enabled but gRPC client is not available on this platform',
+      );
     }
 
     if (useGrpc) {
@@ -389,8 +429,28 @@ export class SpiceClient {
             if (column) {
               let value = column.get(i);
 
+              // Convert Date objects to ISO 8601 strings
+              // Arrow can return Date objects for timestamp/date columns
+              if (value instanceof Date) {
+                value = value.toISOString();
+              }
+              // Convert numeric timestamps/dates to ISO 8601 strings
+              // Arrow Timestamp types store milliseconds since epoch as numbers
+              // Check if this is a timestamp or date column by examining the field type
+              else if (typeof value === 'number') {
+                const typeStr = field.type.toString();
+                if (
+                  typeStr.startsWith('Timestamp') ||
+                  typeStr.startsWith('Date32') ||
+                  typeStr.startsWith('Date64')
+                ) {
+                  // Convert milliseconds since epoch to ISO 8601 string
+                  // e.g., 1628505739000 -> "2021-08-09T10:42:19.000Z"
+                  value = new Date(value).toISOString();
+                }
+              }
               // Convert BigInt to number if within safe range, otherwise to string
-              if (typeof value === 'bigint') {
+              else if (typeof value === 'bigint') {
                 // Check if BigInt is within JavaScript's safe integer range
                 if (
                   value >= BigInt(Number.MIN_SAFE_INTEGER) &&

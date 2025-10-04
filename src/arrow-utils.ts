@@ -1,4 +1,4 @@
-import { Table, tableFromArrays, tableFromJSON } from 'apache-arrow';
+import { Table, tableFromArrays } from 'apache-arrow';
 import { SqlV1JsonResponse } from './interfaces';
 
 /**
@@ -113,7 +113,7 @@ export function convertToSqlV1Format(
 }
 
 /**
- * Converts JSON data to Arrow Table using native Arrow conversion
+ * Converts JSON data to Arrow Table using schema-aware conversion
  */
 export function jsonToArrowTable(schema: any[], rows: any[]): Table {
   // Handle empty results
@@ -125,20 +125,76 @@ export function jsonToArrowTable(schema: any[], rows: any[]): Table {
     return tableFromArrays(columns);
   }
 
-  // Convert array-based rows to objects if needed
-  const rowObjects = rows.map((row: any) => {
-    if (Array.isArray(row)) {
-      const obj: any = {};
-      schema.forEach((col: any, idx: number) => {
-        obj[col.name] = row[idx];
-      });
-      return obj;
-    }
-    return row;
+  // Build columns from rows using schema information
+  const columns: { [key: string]: any[] } = {};
+
+  // Initialize empty arrays for each column
+  schema.forEach((col: any) => {
+    columns[col.name] = [];
   });
 
-  // Use Arrow's native JSON to Table conversion
-  return tableFromJSON(rowObjects);
+  // Populate column arrays from rows
+  rows.forEach((row: any) => {
+    if (Array.isArray(row)) {
+      // Handle array-based rows
+      schema.forEach((col: any, idx: number) => {
+        columns[col.name].push(row[idx]);
+      });
+    } else {
+      // Handle object-based rows
+      schema.forEach((col: any) => {
+        const value = row[col.name];
+        // Convert undefined to null for Arrow compatibility
+        columns[col.name].push(value === undefined ? null : value);
+      });
+    }
+  });
+
+  // Use tableFromArrays - it will infer types from the data
+  // Arrow's tableFromArrays can handle most types, but may struggle with:
+  // - Empty arrays (can't infer element type)
+  // - Mixed-type arrays
+  // - Complex nested structures
+  try {
+    return tableFromArrays(columns);
+  } catch (error) {
+    // If tableFromArrays fails, try converting problematic values
+    const simpleColumns: { [key: string]: any[] } = {};
+
+    schema.forEach((col: any) => {
+      simpleColumns[col.name] = columns[col.name].map((val: any) => {
+        if (val === null || val === undefined) return null;
+
+        // Handle arrays - keep as-is, Arrow will try to infer the type
+        if (Array.isArray(val)) {
+          return val;
+        }
+
+        // Stringify objects that aren't Dates
+        if (typeof val === 'object' && !(val instanceof Date)) {
+          return JSON.stringify(val);
+        }
+
+        return val;
+      });
+    });
+
+    // Try again with simplified columns
+    try {
+      return tableFromArrays(simpleColumns);
+    } catch (secondError) {
+      // Last resort: convert everything to strings
+      const stringColumns: { [key: string]: any[] } = {};
+      schema.forEach((col: any) => {
+        stringColumns[col.name] = simpleColumns[col.name].map((val: any) => {
+          if (val === null || val === undefined) return null;
+          if (typeof val === 'string') return val;
+          return JSON.stringify(val);
+        });
+      });
+      return tableFromArrays(stringColumns);
+    }
+  }
 }
 
 /**
@@ -181,7 +237,7 @@ function serializeArrowType(type: any): any {
     return { Timestamp: [unitName, type.timezone || null] };
   }
 
-  // Handle List types: { List: { name: 'item', data_type: ..., nullable: true } }
+  // Handle List types: { List: { name: 'item', data_type: ..., nullable: true, dict_id: 0, dict_is_ordered: false, metadata: {} } }
   // Check for List in string representation and presence of children
   if (
     (typeStr.startsWith('List<') || typeName === 'List') &&
@@ -194,6 +250,9 @@ function serializeArrowType(type: any): any {
         name: childField.name || 'item',
         data_type: serializeArrowType(childField.type),
         nullable: childField.nullable !== false,
+        dict_id: 0,
+        dict_is_ordered: false,
+        metadata: {},
       },
     };
   }

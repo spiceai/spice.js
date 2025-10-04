@@ -5,6 +5,12 @@ export interface SpiceClientConfig {
   flightTlsEnabled?: boolean;
   userAgent?: string;
   customHeaders?: { [key: string]: string };
+  /**
+   * If true, only use gRPC Arrow Flight without HTTP fallback.
+   * Will throw an error if gRPC is not available.
+   * @default false
+   */
+  flightOnly?: boolean;
 }
 
 export interface SchemaField {
