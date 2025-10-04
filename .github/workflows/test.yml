@@ -15,7 +15,7 @@ on:
 
 jobs:
   browser-tests:
-    name: Browser Tests (Node.JS ${{ matrix.node }})
+    name: Browser Compatibility Tests (using Node.js ${{ matrix.node }} with jsdom)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set up NodeJS
+      - name: Set up Node.js for test runner
         uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
@@ -35,13 +35,14 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build project
+      - name: Build browser bundle
         run: npm run build
 
-      - name: Run browser tests
+      - name: Run browser compatibility tests
         run: npm run test:browser
 
-  test:
+  local-runtime-tests:
+    name: Local Runtime Tests on ${{ matrix.os }} with Node.js ${{ matrix.node }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -53,11 +54,10 @@ jobs:
           - 20
           - 22
           - 24
-    name: Test with spice runtime on ${{ matrix.os }} Node.JS ${{ matrix.node }}
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set up NodeJS
+      - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
@@ -104,7 +104,7 @@ jobs:
           psql -h localhost -U postgres -d testdb < test/scripts/setup-data-postgresql.sql
           psql -h localhost -U postgres -d testdb -c 'SELECT * FROM test_postgresql_table;'
 
-      - name: Install Spice (https://install.spiceai.org) (Linux)
+      - name: Install Spice (https://install.spiceai.org)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -127,6 +127,20 @@ jobs:
       - name: Run Node.js local runtime tests
         run: npm run test:node -- test/local-runtime.test.ts test/user-agent.test.ts
 
+      - name: Stop spice and check logs
+        if: always()
+        run: |
+          killall spiced || true
+          cat test/scripts/spice.log
+
+  vercel-setup:
+    name: Setup Vercel Endpoint
+    runs-on: ubuntu-latest
+    outputs:
+      vercel-api-endpoint: ${{ steps.vercel.outputs.vercel-api-endpoint }}
+    steps:
+      - uses: actions/checkout@v5
+
       - name: Setup Vercel endpoint
         id: vercel
         uses: ./.github/actions/setup-vercel-endpoint
@@ -135,18 +149,39 @@ jobs:
           vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           branch-name: ${{ github.head_ref || github.ref_name }}
 
-      - name: Running cloud tests
-        run: |
-          npm run test:node -- test/cloud.test.ts
+  cloud-tests:
+    name: Cloud Tests on ${{ matrix.os }} with Node.js ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    needs: vercel-setup
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+        node:
+          - 20
+          - 22
+          - 24
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run cloud tests
+        run: npm run test:node -- test/cloud.test.ts
         env:
           SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }} # spice.ai/spiceai/spice-js
           HTTP_URL: ${{ secrets.HTTP_URL || 'https://data.spiceai.io' }}
           FLIGHT_URL: ${{ secrets.FLIGHT_URL || 'flight.spiceai.io:443' }}
-          VERCEL_ENDPOINT: ${{ steps.vercel.outputs.vercel-api-endpoint }}
+          VERCEL_ENDPOINT: ${{ needs.vercel-setup.outputs.vercel-api-endpoint }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-
-      - name: Stop spice and check logs
-        if: always()
-        run: |
-          killall spice || true
-          cat test/scripts/spice.log
