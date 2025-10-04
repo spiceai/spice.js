@@ -2,7 +2,7 @@
  * Common SpiceClient implementation supporting both Node.js and Browser environments
  */
 
-import { Table, tableFromIPC, tableFromArrays } from 'apache-arrow';
+import { Table, tableFromIPC } from 'apache-arrow';
 import type { PlatformAdapter } from './platform/types';
 import { FlightData, FlightStatus, getIpcMessage } from './flight';
 import {
@@ -14,6 +14,11 @@ import {
   type NsqlResponse,
 } from './interfaces';
 import type { GrpcFlightClient } from './grpc/client.node';
+import {
+  jsonToArrowTable,
+  convertToSqlV1Format,
+  normalizeSchema,
+} from './arrow-utils';
 
 // Retry will be imported by the platform-specific entry point
 export interface RetryModule {
@@ -179,127 +184,80 @@ export class SpiceClient {
       );
     }
 
-    const contentType = response.headers.get('content-type') || '';
+    const body = await response.text();
 
-    // Handle streaming JSON responses
-    if (contentType.includes('application/json')) {
-      const body = await response.text();
+    // Try to parse as newline-delimited JSON (streaming)
+    const lines = body
+      .trim()
+      .split('\n')
+      .filter((line: string) => line.trim());
 
-      // Try to parse as newline-delimited JSON (streaming)
-      const lines = body
-        .trim()
-        .split('\n')
-        .filter((line: string) => line.trim());
-
-      if (lines.length > 1) {
-        // Multiple lines = streaming response
-        const allRows: any[] = [];
-        let schema: any = null;
-
-        for (const line of lines) {
-          try {
-            const jsonData = JSON.parse(line);
-
-            // Extract schema from first response
-            if (!schema && jsonData.schema) {
-              // Handle schema - it may be an object with fields property or an array
-              schema = jsonData.schema.fields || jsonData.schema;
-            }
-
-            // Accumulate rows (support both 'rows' and 'data' field names)
-            const rowsData = jsonData.rows || jsonData.data;
-            if (rowsData && Array.isArray(rowsData)) {
-              allRows.push(...rowsData);
-
-              // If onData callback is provided, send partial results
-              if (onData && rowsData.length > 0) {
-                const partialTable = this.jsonToArrowTable(
-                  schema || [],
-                  rowsData,
-                );
-                onData(partialTable);
-              }
-            }
-          } catch (parseError) {
-            console.warn(`[spice.js] Failed to parse JSON line: ${parseError}`);
-          }
-        }
-
-        // Return final table with all rows
-        console.log('[DEBUG] Streaming response:', {
-          hasSchema: !!schema,
-          schemaLength: Array.isArray(schema) ? schema.length : 'not array',
-          totalRows: allRows.length,
-          linesProcessed: lines.length,
-        });
-        return this.jsonToArrowTable(schema || [], allRows);
-      }
-
-      // Single line or entire response = parse as single JSON object
-      // Note: body was already read with response.text() above
-      try {
-        const jsonData: any = JSON.parse(body);
-
-        if (!jsonData) {
-          throw new Error('Empty response body');
-        }
-
-        // Handle schema - it may be an object with fields property or an array
-        const schema = jsonData.schema?.fields || jsonData.schema || [];
-        // Support both 'rows' and 'data' field names (sqlJson format uses 'data')
-        const rows = jsonData.rows || jsonData.data || [];
-
-        console.log('[DEBUG] Non-streaming response:', {
-          hasSchema: !!jsonData.schema,
-          schemaType: typeof jsonData.schema,
-          schemaLength: Array.isArray(schema) ? schema.length : 'not array',
-          hasRows: !!(jsonData.rows || jsonData.data),
-          rowsLength: Array.isArray(rows) ? rows.length : 'not array',
-          jsonDataKeys: Object.keys(jsonData),
-        });
-
-        return this.jsonToArrowTable(schema, rows);
-      } catch (error) {
-        throw new Error(
-          `Failed to parse query response: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        );
-      }
+    // Handle streaming responses (multiple JSON objects)
+    if (lines.length > 1) {
+      return this.parseStreamingResponse(lines, onData);
     }
 
-    // Should not reach here
-    throw new Error('Unexpected response format');
+    // Handle single response
+    return this.parseSingleResponse(body, onData);
   }
 
-  private jsonToArrowTable(schema: any[], rows: any[]): Table {
-    // Convert JSON response to Arrow Table format
-    const columns: { [key: string]: any[] } = {};
+  private parseStreamingResponse(
+    lines: string[],
+    onData: ((data: Table) => void) | undefined,
+  ): Table {
+    const allRows: any[] = [];
+    let schema: any[] = [];
 
-    // Ensure schema is an array
-    if (!Array.isArray(schema)) {
-      throw new Error('Invalid schema: expected an array');
+    for (const line of lines) {
+      try {
+        const jsonData = JSON.parse(line);
+        const sqlV1 = convertToSqlV1Format(jsonData);
+
+        // Extract schema from first response
+        if (schema.length === 0) {
+          schema = normalizeSchema(sqlV1.schema);
+        }
+
+        // Accumulate rows
+        if (sqlV1.rows.length > 0) {
+          allRows.push(...sqlV1.rows);
+
+          // Send partial results if callback provided
+          if (onData) {
+            const partialTable = jsonToArrowTable(schema, sqlV1.rows);
+            onData(partialTable);
+          }
+        }
+      } catch (parseError) {
+        console.warn(`[spice.js] Failed to parse JSON line: ${parseError}`);
+      }
     }
 
-    // Initialize columns
-    schema.forEach((col: any) => {
-      columns[col.name] = [];
-    });
+    return jsonToArrowTable(schema, allRows);
+  }
 
-    // Ensure rows is an array
-    if (!Array.isArray(rows)) {
-      throw new Error('Invalid rows: expected an array');
+  private parseSingleResponse(
+    body: string,
+    onData: ((data: Table) => void) | undefined,
+  ): Table {
+    try {
+      const jsonData = JSON.parse(body);
+      const sqlV1 = convertToSqlV1Format(jsonData);
+      const schema = normalizeSchema(sqlV1.schema);
+      const rows = sqlV1.rows;
+
+      // Send results via callback if provided
+      if (onData && rows.length > 0) {
+        const table = jsonToArrowTable(schema, rows);
+        onData(table);
+      }
+
+      return jsonToArrowTable(schema, rows);
+    } catch (error) {
+      throw new Error(
+        `Failed to parse query response: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
-
-    // Populate columns with row data
-    rows.forEach((row: any) => {
-      schema.forEach((col: any, idx: number) => {
-        // Handle both array-based and object-based rows
-        const value = Array.isArray(row) ? row[idx] : row[col.name];
-        columns[col.name].push(value);
-      });
-    });
-
-    // Use Apache Arrow's tableFromArrays to create the table
-    return tableFromArrays(columns);
   }
 
   /**

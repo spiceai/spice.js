@@ -68,7 +68,7 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.browser.json --noEmit",
     "run": "node dist/node/index.node.js",
     "pretest": "npm run build",
-    "test": "npm run test:node && npm run test:browser",
+    "test": "jest",
     "test:node": "jest --config jest.config.node.js",
     "test:browser": "jest --config jest.config.browser.js",
     "test:watch": "jest --watch",
