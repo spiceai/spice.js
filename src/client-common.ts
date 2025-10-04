@@ -166,6 +166,14 @@ export class SpiceClient {
     queryText: string,
     onData: ((data: Table) => void) | undefined = undefined,
   ): Promise<Table> {
+    // Determine if this is data.spiceai.io endpoint
+    const isSpiceCloud = this._httpUrl.includes('data.spiceai.io');
+
+    // Use appropriate Accept header based on endpoint
+    const acceptHeader = isSpiceCloud
+      ? 'application/vnd.spiceai.sql.v1+json' // data.spiceai.io returns schema with 'data' field
+      : 'application/json'; // OSS returns plain JSON array
+
     const response = await this.fetchInternal(
       'POST',
       '/v1/sql',
@@ -173,7 +181,7 @@ export class SpiceClient {
       queryText,
       {
         'Content-Type': 'text/plain',
-        Accept: 'application/vnd.spiceai.sql.v1+json',
+        Accept: acceptHeader,
       },
     );
 
@@ -194,16 +202,17 @@ export class SpiceClient {
 
     // Handle streaming responses (multiple JSON objects)
     if (lines.length > 1) {
-      return this.parseStreamingResponse(lines, onData);
+      return this.parseStreamingResponse(lines, onData, isSpiceCloud);
     }
 
     // Handle single response
-    return this.parseSingleResponse(body, onData);
+    return this.parseSingleResponse(body, onData, isSpiceCloud);
   }
 
   private parseStreamingResponse(
     lines: string[],
     onData: ((data: Table) => void) | undefined,
+    isSpiceAI: boolean,
   ): Table {
     const allRows: any[] = [];
     let schema: any[] = [];
@@ -211,7 +220,7 @@ export class SpiceClient {
     for (const line of lines) {
       try {
         const jsonData = JSON.parse(line);
-        const sqlV1 = convertToSqlV1Format(jsonData);
+        const sqlV1 = convertToSqlV1Format(jsonData, isSpiceAI);
 
         // Extract schema from first response
         if (schema.length === 0) {
@@ -239,10 +248,11 @@ export class SpiceClient {
   private parseSingleResponse(
     body: string,
     onData: ((data: Table) => void) | undefined,
+    isSpiceAI: boolean,
   ): Table {
     try {
       const jsonData = JSON.parse(body);
-      const sqlV1 = convertToSqlV1Format(jsonData);
+      const sqlV1 = convertToSqlV1Format(jsonData, isSpiceAI);
       const schema = normalizeSchema(sqlV1.schema);
       const rows = sqlV1.rows;
 

@@ -142,6 +142,71 @@ describe('arrow-utils', () => {
       expect(fieldsByName.created.data_type).toBe('timestamp');
       expect(fieldsByName.count.data_type).toBe('int64');
     });
+
+    it('should handle data.spiceai.io format with rows field', () => {
+      // data.spiceai.io with application/json returns schema with 'rows'
+      const input = {
+        schema: { fields: [{ name: 'id', data_type: 'int64' }] },
+        rows: [{ id: 1 }, { id: 2 }],
+      };
+      const result = convertToSqlV1Format(input, true);
+
+      expect(result.schema).toEqual(input.schema);
+      expect(result.rows).toEqual(input.rows);
+    });
+
+    it('should handle OSS format (plain array)', () => {
+      // OSS with application/json returns plain array
+      const input = [
+        { id: 1, name: 'Alice' },
+        { id: 2, name: 'Bob' },
+      ];
+      const result = convertToSqlV1Format(input, false);
+
+      expect(result.schema.fields).toHaveLength(2);
+      expect(result.rows).toEqual(input);
+    });
+
+    it('should handle SQL v1 format with data field', () => {
+      // Both endpoints with application/vnd.spiceai.sql.v1+json return 'data'
+      const input = {
+        schema: { fields: [{ name: 'id', data_type: 'int64' }] },
+        data: [{ id: 1 }, { id: 2 }],
+      };
+      const result = convertToSqlV1Format(input);
+
+      expect(result.schema).toEqual(input.schema);
+      expect(result.rows).toEqual(input.data);
+    });
+
+    it('should handle Spice Cloud application/json format with schema array', () => {
+      // Spice Cloud with application/json returns schema as array with nested type objects
+      const input = {
+        rowCount: 2,
+        schema: [
+          { name: 'repo', type: { name: 'VARCHAR' } },
+          { name: 'number', type: { name: 'BIGINT' } },
+        ],
+        rows: [
+          { repo: 'spiceai/spiceai', number: 1 },
+          { repo: 'spiceai/spiceai', number: 2 },
+        ],
+      };
+      const result = convertToSqlV1Format(input, true);
+
+      expect(result.schema.fields).toHaveLength(2);
+      expect(result.schema.fields[0]).toEqual({
+        name: 'repo',
+        data_type: 'VARCHAR',
+        nullable: true,
+      });
+      expect(result.schema.fields[1]).toEqual({
+        name: 'number',
+        data_type: 'BIGINT',
+        nullable: true,
+      });
+      expect(result.rows).toEqual(input.rows);
+    });
   });
 
   describe('normalizeSchema', () => {

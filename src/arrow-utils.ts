@@ -17,21 +17,64 @@ export function inferDataType(value: any): string {
 
 /**
  * Converts a plain JSON response to SQL v1 format
+ *
+ * Handles different response formats:
+ * - data.spiceai.io with application/json: schema array with 'rows' field
+ * - data.spiceai.io with application/vnd.spiceai.sql.v1+json: schema object with 'data' field
+ * - OSS with application/json: plain array of objects
+ * - OSS with application/vnd.spiceai.sql.v1+json: schema object with 'data' field
+ *
+ * @param jsonData - The JSON response data
+ * @param _isSpiceAI - Whether this is from data.spiceai.io endpoint (reserved for future use)
  */
-export function convertToSqlV1Format(jsonData: any): {
+export function convertToSqlV1Format(
+  jsonData: any,
+  _isSpiceAI: boolean = false,
+): {
   schema: { fields: any[] };
   rows: any[];
 } {
-  // If already in SQL v1 format, return as-is
-  if (jsonData.schema && (jsonData.rows || jsonData.data)) {
+  // Handle Spice Cloud application/json format with schema as array
+  if (
+    jsonData.schema &&
+    Array.isArray(jsonData.schema) &&
+    (jsonData.rows || jsonData.data)
+  ) {
+    // Convert schema array to fields format
+    const fields = jsonData.schema.map((field: any) => ({
+      name: field.name,
+      data_type: field.type?.name || 'utf8',
+      nullable: true,
+    }));
+
+    return {
+      schema: { fields },
+      rows: jsonData.rows || jsonData.data,
+    };
+  }
+
+  // If already in SQL v1 format with explicit schema object
+  if (
+    jsonData.schema &&
+    jsonData.schema.fields &&
+    (jsonData.rows || jsonData.data)
+  ) {
     return {
       schema: jsonData.schema,
       rows: jsonData.rows || jsonData.data,
     };
   }
 
-  // If it's an array of objects, infer schema from first row
-  if (Array.isArray(jsonData) && jsonData.length > 0) {
+  // If it's a plain array (data.spiceai.io with application/json)
+  if (Array.isArray(jsonData)) {
+    if (jsonData.length === 0) {
+      return {
+        schema: { fields: [] },
+        rows: [],
+      };
+    }
+
+    // Infer schema from first row
     const firstRow = jsonData[0];
     const schema = {
       fields: Object.keys(firstRow).map((key) => ({
@@ -47,7 +90,7 @@ export function convertToSqlV1Format(jsonData: any): {
     };
   }
 
-  // Return empty result
+  // Return empty result for any other format
   return {
     schema: { fields: [] },
     rows: [],
