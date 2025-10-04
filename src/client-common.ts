@@ -18,6 +18,7 @@ import {
   jsonToArrowTable,
   convertToSqlV1Format,
   normalizeSchema,
+  serializeArrowField,
 } from './arrow-utils';
 
 // Retry will be imported by the platform-specific entry point
@@ -150,7 +151,7 @@ export class SpiceClient {
       );
     }
 
-    console.log(configLines.join('\n'));
+    console.debug(configLines.join('\n'));
   }
 
   private async doQueryRequest(
@@ -370,13 +371,9 @@ export class SpiceClient {
         // Capture schema from first chunk
         if (!schema) {
           schema = {
-            fields: table.schema.fields.map((field) => ({
-              name: field.name,
-              data_type: field.type.toString(),
-              nullable: field.nullable,
-              dict_id: 0,
-              dict_is_ordered: false,
-            })),
+            fields: table.schema.fields.map((field) =>
+              serializeArrowField(field),
+            ),
           };
         }
 

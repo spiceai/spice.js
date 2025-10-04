@@ -144,3 +144,38 @@ export function normalizeSchema(schema: any): any[] {
 
   return [];
 }
+
+/**
+ * Serializes an Arrow Field to JSON format matching Cloud API schema
+ * Handles complex types like List, Struct, Map recursively
+ */
+export function serializeArrowField(field: any): any {
+  const type = field.type;
+  const typeName = type.constructor.name;
+
+  // For simple types, use string representation
+  if (!type.children || type.children.length === 0) {
+    return {
+      name: field.name,
+      data_type: type.toString(),
+      nullable: field.nullable,
+      dict_id: 0,
+      dict_is_ordered: false,
+      metadata: {},
+    };
+  }
+
+  // For complex types (List, Struct, Map, etc.), create nested structure
+  // Match Cloud API format
+  const dataType: any = {};
+  dataType[typeName] = serializeArrowField(type.children[0]);
+
+  return {
+    name: field.name,
+    data_type: dataType,
+    nullable: field.nullable,
+    dict_id: 0,
+    dict_is_ordered: false,
+    metadata: {},
+  };
+}
