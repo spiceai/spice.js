@@ -87,130 +87,211 @@ describe('local', () => {
       expect(isHealthy).toBe(true);
     });
 
-    test('.sql() should work in flightOnly mode and return Arrow Table', async () => {
-      const table = await flightOnlyClient.query(
-        'SELECT id, int2_column, int4_column, float4_column, text_column, bool_column FROM test_postgresql_table_not_accelerated ORDER BY id LIMIT 3',
-      );
+    test('.sql() and .sqlJson() should return consistent data', async () => {
+      const query =
+        'SELECT id, int2_column, int4_column, float4_column, text_column, bool_column FROM test_postgresql_table_not_accelerated ORDER BY id LIMIT 3';
 
-      // Verify we got an Arrow Table
+      // Get data from both methods
+      const table = await flightOnlyClient.query(query);
+      const jsonResult = await flightOnlyClient.sqlJson(query);
+
+      // Verify Arrow Table
       expect(table).toBeDefined();
       expect(table.toArray).toBeDefined();
       expect(table.schema).toBeDefined();
 
-      // Verify data with actual values
-      const rows = table.toArray();
-      expect(rows).toHaveLength(3);
+      // Verify JSON result
+      expect(jsonResult).toHaveProperty('data');
+      expect(jsonResult).toHaveProperty('schema');
 
-      // First row values
-      expect(rows[0].id).toBe(1);
-      expect(rows[0].int2_column).toBe(1);
-      expect(rows[0].int4_column).toBe(2);
-      expect(rows[0].float4_column).toBeCloseTo(4.0);
-      expect(rows[0].text_column).toBe('test');
-      expect(rows[0].bool_column).toBe(true);
+      // Convert Arrow to array for comparison
+      const arrowRows = table.toArray();
+      const jsonRows = jsonResult.data;
 
-      // Third row should have NULLs
-      expect(rows[2].id).toBe(3);
-      expect(rows[2].int2_column).toBeNull();
-      expect(rows[2].text_column).toBeNull();
+      // Both should have same number of rows
+      expect(arrowRows).toHaveLength(3);
+      expect(jsonRows).toHaveLength(3);
+      expect(jsonResult.row_count).toBe(3);
+
+      // Verify first row values are identical
+      expect(arrowRows[0].id).toBe(jsonRows[0].id);
+      expect(arrowRows[0].id).toBe(1);
+
+      expect(arrowRows[0].int2_column).toBe(jsonRows[0].int2_column);
+      expect(arrowRows[0].int2_column).toBe(1);
+
+      expect(arrowRows[0].int4_column).toBe(jsonRows[0].int4_column);
+      expect(arrowRows[0].int4_column).toBe(2);
+
+      expect(arrowRows[0].float4_column).toBeCloseTo(jsonRows[0].float4_column);
+      expect(arrowRows[0].float4_column).toBeCloseTo(4.0);
+
+      expect(arrowRows[0].text_column).toBe(jsonRows[0].text_column);
+      expect(arrowRows[0].text_column).toBe('test');
+
+      expect(arrowRows[0].bool_column).toBe(jsonRows[0].bool_column);
+      expect(arrowRows[0].bool_column).toBe(true);
+
+      // Verify third row NULLs are consistent
+      expect(arrowRows[2].id).toBe(jsonRows[2].id);
+      expect(arrowRows[2].id).toBe(3);
+
+      expect(arrowRows[2].int2_column).toBeNull();
+      expect(jsonRows[2].int2_column).toBeNull();
+
+      expect(arrowRows[2].text_column).toBeNull();
+      expect(jsonRows[2].text_column).toBeNull();
     });
 
-    test('.sqlJson() should work in flightOnly mode and preserve numeric types', async () => {
-      const result = await flightOnlyClient.sqlJson(
-        'SELECT id, int2_column, int4_column, int8_column, float4_column, float8_column, numeric_column FROM test_postgresql_table_not_accelerated ORDER BY id LIMIT 3',
-      );
+    test('.sql() and .sqlJson() should return identical numeric types', async () => {
+      const query =
+        'SELECT id, int2_column, int4_column, int8_column, float4_column, float8_column, numeric_column FROM test_postgresql_table_not_accelerated ORDER BY id LIMIT 3';
 
-      // Verify response structure
-      expect(result).toHaveProperty('data');
-      expect(result).toHaveProperty('schema');
-      expect(result.data).toHaveLength(3);
+      // Get data from both methods
+      const table = await flightOnlyClient.query(query);
+      const jsonResult = await flightOnlyClient.sqlJson(query);
 
-      // Verify numeric types are preserved (not converted to strings) and values are correct
-      const firstRow = result.data[0];
-      expect(firstRow.id).toBe(1);
-      expect(typeof firstRow.id).toBe('number');
+      const arrowRows = table.toArray();
+      const jsonRows = jsonResult.data;
 
-      expect(firstRow.int2_column).toBe(1);
-      expect(typeof firstRow.int2_column).toBe('number');
+      // Verify row counts match
+      expect(arrowRows).toHaveLength(3);
+      expect(jsonRows).toHaveLength(3);
 
-      expect(firstRow.int4_column).toBe(2);
-      expect(typeof firstRow.int4_column).toBe('number');
+      // Verify first row: all numeric types are identical and preserved as numbers
+      expect(arrowRows[0].id).toBe(jsonRows[0].id);
+      expect(arrowRows[0].id).toBe(1);
+      expect(typeof jsonRows[0].id).toBe('number');
 
-      expect(firstRow.int8_column).toBe(3);
-      expect(typeof firstRow.int8_column).toBe('number');
+      expect(arrowRows[0].int2_column).toBe(jsonRows[0].int2_column);
+      expect(arrowRows[0].int2_column).toBe(1);
+      expect(typeof jsonRows[0].int2_column).toBe('number');
 
-      expect(firstRow.float4_column).toBeCloseTo(4.0);
-      expect(typeof firstRow.float4_column).toBe('number');
+      expect(arrowRows[0].int4_column).toBe(jsonRows[0].int4_column);
+      expect(arrowRows[0].int4_column).toBe(2);
+      expect(typeof jsonRows[0].int4_column).toBe('number');
 
-      expect(firstRow.float8_column).toBeCloseTo(5.0);
-      expect(typeof firstRow.float8_column).toBe('number');
+      expect(arrowRows[0].int8_column).toBe(jsonRows[0].int8_column);
+      expect(arrowRows[0].int8_column).toBe(3);
+      expect(typeof jsonRows[0].int8_column).toBe('number');
 
-      expect(firstRow.numeric_column).toBe(6);
-      expect(typeof firstRow.numeric_column).toBe('number');
+      expect(arrowRows[0].float4_column).toBeCloseTo(jsonRows[0].float4_column);
+      expect(arrowRows[0].float4_column).toBeCloseTo(4.0);
+      expect(typeof jsonRows[0].float4_column).toBe('number');
 
-      // Verify NULL row
-      const thirdRow = result.data[2];
-      expect(thirdRow.id).toBe(3);
-      expect(thirdRow.int2_column).toBeNull();
-      expect(thirdRow.int4_column).toBeNull();
-      expect(thirdRow.float4_column).toBeNull();
+      expect(arrowRows[0].float8_column).toBeCloseTo(jsonRows[0].float8_column);
+      expect(arrowRows[0].float8_column).toBeCloseTo(5.0);
+      expect(typeof jsonRows[0].float8_column).toBe('number');
+
+      expect(arrowRows[0].numeric_column).toBe(jsonRows[0].numeric_column);
+      expect(arrowRows[0].numeric_column).toBe(6);
+      expect(typeof jsonRows[0].numeric_column).toBe('number');
+
+      // Verify third row: NULL values are consistent
+      expect(arrowRows[2].id).toBe(jsonRows[2].id);
+      expect(arrowRows[2].id).toBe(3);
+
+      expect(arrowRows[2].int2_column).toBeNull();
+      expect(jsonRows[2].int2_column).toBeNull();
+
+      expect(arrowRows[2].int4_column).toBeNull();
+      expect(jsonRows[2].int4_column).toBeNull();
+
+      expect(arrowRows[2].float4_column).toBeNull();
+      expect(jsonRows[2].float4_column).toBeNull();
     });
 
-    test('.sqlJson() should preserve BigInt values correctly', async () => {
-      // Test with int8 (BIGINT) column which could have large numbers
-      const result = await flightOnlyClient.sqlJson(
-        'SELECT id, int8_column FROM test_postgresql_table_not_accelerated WHERE id = 1',
-      );
+    test('.sql() and .sqlJson() should handle BigInt consistently', async () => {
+      const query =
+        'SELECT id, int8_column FROM test_postgresql_table_not_accelerated WHERE id = 1';
 
-      expect(result.data).toHaveLength(1);
-      const row = result.data[0];
+      // Get data from both methods
+      const table = await flightOnlyClient.query(query);
+      const jsonResult = await flightOnlyClient.sqlJson(query);
+
+      const arrowRows = table.toArray();
+      const jsonRows = jsonResult.data;
+
+      expect(arrowRows).toHaveLength(1);
+      expect(jsonRows).toHaveLength(1);
 
       // The test data has int8_column = 3, which is within safe integer range
-      expect(row.id).toBe(1);
-      expect(row.int8_column).toBe(3);
-      expect(typeof row.int8_column).toBe('number');
-      expect(Number.isSafeInteger(row.int8_column)).toBe(true);
+      // Both should return the same value as a number
+      expect(arrowRows[0].id).toBe(jsonRows[0].id);
+      expect(arrowRows[0].id).toBe(1);
+
+      expect(arrowRows[0].int8_column).toBe(jsonRows[0].int8_column);
+      expect(arrowRows[0].int8_column).toBe(3);
+      expect(typeof jsonRows[0].int8_column).toBe('number');
+      expect(Number.isSafeInteger(jsonRows[0].int8_column)).toBe(true);
 
       // Test with a computed large BigInt value
-      const largeResult = await flightOnlyClient.sqlJson(
-        'SELECT 9007199254740992::BIGINT as large_int FROM test_postgresql_table_not_accelerated LIMIT 1',
-      );
+      const largeQuery =
+        'SELECT 9007199254740992::BIGINT as large_int FROM test_postgresql_table_not_accelerated LIMIT 1';
+      const largeTable = await flightOnlyClient.query(largeQuery);
+      const largeJsonResult = await flightOnlyClient.sqlJson(largeQuery);
 
-      const largeRow = largeResult.data[0];
-      // Values beyond Number.MAX_SAFE_INTEGER should be converted to strings
-      expect(typeof largeRow.large_int).toBe('string');
-      expect(largeRow.large_int).toBe('9007199254740992');
+      const largeArrowRows = largeTable.toArray();
+      const largeJsonRows = largeJsonResult.data;
+
+      // Values beyond Number.MAX_SAFE_INTEGER should be converted to strings in sqlJson
+      expect(typeof largeJsonRows[0].large_int).toBe('string');
+      expect(largeJsonRows[0].large_int).toBe('9007199254740992');
+
+      // Arrow returns as string as well since it exceeds safe integer range
+      expect(largeArrowRows[0].large_int.toString()).toBe(
+        largeJsonRows[0].large_int,
+      );
     });
 
-    test('.sqlJson() should convert timestamps to ISO 8601 strings', async () => {
-      // Test with timestamp and date columns
-      const result = await flightOnlyClient.sqlJson(
-        'SELECT id, timestamp_column, date_column FROM test_postgresql_table_not_accelerated WHERE id = 1',
-      );
+    test('.sql() and .sqlJson() should convert timestamps to ISO 8601 strings consistently', async () => {
+      const query =
+        'SELECT id, timestamp_column, date_column FROM test_postgresql_table_not_accelerated WHERE id = 1';
 
-      expect(result.data).toHaveLength(1);
-      const row = result.data[0];
+      // Get data from both methods
+      const table = await flightOnlyClient.query(query);
+      const jsonResult = await flightOnlyClient.sqlJson(query);
 
-      expect(row.id).toBe(1);
+      const arrowRows = table.toArray();
+      const jsonRows = jsonResult.data;
 
-      // Timestamp should be converted to ISO 8601 string format
-      expect(typeof row.timestamp_column).toBe('string');
-      expect(row.timestamp_column).toMatch(
+      expect(arrowRows).toHaveLength(1);
+      expect(jsonRows).toHaveLength(1);
+
+      expect(arrowRows[0].id).toBe(jsonRows[0].id);
+      expect(arrowRows[0].id).toBe(1);
+
+      // Both should convert timestamps to ISO 8601 string format
+      expect(typeof arrowRows[0].timestamp_column).toBe('object'); // Arrow returns Date object
+      expect(typeof jsonRows[0].timestamp_column).toBe('string');
+
+      // Convert Arrow Date to string for comparison
+      const arrowTimestamp =
+        arrowRows[0].timestamp_column instanceof Date
+          ? arrowRows[0].timestamp_column.toISOString()
+          : arrowRows[0].timestamp_column;
+      expect(arrowTimestamp).toBe(jsonRows[0].timestamp_column);
+      expect(jsonRows[0].timestamp_column).toMatch(
         /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
       );
 
-      // Date should also be converted to ISO 8601 string format
-      expect(typeof row.date_column).toBe('string');
-      expect(row.date_column).toMatch(/^\d{4}-\d{2}-\d{2}/);
+      // Date columns should also match
+      expect(typeof jsonRows[0].date_column).toBe('string');
+      const arrowDate =
+        arrowRows[0].date_column instanceof Date
+          ? arrowRows[0].date_column.toISOString()
+          : arrowRows[0].date_column;
+      expect(arrowDate).toBe(jsonRows[0].date_column);
+      expect(jsonRows[0].date_column).toMatch(/^\d{4}-\d{2}-\d{2}/);
 
       // Verify the schema shows the correct types
-      const timestampField = result.schema.fields.find(
+      const timestampField = jsonResult.schema.fields.find(
         (f: any) => f.name === 'timestamp_column',
       );
       expect(timestampField).toBeDefined();
       expect(timestampField!.data_type).toHaveProperty('Timestamp');
 
-      const dateField = result.schema.fields.find(
+      const dateField = jsonResult.schema.fields.find(
         (f: any) => f.name === 'date_column',
       );
       expect(dateField).toBeDefined();
@@ -305,62 +386,107 @@ describe('local', () => {
       );
     });
 
-    test('flightOnly mode should work with complex queries', async () => {
-      const result = await flightOnlyClient.sqlJson(
-        `SELECT 
-          id, 
-          int4_column,
-          float4_column * 2 as doubled_value,
-          CASE WHEN int4_column > 1 THEN 'high' ELSE 'low' END as category
-        FROM test_postgresql_table_not_accelerated 
-        WHERE id <= 2
-        ORDER BY id`,
-      );
+    test('.sql() and .sqlJson() should handle complex queries identically', async () => {
+      const query = `SELECT 
+        id, 
+        int4_column,
+        float4_column * 2 as doubled_value,
+        CASE WHEN int4_column > 1 THEN 'high' ELSE 'low' END as category
+      FROM test_postgresql_table_not_accelerated 
+      WHERE id <= 2
+      ORDER BY id`;
 
-      expect(result.data).toHaveLength(2);
+      // Get data from both methods
+      const table = await flightOnlyClient.query(query);
+      const jsonResult = await flightOnlyClient.sqlJson(query);
 
-      // Verify computed columns and values
-      expect(result.data[0].id).toBe(1);
-      expect(result.data[0].int4_column).toBe(2);
-      expect(result.data[0].doubled_value).toBeCloseTo(8.0); // 4.0 * 2
-      expect(result.data[0].category).toBe('high'); // int4_column = 2 > 1
+      const arrowRows = table.toArray();
+      const jsonRows = jsonResult.data;
 
-      expect(result.data[1].id).toBe(2);
-      expect(result.data[1].int4_column).toBe(2);
-      expect(result.data[1].category).toBe('high');
+      // Both should have same number of rows
+      expect(arrowRows).toHaveLength(2);
+      expect(jsonRows).toHaveLength(2);
+
+      // Verify first row: computed columns and values match
+      expect(arrowRows[0].id).toBe(jsonRows[0].id);
+      expect(arrowRows[0].id).toBe(1);
+
+      expect(arrowRows[0].int4_column).toBe(jsonRows[0].int4_column);
+      expect(arrowRows[0].int4_column).toBe(2);
+
+      expect(arrowRows[0].doubled_value).toBeCloseTo(jsonRows[0].doubled_value);
+      expect(jsonRows[0].doubled_value).toBeCloseTo(8.0); // 4.0 * 2
+
+      expect(arrowRows[0].category).toBe(jsonRows[0].category);
+      expect(jsonRows[0].category).toBe('high'); // int4_column = 2 > 1
+
+      // Verify second row
+      expect(arrowRows[1].id).toBe(jsonRows[1].id);
+      expect(arrowRows[1].id).toBe(2);
+
+      expect(arrowRows[1].int4_column).toBe(jsonRows[1].int4_column);
+      expect(jsonRows[1].int4_column).toBe(2);
+
+      expect(arrowRows[1].category).toBe(jsonRows[1].category);
+      expect(jsonRows[1].category).toBe('high');
 
       // Verify schema includes computed columns
-      expect(result.schema.fields.some((f: any) => f.name === 'category')).toBe(
-        true,
-      );
       expect(
-        result.schema.fields.some((f: any) => f.name === 'doubled_value'),
+        jsonResult.schema.fields.some((f: any) => f.name === 'category'),
+      ).toBe(true);
+      expect(
+        jsonResult.schema.fields.some((f: any) => f.name === 'doubled_value'),
       ).toBe(true);
     });
 
-    test('flightOnly mode should handle NULL values correctly', async () => {
-      const result = await flightOnlyClient.sqlJson(
-        'SELECT id, int4_column, text_column, bool_column FROM test_postgresql_table_not_accelerated ORDER BY id',
-      );
+    test('.sql() and .sqlJson() should handle NULL values identically', async () => {
+      const query =
+        'SELECT id, int4_column, text_column, bool_column FROM test_postgresql_table_not_accelerated ORDER BY id';
 
-      expect(result.data).toHaveLength(3);
+      // Get data from both methods
+      const table = await flightOnlyClient.query(query);
+      const jsonResult = await flightOnlyClient.sqlJson(query);
 
-      // First two rows have actual values
-      expect(result.data[0].id).toBe(1);
-      expect(result.data[0].int4_column).toBe(2);
-      expect(result.data[0].text_column).toBe('test');
-      expect(result.data[0].bool_column).toBe(true);
+      const arrowRows = table.toArray();
+      const jsonRows = jsonResult.data;
 
-      expect(result.data[1].id).toBe(2);
-      expect(result.data[1].int4_column).toBe(2);
-      expect(result.data[1].text_column).toBe('test');
-      expect(result.data[1].bool_column).toBe(true);
+      // Both should have same number of rows
+      expect(arrowRows).toHaveLength(3);
+      expect(jsonRows).toHaveLength(3);
 
-      // Third row has NULLs (except for id)
-      expect(result.data[2].id).toBe(3);
-      expect(result.data[2].int4_column).toBeNull();
-      expect(result.data[2].text_column).toBeNull();
-      expect(result.data[2].bool_column).toBeNull();
+      // First row: actual values should match
+      expect(arrowRows[0].id).toBe(jsonRows[0].id);
+      expect(arrowRows[0].id).toBe(1);
+
+      expect(arrowRows[0].int4_column).toBe(jsonRows[0].int4_column);
+      expect(jsonRows[0].int4_column).toBe(2);
+
+      expect(arrowRows[0].text_column).toBe(jsonRows[0].text_column);
+      expect(jsonRows[0].text_column).toBe('test');
+
+      expect(arrowRows[0].bool_column).toBe(jsonRows[0].bool_column);
+      expect(jsonRows[0].bool_column).toBe(true);
+
+      // Second row should also match
+      expect(arrowRows[1].id).toBe(jsonRows[1].id);
+      expect(arrowRows[1].id).toBe(2);
+
+      expect(arrowRows[1].int4_column).toBe(jsonRows[1].int4_column);
+      expect(arrowRows[1].text_column).toBe(jsonRows[1].text_column);
+      expect(arrowRows[1].bool_column).toBe(jsonRows[1].bool_column);
+
+      // Third row: NULLs should be consistent (except for id)
+      expect(arrowRows[2].id).toBe(jsonRows[2].id);
+      expect(arrowRows[2].id).toBe(3);
+
+      expect(arrowRows[2].int4_column).toBeNull();
+      expect(jsonRows[2].int4_column).toBeNull();
+
+      expect(arrowRows[2].text_column).toBeNull();
+      expect(jsonRows[2].text_column).toBeNull();
+
+      expect(arrowRows[2].bool_column).toBeNull();
+      expect(jsonRows[2].bool_column).toBeNull();
     });
   });
 });

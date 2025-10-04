@@ -514,4 +514,490 @@ describe('Browser SpiceClient', () => {
       );
     });
   });
+
+  describe('Cross-Platform Consistency Tests', () => {
+    describe('.sql() and .sqlJson() consistency in HTTP-only mode', () => {
+      test('should return consistent data for basic query', async () => {
+        // Mock response with test data matching local runtime test structure
+        const mockSqlResponse = {
+          schema: {
+            fields: [
+              {
+                name: 'id',
+                data_type: 'Int32',
+                nullable: false,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+              {
+                name: 'int4_column',
+                data_type: 'Int32',
+                nullable: true,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+              {
+                name: 'text_column',
+                data_type: 'Utf8',
+                nullable: true,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+              {
+                name: 'bool_column',
+                data_type: 'Bool',
+                nullable: true,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+            ],
+          },
+          data: [
+            { id: 1, int4_column: 2, text_column: 'test', bool_column: true },
+            { id: 2, int4_column: 2, text_column: 'test', bool_column: true },
+            { id: 3, int4_column: null, text_column: null, bool_column: null },
+          ],
+          row_count: 3,
+          execution_time_ms: 5,
+        };
+
+        // Mock for sql() - returns Arrow-compatible format
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: {
+            get: jest.fn().mockReturnValue('application/json'),
+          },
+          text: jest.fn().mockResolvedValue(JSON.stringify(mockSqlResponse)),
+          json: jest.fn().mockResolvedValue(mockSqlResponse),
+        });
+
+        const sqlResult = await client.sql(
+          'SELECT id, int4_column, text_column, bool_column FROM test_table ORDER BY id',
+        );
+
+        // Mock for sqlJson() - returns JSON format
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: {
+            get: jest
+              .fn()
+              .mockReturnValue('application/vnd.spiceai.sql.v1+json'),
+          },
+          text: jest.fn().mockResolvedValue(JSON.stringify(mockSqlResponse)),
+          json: jest.fn().mockResolvedValue(mockSqlResponse),
+        });
+
+        const sqlJsonResult = await client.sqlJson(
+          'SELECT id, int4_column, text_column, bool_column FROM test_table ORDER BY id',
+        );
+
+        // Convert Arrow table to array for comparison
+        const sqlRows = sqlResult.toArray();
+        const jsonRows = sqlJsonResult.data;
+
+        // Both should have same number of rows
+        expect(sqlRows).toHaveLength(3);
+        expect(jsonRows).toHaveLength(3);
+        expect(sqlJsonResult.row_count).toBe(3);
+
+        // First row values should match
+        expect(sqlRows[0].id).toBe(jsonRows[0].id);
+        expect(sqlRows[0].id).toBe(1);
+        expect(sqlRows[0].int4_column).toBe(jsonRows[0].int4_column);
+        expect(sqlRows[0].int4_column).toBe(2);
+        expect(sqlRows[0].text_column).toBe(jsonRows[0].text_column);
+        expect(sqlRows[0].text_column).toBe('test');
+        expect(sqlRows[0].bool_column).toBe(jsonRows[0].bool_column);
+        expect(sqlRows[0].bool_column).toBe(true);
+
+        // NULL values should be consistent
+        expect(sqlRows[2].id).toBe(jsonRows[2].id);
+        expect(sqlRows[2].id).toBe(3);
+        expect(sqlRows[2].int4_column).toBeNull();
+        expect(jsonRows[2].int4_column).toBeNull();
+        expect(sqlRows[2].text_column).toBeNull();
+        expect(jsonRows[2].text_column).toBeNull();
+      });
+
+      test('should preserve numeric types consistently', async () => {
+        const mockResponse = {
+          schema: {
+            fields: [
+              {
+                name: 'id',
+                data_type: 'Int32',
+                nullable: false,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+              {
+                name: 'int2_column',
+                data_type: 'Int16',
+                nullable: true,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+              {
+                name: 'int8_column',
+                data_type: 'Int64',
+                nullable: true,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+              {
+                name: 'float4_column',
+                data_type: 'Float32',
+                nullable: true,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+              {
+                name: 'float8_column',
+                data_type: 'Float64',
+                nullable: true,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+            ],
+          },
+          data: [
+            {
+              id: 1,
+              int2_column: 1,
+              int8_column: 3,
+              float4_column: 4.0,
+              float8_column: 5.0,
+            },
+          ],
+          row_count: 1,
+          execution_time_ms: 5,
+        };
+
+        // Mock sql()
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: jest.fn().mockReturnValue('application/json') },
+          text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+          json: jest.fn().mockResolvedValue(mockResponse),
+        });
+
+        const sqlResult = await client.sql('SELECT * FROM test_table');
+
+        // Mock sqlJson()
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: {
+            get: jest
+              .fn()
+              .mockReturnValue('application/vnd.spiceai.sql.v1+json'),
+          },
+          text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+          json: jest.fn().mockResolvedValue(mockResponse),
+        });
+
+        const sqlJsonResult = await client.sqlJson('SELECT * FROM test_table');
+
+        const sqlRows = sqlResult.toArray();
+        const jsonRows = sqlJsonResult.data;
+
+        // Verify all numeric types are preserved as numbers in both
+        expect(sqlRows[0].id).toBe(jsonRows[0].id);
+        expect(typeof jsonRows[0].id).toBe('number');
+
+        expect(sqlRows[0].int2_column).toBe(jsonRows[0].int2_column);
+        expect(typeof jsonRows[0].int2_column).toBe('number');
+
+        expect(sqlRows[0].int8_column).toBe(jsonRows[0].int8_column);
+        expect(typeof jsonRows[0].int8_column).toBe('number');
+
+        expect(sqlRows[0].float4_column).toBeCloseTo(jsonRows[0].float4_column);
+        expect(typeof jsonRows[0].float4_column).toBe('number');
+
+        expect(sqlRows[0].float8_column).toBeCloseTo(jsonRows[0].float8_column);
+        expect(typeof jsonRows[0].float8_column).toBe('number');
+      });
+
+      test('should handle timestamps consistently', async () => {
+        const mockResponse = {
+          schema: {
+            fields: [
+              {
+                name: 'id',
+                data_type: 'Int32',
+                nullable: false,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+              {
+                name: 'created_at',
+                data_type: { Timestamp: ['Millisecond', null] },
+                nullable: true,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+              {
+                name: 'date_column',
+                data_type: 'Date32',
+                nullable: true,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+            ],
+          },
+          data: [
+            {
+              id: 1,
+              created_at: '2021-08-09T10:42:19.000Z',
+              date_column: '2021-08-09T00:00:00.000Z',
+            },
+          ],
+          row_count: 1,
+          execution_time_ms: 5,
+        };
+
+        // Mock sql()
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: jest.fn().mockReturnValue('application/json') },
+          text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+          json: jest.fn().mockResolvedValue(mockResponse),
+        });
+
+        const sqlResult = await client.sql('SELECT * FROM test_table');
+
+        // Mock sqlJson()
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: {
+            get: jest
+              .fn()
+              .mockReturnValue('application/vnd.spiceai.sql.v1+json'),
+          },
+          text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+          json: jest.fn().mockResolvedValue(mockResponse),
+        });
+
+        const sqlJsonResult = await client.sqlJson('SELECT * FROM test_table');
+
+        const sqlRows = sqlResult.toArray();
+        const jsonRows = sqlJsonResult.data;
+
+        // Both should return ISO 8601 strings for timestamps
+        expect(sqlRows[0].id).toBe(jsonRows[0].id);
+        expect(typeof jsonRows[0].created_at).toBe('string');
+        expect(jsonRows[0].created_at).toMatch(
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
+        );
+
+        // In HTTP mode, both should get the same timestamp string
+        expect(sqlRows[0].created_at).toBe(jsonRows[0].created_at);
+        expect(sqlRows[0].date_column).toBe(jsonRows[0].date_column);
+      });
+
+      test('should handle complex queries with computed columns consistently', async () => {
+        const mockResponse = {
+          schema: {
+            fields: [
+              {
+                name: 'id',
+                data_type: 'Int32',
+                nullable: false,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+              {
+                name: 'value',
+                data_type: 'Int32',
+                nullable: true,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+              {
+                name: 'doubled',
+                data_type: 'Float64',
+                nullable: true,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+              {
+                name: 'category',
+                data_type: 'Utf8',
+                nullable: true,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+            ],
+          },
+          data: [
+            { id: 1, value: 10, doubled: 20.0, category: 'high' },
+            { id: 2, value: 5, doubled: 10.0, category: 'low' },
+          ],
+          row_count: 2,
+          execution_time_ms: 5,
+        };
+
+        // Mock sql()
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: jest.fn().mockReturnValue('application/json') },
+          text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+          json: jest.fn().mockResolvedValue(mockResponse),
+        });
+
+        const sqlResult = await client.sql(
+          "SELECT id, value, value * 2 as doubled, CASE WHEN value > 5 THEN 'high' ELSE 'low' END as category FROM test_table",
+        );
+
+        // Mock sqlJson()
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: {
+            get: jest
+              .fn()
+              .mockReturnValue('application/vnd.spiceai.sql.v1+json'),
+          },
+          text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+          json: jest.fn().mockResolvedValue(mockResponse),
+        });
+
+        const sqlJsonResult = await client.sqlJson(
+          "SELECT id, value, value * 2 as doubled, CASE WHEN value > 5 THEN 'high' ELSE 'low' END as category FROM test_table",
+        );
+
+        const sqlRows = sqlResult.toArray();
+        const jsonRows = sqlJsonResult.data;
+
+        // Computed columns should match
+        expect(sqlRows[0].doubled).toBeCloseTo(jsonRows[0].doubled);
+        expect(sqlRows[0].doubled).toBeCloseTo(20.0);
+
+        expect(sqlRows[0].category).toBe(jsonRows[0].category);
+        expect(sqlRows[0].category).toBe('high');
+
+        expect(sqlRows[1].category).toBe(jsonRows[1].category);
+        expect(sqlRows[1].category).toBe('low');
+      });
+    });
+
+    describe('Schema consistency across methods', () => {
+      test('sqlJson() should return schema matching Arrow table schema', async () => {
+        const mockResponse = {
+          schema: {
+            fields: [
+              {
+                name: 'id',
+                data_type: 'Int32',
+                nullable: false,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+              {
+                name: 'name',
+                data_type: 'Utf8',
+                nullable: true,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+              {
+                name: 'timestamp_col',
+                data_type: { Timestamp: ['Millisecond', null] },
+                nullable: true,
+                dict_id: 0,
+                dict_is_ordered: false,
+              },
+            ],
+          },
+          data: [
+            { id: 1, name: 'test', timestamp_col: '2021-08-09T10:42:19.000Z' },
+          ],
+          row_count: 1,
+          execution_time_ms: 5,
+        };
+
+        // Mock sql()
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: jest.fn().mockReturnValue('application/json') },
+          text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+          json: jest.fn().mockResolvedValue(mockResponse),
+        });
+
+        const sqlResult = await client.sql('SELECT * FROM test_table');
+
+        // Mock sqlJson()
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: {
+            get: jest
+              .fn()
+              .mockReturnValue('application/vnd.spiceai.sql.v1+json'),
+          },
+          text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+          json: jest.fn().mockResolvedValue(mockResponse),
+        });
+
+        const sqlJsonResult = await client.sqlJson('SELECT * FROM test_table');
+
+        // Verify schema structure matches
+        expect(sqlResult.schema.fields.length).toBe(
+          sqlJsonResult.schema.fields.length,
+        );
+        expect(sqlResult.schema.fields.length).toBe(3);
+
+        // Verify field names match
+        const sqlFieldNames = sqlResult.schema.fields.map((f: any) => f.name);
+        const jsonFieldNames = sqlJsonResult.schema.fields.map(
+          (f: any) => f.name,
+        );
+        expect(sqlFieldNames).toEqual(jsonFieldNames);
+        expect(sqlFieldNames).toEqual(['id', 'name', 'timestamp_col']);
+
+        // Verify both schemas have nullable property defined
+        expect(sqlResult.schema.fields[0]).toHaveProperty('nullable');
+        expect(sqlJsonResult.schema.fields[0]).toHaveProperty('nullable');
+        expect(sqlResult.schema.fields[1]).toHaveProperty('nullable');
+        expect(sqlJsonResult.schema.fields[1]).toHaveProperty('nullable');
+      });
+    });
+
+    describe('Error handling consistency', () => {
+      test('both methods should handle errors consistently', async () => {
+        const errorMessage = 'Table not found';
+
+        // Mock sql() error
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          headers: { get: jest.fn() },
+          text: jest.fn().mockResolvedValue(errorMessage),
+        });
+
+        await expect(
+          client.sql('SELECT * FROM nonexistent_table'),
+        ).rejects.toThrow();
+
+        // Mock sqlJson() error
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          headers: { get: jest.fn() },
+          text: jest.fn().mockResolvedValue(errorMessage),
+        });
+
+        await expect(
+          client.sqlJson('SELECT * FROM nonexistent_table'),
+        ).rejects.toThrow();
+      });
+    });
+  });
 });
