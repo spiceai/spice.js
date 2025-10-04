@@ -170,7 +170,11 @@ function serializeArrowType(type: any): any {
 
   // Handle Timestamp types: { Timestamp: ['Millisecond', null] }
   // Check for Timestamp in string representation since constructor.name may vary
-  if (typeStr.startsWith('Timestamp<') || typeName === 'Timestamp_' || typeName === 'Timestamp') {
+  if (
+    typeStr.startsWith('Timestamp<') ||
+    typeName === 'Timestamp_' ||
+    typeName === 'Timestamp'
+  ) {
     const unit = type.unit; // 0=Second, 1=Millisecond, 2=Microsecond, 3=Nanosecond
     const unitNames = ['Second', 'Millisecond', 'Microsecond', 'Nanosecond'];
     const unitName = unitNames[unit] || 'Millisecond';
@@ -179,7 +183,11 @@ function serializeArrowType(type: any): any {
 
   // Handle List types: { List: { name: 'item', data_type: ..., nullable: true } }
   // Check for List in string representation and presence of children
-  if ((typeStr.startsWith('List<') || typeName === 'List') && type.children && type.children.length > 0) {
+  if (
+    (typeStr.startsWith('List<') || typeName === 'List') &&
+    type.children &&
+    type.children.length > 0
+  ) {
     const childField = type.children[0];
     return {
       List: {
@@ -192,7 +200,11 @@ function serializeArrowType(type: any): any {
 
   // Handle Struct types: { Struct: [...fields...] }
   // Check for Struct in string representation and presence of children
-  if ((typeStr.startsWith('Struct<') || typeName === 'Struct') && type.children && type.children.length > 0) {
+  if (
+    (typeStr.startsWith('Struct<') || typeName === 'Struct') &&
+    type.children &&
+    type.children.length > 0
+  ) {
     return {
       Struct: type.children.map((child: any) => ({
         name: child.name,
@@ -204,7 +216,11 @@ function serializeArrowType(type: any): any {
 
   // Handle Map types
   // Check for Map in string representation and presence of children
-  if ((typeStr.startsWith('Map<') || typeName === 'Map') && type.children && type.children.length > 0) {
+  if (
+    (typeStr.startsWith('Map<') || typeName === 'Map') &&
+    type.children &&
+    type.children.length > 0
+  ) {
     const entries = type.children[0]; // Map has a single child 'entries' struct
     if (entries.type.children && entries.type.children.length === 2) {
       return {
