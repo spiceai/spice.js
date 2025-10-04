@@ -32,9 +32,48 @@ export interface RetryModule {
 }
 
 /**
+ * Helper function to recursively convert Arrow structures to plain JavaScript
+ */
+function convertArrowValue(value: any): any {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  // Check if it's an Arrow Vector (has toArray method and length property)
+  // Arrow Vectors have specific characteristics that distinguish them from regular objects
+  if (
+    typeof value === 'object' &&
+    typeof value.toArray === 'function' &&
+    typeof value.length === 'number' &&
+    typeof value.get === 'function'
+  ) {
+    // Convert Arrow Vector to JavaScript array
+    const arr = value.toArray();
+    return arr.map((item: any) => convertArrowValue(item));
+  }
+
+  // Handle plain objects recursively (for Struct types)
+  // Only convert if it's a plain object, not Date or other built-in types
+  if (
+    typeof value === 'object' &&
+    value.constructor === Object &&
+    !Array.isArray(value)
+  ) {
+    const converted: any = {};
+    for (const key in value) {
+      converted[key] = convertArrowValue(value[key]);
+    }
+    return converted;
+  }
+
+  return value;
+}
+
+/**
  * Wraps an Arrow Table to handle type conversions in toArray()
  * - Decimal types: Converts DecimalBigNum objects to numbers
  * - Timestamp types: Converts Date objects to ISO 8601 strings (without Z for timestamps without timezone)
+ * - List types: Converts Arrow Vector objects to JavaScript arrays
  */
 function wrapTableForDecimalConversion(table: Table): Table {
   const originalToArray = table.toArray.bind(table);
@@ -52,15 +91,35 @@ function wrapTableForDecimalConversion(table: Table): Table {
         f.type.toString().startsWith('Timestamp') ||
         f.type.toString().startsWith('Date'),
     );
+    const listFields = table.schema.fields.filter(
+      (f) => f.type.toString().startsWith('List<') || f.type.toString() === 'List',
+    );
+    const structFields = table.schema.fields.filter(
+      (f) => f.type.toString().startsWith('Struct<') || f.type.toString() === 'Struct',
+    );
 
-    if (decimalFields.length === 0 && timestampFields.length === 0) {
-      return rows; // No special fields, return as-is
+    // If no special fields, return rows as-is to avoid unnecessary processing
+    if (
+      decimalFields.length === 0 &&
+      timestampFields.length === 0 &&
+      listFields.length === 0 &&
+      structFields.length === 0
+    ) {
+      return rows;
     }
 
-    // Convert values in each row
+    // Process rows only if we have fields that need conversion
     return rows.map((row: any) => {
       let hasConversions = false;
       let convertedRow = row;
+
+      // Only create a new row object if we actually need to convert something
+      const ensureConvertedRow = () => {
+        if (!hasConversions) {
+          convertedRow = { ...row };
+          hasConversions = true;
+        }
+      };
 
       // Convert decimal values
       for (const field of decimalFields) {
@@ -70,10 +129,7 @@ function wrapTableForDecimalConversion(table: Table): Table {
           value !== undefined &&
           value.constructor?.name === 'DecimalBigNum'
         ) {
-          if (!hasConversions) {
-            convertedRow = { ...row };
-            hasConversions = true;
-          }
+          ensureConvertedRow();
           try {
             const decimalStr = value.toString();
             const scale = field.type.scale || 0;
@@ -93,26 +149,39 @@ function wrapTableForDecimalConversion(table: Table): Table {
         if (value !== null && value !== undefined) {
           const hasTimezone = field.type.timezone != null;
           if (value instanceof Date) {
-            if (!hasConversions) {
-              convertedRow = { ...row };
-              hasConversions = true;
-            }
-            const isoString = value.toISOString();
+            ensureConvertedRow();
+            let isoString = value.toISOString();
+            // Remove .000 milliseconds if present (before removing Z)
+            isoString = isoString.replace(/\.000Z$/, 'Z');
             // Remove 'Z' suffix for timestamps without timezone
-            convertedRow[field.name] = hasTimezone
-              ? isoString
-              : isoString.replace(/Z$/, '');
-          } else if (typeof value === 'number') {
-            if (!hasConversions) {
-              convertedRow = { ...row };
-              hasConversions = true;
+            if (!hasTimezone) {
+              isoString = isoString.replace(/Z$/, '');
             }
+            convertedRow[field.name] = isoString;
+          } else if (typeof value === 'number') {
+            ensureConvertedRow();
             // Handle numeric timestamps
             const date = new Date(value);
-            const isoString = date.toISOString();
-            convertedRow[field.name] = hasTimezone
-              ? isoString
-              : isoString.replace(/Z$/, '');
+            let isoString = date.toISOString();
+            // Remove .000 milliseconds if present (before removing Z)
+            isoString = isoString.replace(/\.000Z$/, 'Z');
+            if (!hasTimezone) {
+              isoString = isoString.replace(/Z$/, '');
+            }
+            convertedRow[field.name] = isoString;
+          }
+        }
+      }
+
+      // Convert List/Struct fields (Arrow Vectors to JavaScript arrays/objects)
+      for (const field of listFields.concat(structFields)) {
+        const value = row[field.name];
+        if (value !== null && value !== undefined) {
+          const converted = convertArrowValue(value);
+          // Only update if conversion actually changed the value
+          if (converted !== value) {
+            ensureConvertedRow();
+            convertedRow[field.name] = converted;
           }
         }
       }
