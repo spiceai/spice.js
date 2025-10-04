@@ -417,6 +417,82 @@ export class SpiceClient {
           };
         }
 
+        // Helper function to recursively convert values, handling nested structures
+        const convertValue = (value: any, field: any): any => {
+          // Handle null/undefined
+          if (value === null || value === undefined) {
+            return value;
+          }
+
+          // Get type information
+          const typeStr = field.type.toString();
+          const hasTimezone = field.type.timezone != null;
+
+          // Convert Date objects to ISO 8601 strings
+          if (value instanceof Date) {
+            const isoString = value.toISOString();
+            // Remove timezone suffix if the original type doesn't have timezone
+            return hasTimezone
+              ? isoString
+              : isoString.replace(/\.000Z$/, '').replace(/Z$/, '');
+          }
+
+          // Convert numeric timestamps/dates to ISO 8601 strings
+          if (typeof value === 'number') {
+            if (
+              typeStr.startsWith('Timestamp') ||
+              typeStr.startsWith('Date32') ||
+              typeStr.startsWith('Date64')
+            ) {
+              const date = new Date(value);
+              const isoString = date.toISOString();
+              // Remove timezone suffix if the original type doesn't have timezone
+              return hasTimezone
+                ? isoString
+                : isoString.replace(/\.000Z$/, '').replace(/Z$/, '');
+            }
+            return value;
+          }
+
+          // Convert BigInt to number if within safe range, otherwise to string
+          if (typeof value === 'bigint') {
+            if (
+              value >= BigInt(Number.MIN_SAFE_INTEGER) &&
+              value <= BigInt(Number.MAX_SAFE_INTEGER)
+            ) {
+              return Number(value);
+            }
+            return value.toString();
+          }
+
+          // Handle arrays (from List types) - recursively process elements
+          if (
+            Array.isArray(value) &&
+            field.type.children &&
+            field.type.children.length > 0
+          ) {
+            const childField = field.type.children[0];
+            return value.map((item) => convertValue(item, childField));
+          }
+
+          // Handle objects (from Struct types) - recursively process fields
+          if (typeof value === 'object' && field.type.children) {
+            const result: any = {};
+            for (const childField of field.type.children) {
+              if (childField.name in value) {
+                result[childField.name] = convertValue(
+                  value[childField.name],
+                  childField,
+                );
+              }
+            }
+            return result;
+          }
+
+          // Return value as-is for primitive types
+          return value;
+        };
+
         // Convert Arrow table to JSON, preserving native types
         for (let i = 0; i < table.numRows; i++) {
           const row: any = {};
@@ -427,43 +503,8 @@ export class SpiceClient {
             const column = table.getChild(columnName);
 
             if (column) {
-              let value = column.get(i);
-
-              // Convert Date objects to ISO 8601 strings
-              // Arrow can return Date objects for timestamp/date columns
-              if (value instanceof Date) {
-                value = value.toISOString();
-              }
-              // Convert numeric timestamps/dates to ISO 8601 strings
-              // Arrow Timestamp types store milliseconds since epoch as numbers
-              // Check if this is a timestamp or date column by examining the field type
-              else if (typeof value === 'number') {
-                const typeStr = field.type.toString();
-                if (
-                  typeStr.startsWith('Timestamp') ||
-                  typeStr.startsWith('Date32') ||
-                  typeStr.startsWith('Date64')
-                ) {
-                  // Convert milliseconds since epoch to ISO 8601 string
-                  // e.g., 1628505739000 -> "2021-08-09T10:42:19.000Z"
-                  value = new Date(value).toISOString();
-                }
-              }
-              // Convert BigInt to number if within safe range, otherwise to string
-              else if (typeof value === 'bigint') {
-                // Check if BigInt is within JavaScript's safe integer range
-                if (
-                  value >= BigInt(Number.MIN_SAFE_INTEGER) &&
-                  value <= BigInt(Number.MAX_SAFE_INTEGER)
-                ) {
-                  value = Number(value);
-                } else {
-                  // Too large for safe integer, convert to string
-                  value = value.toString();
-                }
-              }
-
-              row[columnName] = value;
+              const value = column.get(i);
+              row[columnName] = convertValue(value, field);
             }
           }
 
