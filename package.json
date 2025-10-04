@@ -71,6 +71,7 @@
     "test": "jest",
     "test:node": "jest --config jest.config.node.js",
     "test:browser": "jest --config jest.config.browser.js",
+    "test:perf": "jest --config jest.config.node.js test/performance.test.ts",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "dev": "npx nodemon --exec ts-node ./test/index.ts --watch test --ext .ts",

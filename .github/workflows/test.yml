@@ -130,6 +130,9 @@ jobs:
       - name: Run Node.js local runtime tests
         run: npm run test:node -- test/local-runtime.test.ts test/user-agent.test.ts
 
+      - name: Run performance tests
+        run: npm run test:perf
+
       - name: Stop spice and check logs
         if: always()
         run: |

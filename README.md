@@ -565,6 +565,18 @@ Both gRPC and HTTP modes support compression (gzip, deflate) to reduce bandwidth
 
 Check out our [API documentation](https://docs.spice.ai/sdks/node.js-sdk) to learn more about how to use the Node.js SDK.
 
+## Performance
+
+The SpiceClient is optimized for high-performance query execution. Performance tests verify that `.sql()` and `.sqlJson()` operations meet strict performance thresholds across various scenarios including type conversions, streaming, and concurrent queries.
+
+To run performance tests:
+
+```bash
+npm run test:perf
+```
+
+For more details, see [docs/PERFORMANCE_TESTING.md](./docs/PERFORMANCE_TESTING.md).
+
 ## Running tests locally
 
 Run the tests with `make test`. For more information, see [CONTRIBUTING.md](./CONTRIBUTING.md)

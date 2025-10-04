@@ -494,14 +494,23 @@ export class SpiceClient {
         // Use toArray() to properly convert Arrow values to JavaScript objects
         // This handles Decimal types and other special Arrow representations correctly
         const rows = table.toArray();
+
+        // Optimize: Create a field map once per chunk instead of per row
+        const fieldMap = new Map(fields.map((field) => [field.name, field]));
+
         for (const row of rows) {
           const convertedRow: any = {};
 
           // Apply conversions based on schema information
-          for (const field of fields) {
-            const columnName = field.name;
-            if (columnName in row) {
-              convertedRow[columnName] = convertValue(row[columnName], field);
+          for (const columnName in row) {
+            if (Object.prototype.hasOwnProperty.call(row, columnName)) {
+              const field = fieldMap.get(columnName);
+              if (field) {
+                convertedRow[columnName] = convertValue(row[columnName], field);
+              } else {
+                // Field not in schema, keep as-is
+                convertedRow[columnName] = row[columnName];
+              }
             }
           }
 
