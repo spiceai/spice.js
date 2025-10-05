@@ -76,7 +76,7 @@ runs:
         MAX_ATTEMPTS: ${{ inputs.max-attempts }}
         WAIT_INTERVAL: ${{ inputs.wait-interval }}
       run: |
-        HEALTH_URL="${VERCEL_ENDPOINT}/health"
+        HEALTH_URL="${VERCEL_ENDPOINT}/api/health"
 
         echo "Waiting for Vercel endpoint to be ready: ${HEALTH_URL}"
 

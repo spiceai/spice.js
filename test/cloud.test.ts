@@ -43,7 +43,27 @@ describe('cloud', () => {
         : undefined,
   });
 
-  const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
+  describe('Health Checks', () => {
+    test('isSpiceHealthy should return true for cloud endpoint', async () => {
+      const isHealthy = await cloudClient.isSpiceHealthy();
+      expect(isHealthy).toBe(true);
+    });
+
+    test('isSpiceReady should return true for cloud endpoint', async () => {
+      const isReady = await cloudClient.isSpiceReady();
+      expect(isReady).toBe(true);
+    });
+
+    test('Vercel endpoint isSpiceHealthy should work', async () => {
+      const isHealthy = await vercelClient.isSpiceHealthy();
+      expect(isHealthy).toBe(true);
+    });
+
+    test('Vercel endpoint isSpiceReady should work', async () => {
+      const isReady = await vercelClient.isSpiceReady();
+      expect(isReady).toBe(true);
+    });
+  });
 
   describe('Flight (gRPC)', () => {
     test('legacy client uses spice.ai cloud ', async () => {
@@ -164,6 +184,50 @@ describe('cloud', () => {
       expect(
         typeof row.big_num === 'string' || typeof row.big_num === 'number',
       ).toBe(true);
+    });
+
+    test('preserves numeric types in gRPC mode', async () => {
+      // Test that numbers remain as numbers when using gRPC/Arrow
+      const result = await cloudClient.sqlJson(
+        'SELECT 1 as int_val, 2.5 as float_val, 3 as another_int',
+      );
+
+      expect(result.row_count).toBe(1);
+      const row = result.data[0];
+
+      // Verify all numeric values are numbers, not strings
+      expect(typeof row.int_val).toBe('number');
+      expect(typeof row.float_val).toBe('number');
+      expect(typeof row.another_int).toBe('number');
+
+      // Verify actual values
+      expect(row.int_val).toBe(1);
+      expect(row.float_val).toBe(2.5);
+      expect(row.another_int).toBe(3);
+
+      // Ensure they're NOT strings
+      expect(row.int_val).not.toBe('1');
+      expect(row.float_val).not.toBe('2.5');
+    });
+
+    test('preserves mixed data types correctly', async () => {
+      const result = await cloudClient.sqlJson(
+        "SELECT 42 as num, 'text' as str, true as bool, 3.14 as float",
+      );
+
+      expect(result.row_count).toBe(1);
+      const row = result.data[0];
+
+      // Check each type is preserved correctly
+      expect(typeof row.num).toBe('number');
+      expect(typeof row.str).toBe('string');
+      expect(typeof row.bool).toBe('boolean');
+      expect(typeof row.float).toBe('number');
+
+      expect(row.num).toBe(42);
+      expect(row.str).toBe('text');
+      expect(row.bool).toBe(true);
+      expect(row.float).toBeCloseTo(3.14, 2);
     });
   });
 

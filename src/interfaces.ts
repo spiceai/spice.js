@@ -5,6 +5,12 @@ export interface SpiceClientConfig {
   flightTlsEnabled?: boolean;
   userAgent?: string;
   customHeaders?: { [key: string]: string };
+  /**
+   * If true, only use gRPC Arrow Flight without HTTP fallback.
+   * Will throw an error if gRPC is not available.
+   * @default false
+   */
+  flightOnly?: boolean;
 }
 
 export interface SchemaField {
@@ -15,7 +21,7 @@ export interface SchemaField {
   dict_is_ordered: boolean;
 }
 
-export interface SqlJsonResponse {
+export interface SqlV1JsonResponse {
   row_count: number;
   schema: {
     fields: SchemaField[];

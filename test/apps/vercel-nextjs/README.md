@@ -10,6 +10,7 @@ This test app validates that the Spice.js SDK works correctly on Vercel, particu
 - Proto file handling when bundled deployments don't include proto files
 - Query execution and result serialization
 - Next.js 15 App Router compatibility
+- **Browser build usage** in client-side components
 - **Testing the actual compiled SDK from `/dist` folder**
 
 ## Setup
@@ -40,7 +41,11 @@ This creates a symlink: `node_modules/@spiceai/spice → ../../../`
 3. **Set up environment variables** (create `.env.local`):
 
 ```bash
+# For server-side API routes
 SPICEAI_API_KEY=your_api_key_here
+
+# For browser test page (must be prefixed with NEXT_PUBLIC_)
+NEXT_PUBLIC_SPICEAI_API_KEY=your_api_key_here
 ```
 
 4. **Run the app**:
@@ -71,8 +76,31 @@ The app will be available at http://localhost:3000
 This app uses **Next.js 15 App Router** with TypeScript:
 
 - `app/layout.tsx` - Root layout
-- `app/page.tsx` - Home page (client component)
-- `app/api/v1/sql/route.ts` - API route handler (server-side)
+- `app/page.tsx` - Home page with navigation
+- `app/test/page.tsx` - Browser test page (client component using browser build)
+- `app/api/health/route.ts` - Health check endpoint (server-side)
+- `app/api/v1/ready/route.ts` - Ready check endpoint (server-side)
+- `app/api/v1/sql/route.ts` - SQL query endpoint (server-side)
+
+## Pages
+
+### Home Page (`/`)
+
+Landing page with links to:
+
+- Browser test page
+- API endpoints
+
+### Browser Test Page (`/test`)
+
+Interactive test page that uses the **browser build** of SpiceClient:
+
+- Health check (`/api/health`)
+- Ready check (`/api/v1/ready`)
+- SQL query execution
+- All operations run client-side using the browser build
+
+**Note:** This page requires `NEXT_PUBLIC_SPICEAI_API_KEY` environment variable to be set.
 
 ## API Endpoint
 

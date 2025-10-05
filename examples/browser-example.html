@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spice.js Browser Example</title>
+  </head>
+  <body>
+    <h1>Spice.js Browser Example</h1>
+
+    <div>
+      <h2>Query Spice Data</h2>
+      <textarea id="query" rows="3" cols="50">
+SELECT * FROM taxi_trips LIMIT 5</textarea
+      >
+      <br />
+      <button onclick="executeQuery()">Execute Query</button>
+    </div>
+
+    <div id="results">
+      <h2>Results:</h2>
+      <pre id="output"></pre>
+    </div>
+
+    <script type="module">
+      // Import from the browser build
+      import { SpiceClient } from './dist/browser/index.browser.js';
+
+      // Create a client instance
+      // In browser, it will automatically use HTTP-only mode (no gRPC)
+      const client = new SpiceClient({
+        httpUrl: 'http://localhost:8090',
+        // apiKey: 'your-api-key-here' // if needed
+      });
+
+      // Make it globally available for the button
+      window.spiceClient = client;
+
+      async function executeQuery() {
+        const query = document.getElementById('query').value;
+        const output = document.getElementById('output');
+
+        try {
+          output.textContent = 'Executing query...';
+
+          // Execute the query
+          const result = await client.sql(query);
+
+          // Display results
+          const data = {
+            numRows: result.numRows,
+            numCols: result.numCols,
+            schema: result.schema.fields.map((f) => ({
+              name: f.name,
+              type: f.type.toString(),
+            })),
+            data: result.toArray().slice(0, 10), // Show first 10 rows
+          };
+
+          output.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          output.textContent = `Error: ${error.message}`;
+          console.error('Query failed:', error);
+        }
+      }
+
+      // Expose to global scope for button onclick
+      window.executeQuery = executeQuery;
+    </script>
+  </body>
+</html>

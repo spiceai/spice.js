@@ -9,7 +9,7 @@ import fetch, {
   RequestInit as NodeFetchRequestInit,
 } from 'node-fetch';
 import { EventEmitter } from 'stream';
-import { Table, tableFromIPC, tableFromArrays } from 'apache-arrow';
+import { Table, tableFromIPC } from 'apache-arrow';
 import {
   FlightClient,
   FlightData,
@@ -21,12 +21,18 @@ import {
 } from './flight';
 import {
   type SpiceClientConfig,
-  type SqlJsonResponse,
+  type SqlV1JsonResponse,
   type RefreshAccelerationOptions,
   type RefreshAccelerationResponse,
   type NsqlOptions,
   type NsqlResponse,
 } from './interfaces';
+import {
+  jsonToArrowTable,
+  convertToSqlV1Format,
+  normalizeSchema,
+  serializeArrowField,
+} from './arrow-utils';
 
 import * as retry from './retry';
 import { getUserAgent } from './user-agent';
@@ -351,7 +357,7 @@ class SpiceClient {
    * @param queryText - The SQL query to execute
    * @returns Promise resolving to an object containing row_count, schema, data, and execution_time_ms
    */
-  async sqlJson(queryText: string): Promise<SqlJsonResponse> {
+  async sqlJson(queryText: string): Promise<SqlV1JsonResponse> {
     const startTime = Date.now();
     const allRows: any[] = [];
     let schema: any = null;
@@ -360,27 +366,28 @@ class SpiceClient {
       // Capture schema from first chunk
       if (!schema) {
         schema = {
-          fields: table.schema.fields.map((field) => ({
-            name: field.name,
-            data_type: field.type.toString(),
-            nullable: field.nullable,
-            dict_id: 0,
-            dict_is_ordered: false,
-          })),
+          fields: table.schema.fields.map((field) =>
+            serializeArrowField(field),
+          ),
         };
       }
 
       // Convert each chunk's rows
-      const resultArray = table.toArray();
-      resultArray.forEach((row: any) => {
-        const plainRow: any = {};
+      // toArray() returns clean row objects with only data fields
+      const rows = table.toArray();
+      for (const row of rows) {
+        // Need to handle BigInt serialization
+        const cleanRow: any = {};
         for (const key in row) {
-          const value = row[key];
-          // Convert BigInt to string for JSON serialization
-          plainRow[key] = typeof value === 'bigint' ? value.toString() : value;
+          if (Object.prototype.hasOwnProperty.call(row, key)) {
+            const value = row[key];
+            // Convert BigInt to string for JSON serialization
+            cleanRow[key] =
+              typeof value === 'bigint' ? value.toString() : value;
+          }
         }
-        allRows.push(plainRow);
-      });
+        allRows.push(cleanRow);
+      }
     });
 
     const executionTime = Date.now() - startTime;
@@ -435,7 +442,12 @@ class SpiceClient {
     const useGrpc = await this.ensureInitialized();
 
     if (!useGrpc) {
-      return this.doHttpQueryRequest(queryText, onData);
+      const sqlJsonResponse = await this.doHttpQueryRequest(queryText, onData);
+      // Convert SqlJsonResponse to Arrow Table
+      return jsonToArrowTable(
+        sqlJsonResponse.schema.fields,
+        sqlJsonResponse.data,
+      );
     }
 
     let client: FlightClient | undefined;
@@ -489,7 +501,9 @@ class SpiceClient {
   private async doHttpQueryRequest(
     queryText: string,
     onData: ((data: Table) => void) | undefined = undefined,
-  ): Promise<Table> {
+  ): Promise<SqlV1JsonResponse> {
+    const startTime = Date.now();
+
     const response = await this.fetchInternal(
       'POST',
       '/v1/sql',
@@ -505,82 +519,36 @@ class SpiceClient {
       );
     }
 
-    const contentType = response.headers.get('content-type') || '';
+    const jsonData: any = await response.json();
 
-    // Handle streaming JSON responses
-    if (contentType.includes('application/json')) {
-      const body = await response.text();
+    // Convert to SQL v1 format if needed
+    const sqlV1Response = convertToSqlV1Format(jsonData);
+    const schema = normalizeSchema(sqlV1Response.schema);
+    const rows = sqlV1Response.data;
 
-      // Try to parse as newline-delimited JSON (streaming)
-      const lines = body
-        .trim()
-        .split('\n')
-        .filter((line: string) => line.trim());
-
-      if (lines.length > 0) {
-        const allRows: any[] = [];
-        let schema: any = null;
-
-        for (const line of lines) {
-          try {
-            const jsonData = JSON.parse(line);
-
-            // Extract schema from first response
-            if (!schema && jsonData.schema) {
-              schema = jsonData.schema;
-            }
-
-            // Accumulate rows
-            if (jsonData.rows && Array.isArray(jsonData.rows)) {
-              allRows.push(...jsonData.rows);
-
-              // If onData callback is provided, send partial results
-              if (onData && jsonData.rows.length > 0) {
-                const partialTable = this.jsonToArrowTable(
-                  schema || [],
-                  jsonData.rows,
-                );
-                onData(partialTable);
-              }
-            }
-          } catch (parseError) {
-            console.warn(`[spice.js] Failed to parse JSON line: ${parseError}`);
-          }
-        }
-
-        // Return final table with all rows
-        return this.jsonToArrowTable(schema || [], allRows);
-      }
+    // If onData callback is provided, send the results as Arrow Table
+    if (onData && rows.length > 0) {
+      const table = jsonToArrowTable(schema, rows);
+      onData(table);
     }
 
-    // Fallback: try to parse entire body as single JSON
-    const jsonData: any = await response.json();
-    const schema = jsonData.schema || [];
-    const rows = jsonData.rows || [];
+    const executionTime = Date.now() - startTime;
 
-    return this.jsonToArrowTable(schema, rows);
-  }
-
-  private jsonToArrowTable(schema: any[], rows: any[]): Table {
-    // Convert JSON response to Arrow Table format
-    const columns: { [key: string]: any[] } = {};
-
-    // Initialize columns
-    schema.forEach((col: any) => {
-      columns[col.name] = [];
-    });
-
-    // Populate columns with row data
-    rows.forEach((row: any) => {
-      schema.forEach((col: any, idx: number) => {
-        // Handle both array-based and object-based rows
-        const value = Array.isArray(row) ? row[idx] : row[col.name];
-        columns[col.name].push(value);
-      });
-    });
-
-    // Use Apache Arrow's tableFromArrays to create the table
-    return tableFromArrays(columns);
+    // Return in SqlJsonResponse format
+    return {
+      row_count: rows.length,
+      schema: {
+        fields: schema.map((field: any) => ({
+          name: field.name,
+          data_type: field.data_type || field.type?.toString() || 'utf8',
+          nullable: field.nullable !== false,
+          dict_id: field.dict_id || 0,
+          dict_is_ordered: field.dict_is_ordered || false,
+        })),
+      },
+      data: rows,
+      execution_time_ms: executionTime,
+    };
   }
 
   /*
@@ -642,7 +610,7 @@ class SpiceClient {
 
     const headers = new Headers([
       ['Content-Type', 'application/json'],
-      ['Accept-Encoding', 'zstd, br, gzip, deflate'],
+      ['Accept-Encoding', 'gzip, deflate'],
       ['User-Agent', this._userAgent],
     ]);
 
@@ -677,5 +645,3 @@ class SpiceClient {
     return fetch(url, fetchOptions);
   }
 }
-
-export { SpiceClient };

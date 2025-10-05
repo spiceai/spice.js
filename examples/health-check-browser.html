@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spice.js Health Check Example</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 50px auto;
+        padding: 20px;
+      }
+      .status {
+        padding: 20px;
+        margin: 10px 0;
+        border-radius: 5px;
+        font-weight: bold;
+      }
+      .healthy {
+        background-color: #d4edda;
+        color: #155724;
+      }
+      .unhealthy {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
+      .unknown {
+        background-color: #fff3cd;
+        color: #856404;
+      }
+      button {
+        padding: 10px 20px;
+        font-size: 16px;
+        cursor: pointer;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 5px;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Spice.js Health Check Example</h1>
+
+    <div>
+      <button onclick="checkStatus()">Check Spice Status</button>
+      <button onclick="autoRefresh()">Auto-Refresh (5s)</button>
+      <button onclick="stopAutoRefresh()">Stop Auto-Refresh</button>
+    </div>
+
+    <h2>Status:</h2>
+    <div id="health-status" class="status unknown">Health: Not checked yet</div>
+    <div id="ready-status" class="status unknown">Ready: Not checked yet</div>
+
+    <div id="error-message" style="color: red; margin-top: 20px"></div>
+
+    <script type="module">
+      // Import from the browser build
+      import { SpiceClient } from '../dist/browser/index.browser.js';
+
+      // Create a client instance
+      const client = new SpiceClient({
+        httpUrl: 'http://localhost:8090',
+      });
+
+      let autoRefreshInterval = null;
+
+      // Make functions globally available
+      window.spiceClient = client;
+
+      async function checkStatus() {
+        const healthDiv = document.getElementById('health-status');
+        const readyDiv = document.getElementById('ready-status');
+        const errorDiv = document.getElementById('error-message');
+
+        errorDiv.textContent = '';
+
+        try {
+          // Check health (unauthenticated)
+          const isHealthy = await client.isSpiceHealthy();
+          healthDiv.textContent = isHealthy
+            ? 'Health: ✅ Healthy'
+            : 'Health: ❌ Unhealthy';
+          healthDiv.className = `status ${isHealthy ? 'healthy' : 'unhealthy'}`;
+
+          // Check ready (authenticated)
+          const isReady = await client.isSpiceReady();
+          readyDiv.textContent = isReady
+            ? 'Ready: ✅ Ready'
+            : 'Ready: ❌ Not Ready';
+          readyDiv.className = `status ${isReady ? 'healthy' : 'unhealthy'}`;
+        } catch (error) {
+          errorDiv.textContent = `Error: ${error.message}`;
+          healthDiv.textContent = 'Health: ❌ Error';
+          healthDiv.className = 'status unhealthy';
+          readyDiv.textContent = 'Ready: ❌ Error';
+          readyDiv.className = 'status unhealthy';
+        }
+      }
+
+      function autoRefresh() {
+        stopAutoRefresh(); // Clear any existing interval
+        checkStatus(); // Check immediately
+        autoRefreshInterval = setInterval(checkStatus, 5000);
+      }
+
+      function stopAutoRefresh() {
+        if (autoRefreshInterval) {
+          clearInterval(autoRefreshInterval);
+          autoRefreshInterval = null;
+        }
+      }
+
+      // Expose to global scope
+      window.checkStatus = checkStatus;
+      window.autoRefresh = autoRefresh;
+      window.stopAutoRefresh = stopAutoRefresh;
+    </script>
+  </body>
+</html>
