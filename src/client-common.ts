@@ -42,13 +42,14 @@ function convertTimestampsInValue(value: any, field?: any): any {
   // Handle arrays (Lists)
   if (Array.isArray(value) && field?.children?.[0]) {
     const childField = field.children[0];
-    const childType = typeof childField.data_type === 'string' ? childField.data_type : '';
-    
+    const childType =
+      typeof childField.data_type === 'string' ? childField.data_type : '';
+
     if (childType.startsWith('Timestamp') || childType.startsWith('Date')) {
       // Parse timezone from data_type string like "Timestamp(Nanosecond, Some("UTC"))"
       const match = childType.match(/Some\("([^"]+)"\)/);
       const hasTimezone = match !== null;
-      
+
       return value.map((item: any) => {
         if (typeof item === 'string') {
           let isoString = item;
@@ -74,13 +75,17 @@ function convertTimestampsInValue(value: any, field?: any): any {
     for (const key in value) {
       const childField = field.children.find((f: any) => f.name === key);
       if (childField) {
-        const childType = typeof childField.data_type === 'string' ? childField.data_type : '';
-        
-        if ((childType.startsWith('Timestamp') || childType.startsWith('Date')) && typeof value[key] === 'string') {
+        const childType =
+          typeof childField.data_type === 'string' ? childField.data_type : '';
+
+        if (
+          (childType.startsWith('Timestamp') || childType.startsWith('Date')) &&
+          typeof value[key] === 'string'
+        ) {
           // Parse timezone from data_type string
           const match = childType.match(/Some\("([^"]+)"\)/);
           const hasTimezone = match !== null;
-          
+
           let isoString = value[key];
           // Remove milliseconds if .000
           isoString = isoString.replace(/\.000Z$/, '');
@@ -196,19 +201,21 @@ function wrapTableForDecimalConversion(table: Table): Table {
 
     // Use original schema if available (from jsonToArrowTable)
     const originalSchema = (table as any)._originalSchema;
-    
+
     // Check which fields need conversion
     const decimalFields = table.schema.fields.filter((f) =>
       f.type.toString().startsWith('Decimal'),
     );
-    
+
     // For timestamp fields, use original schema metadata if available
     let timestampFields: any[];
     if (originalSchema && Array.isArray(originalSchema)) {
       timestampFields = originalSchema
         .filter((f: any) => {
           const dataType = typeof f.data_type === 'string' ? f.data_type : '';
-          return dataType.startsWith('Timestamp') || dataType.startsWith('Date');
+          return (
+            dataType.startsWith('Timestamp') || dataType.startsWith('Date')
+          );
         })
         .map((f: any) => {
           // Parse timezone from data_type string like "Timestamp(Nanosecond, Some("UTC"))"
@@ -235,11 +242,11 @@ function wrapTableForDecimalConversion(table: Table): Table {
           f.type.toString().startsWith('Date'),
       );
     }
-    
+
     // For list/struct fields, use original schema if available
     let listFields: any[];
     let structFields: any[];
-    
+
     if (originalSchema && Array.isArray(originalSchema)) {
       listFields = originalSchema.filter((f: any) => {
         const dataType = typeof f.data_type === 'string' ? f.data_type : '';
@@ -354,15 +361,18 @@ function wrapTableForDecimalConversion(table: Table): Table {
         const value = row[field.name];
         if (value !== null && value !== undefined) {
           // Find corresponding field in original schema
-          const originalField = originalSchema?.find((f: any) => f.name === field.name);
-          
+          const originalField = originalSchema?.find(
+            (f: any) => f.name === field.name,
+          );
+
           // If value is a JSON string, parse it first, convert timestamps, then stringify back
           if (typeof value === 'string') {
             try {
               const parsed = JSON.parse(value);
               const converted = convertTimestampsInValue(parsed, originalField);
               // Always update if we successfully parsed and converted
-              const shouldUpdate = JSON.stringify(converted) !== JSON.stringify(parsed);
+              const shouldUpdate =
+                JSON.stringify(converted) !== JSON.stringify(parsed);
               if (shouldUpdate) {
                 ensureConvertedRow();
                 convertedRow[field.name] = JSON.stringify(converted);
@@ -370,10 +380,16 @@ function wrapTableForDecimalConversion(table: Table): Table {
             } catch (e) {
               // Not valid JSON, keep as-is
             }
-          } else if (typeof value === 'object' && (Array.isArray(value) || value.constructor === Object || value.constructor?.name === 'StructRow')) {
+          } else if (
+            typeof value === 'object' &&
+            (Array.isArray(value) ||
+              value.constructor === Object ||
+              value.constructor?.name === 'StructRow')
+          ) {
             // If value is already an object/array (not stringified), convert it directly
             const converted = convertTimestampsInValue(value, originalField);
-            const shouldUpdate = JSON.stringify(converted) !== JSON.stringify(value);
+            const shouldUpdate =
+              JSON.stringify(converted) !== JSON.stringify(value);
             if (shouldUpdate) {
               ensureConvertedRow();
               convertedRow[field.name] = converted;
