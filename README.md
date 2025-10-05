@@ -54,7 +54,7 @@ const main = async () => {
   // });
 
   const table = await spiceClient.sql(
-    'SELECT trip_distance, total_amount FROM taxi_trips ORDER BY trip_distance DESC LIMIT 10;',
+    'SELECT trip_distance, total_amount FROM taxi_trips ORDER BY trip_distance DESC LIMIT 10;'
   );
   console.table(table.toArray());
 };
@@ -66,7 +66,7 @@ main();
 
 The SpiceClient automatically selects the best available transport protocol in this order:
 
-1. **Arrow Flight SQL** - gRPC protocol with parameter substitution  
+1. **Arrow Flight SQL** - gRPC protocol with parameter substitution
 2. **HTTP/HTTPS** - Fallback for browser environments or when Flight is unavailable
 
 For parameterized queries, the SDK provides secure parameter binding:
@@ -508,7 +508,7 @@ The `nsql()` method converts natural language queries into SQL and executes them
 ```js
 // Basic natural language query
 const result = await spiceClient.nsql(
-  'Show me the top 5 customers by total sales',
+  'Show me the top 5 customers by total sales'
 );
 
 console.log('Generated SQL:', result.sql);
@@ -522,7 +522,7 @@ const result = await spiceClient.nsql(
     datasets: ['taxi_trips'], // Limit to specific datasets
     model: 'nql', // Specify the model (default: 'nql')
     sample_data_enabled: true, // Include sample data in context (default: true)
-  },
+  }
 );
 
 // Access the generated SQL

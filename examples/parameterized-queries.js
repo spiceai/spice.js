@@ -32,7 +32,9 @@ async function main() {
 
     console.log(`✓ Query executed successfully`);
     console.log(`  Rows returned: ${table1.numRows}`);
-    console.log(`  Transport used: Apache Flight SQL (gRPC) with parameter substitution`);
+    console.log(
+      `  Transport used: Apache Flight SQL (gRPC) with parameter substitution`
+    );
     console.log('\nFirst few rows:');
     console.table(table1.toArray().slice(0, 3));
 
@@ -42,11 +44,11 @@ async function main() {
 
     const table2 = await client.sql(
       'SELECT * FROM taxi_trips WHERE passenger_count = $passengers AND fare_amount > $min_fare LIMIT 10',
-      { 
-        parameters: { 
+      {
+        parameters: {
           passengers: 3,
-          min_fare: 20.0
-        } 
+          min_fare: 20.0,
+        },
       }
     );
 
@@ -65,13 +67,13 @@ async function main() {
        AND trip_distance BETWEEN $2 AND $3 
        AND store_and_fwd_flag = $4 
        LIMIT 10`,
-      { 
+      {
         parameters: [
-          2,          // integer
-          1.0,        // float (minimum distance)
-          10.0,       // float (maximum distance)
-          'N'         // string
-        ] 
+          2, // integer
+          1.0, // float (minimum distance)
+          10.0, // float (maximum distance)
+          'N', // string
+        ],
       }
     );
 
@@ -86,7 +88,7 @@ async function main() {
 
     // This would be dangerous without proper escaping
     const maliciousInput = "' OR '1'='1";
-    
+
     const table4 = await client.sql(
       'SELECT COUNT(*) as count FROM taxi_trips WHERE store_and_fwd_flag = $1',
       { parameters: [maliciousInput] }
@@ -115,18 +117,27 @@ async function main() {
     console.log('✓ All examples completed successfully!');
     console.log('='.repeat(80));
     console.log('\n📝 Key Points:');
-    console.log('  • Parameterized queries work perfectly with Apache Flight SQL');
+    console.log(
+      '  • Parameterized queries work perfectly with Apache Flight SQL'
+    );
     console.log('  • Parameters are safely substituted on the client side');
-    console.log('  • Both positional ($1, $2) and named ($param_name) parameters supported');
-    console.log('  • Automatic SQL injection prevention through proper escaping');
-    console.log('  • Works with all data types: strings, numbers, booleans, null');
+    console.log(
+      '  • Both positional ($1, $2) and named ($param_name) parameters supported'
+    );
+    console.log(
+      '  • Automatic SQL injection prevention through proper escaping'
+    );
+    console.log(
+      '  • Works with all data types: strings, numbers, booleans, null'
+    );
     console.log('  • Automatic fallback to HTTP if Flight SQL is unavailable');
     console.log('\n💡 Best Practices:');
     console.log('  • Use positional parameters for simple queries');
-    console.log('  • Use named parameters for complex queries with many parameters');
+    console.log(
+      '  • Use named parameters for complex queries with many parameters'
+    );
     console.log('  • Never concatenate user input directly into SQL strings');
     console.log('  • Let the SDK handle parameter escaping automatically');
-
   } catch (error) {
     console.error('\n❌ Error:', error.message);
     console.error(error.stack);

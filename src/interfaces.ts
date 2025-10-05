@@ -58,12 +58,12 @@ export interface NsqlResponse {
 /**
  * Query parameter value types supported by DataFusion
  */
-export type QueryParameterValue = 
-  | string 
-  | number 
-  | boolean 
-  | Date 
-  | null 
+export type QueryParameterValue =
+  | string
+  | number
+  | boolean
+  | Date
+  | null
   | bigint
   | Buffer;
 
@@ -71,7 +71,7 @@ export type QueryParameterValue =
  * Query parameters for parameterized queries
  * Can be an object with named parameters or an array for positional parameters
  */
-export type QueryParameters = 
+export type QueryParameters =
   | { [key: string]: QueryParameterValue }
   | QueryParameterValue[];
 

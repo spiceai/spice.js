@@ -33,7 +33,7 @@ To develop locally:
    ```bash
    # Copy the example file
    cp .env.example .env
-   
+
    # Edit .env and add your API key
    # SPICE_API_KEY=your_api_key_here
    ```
