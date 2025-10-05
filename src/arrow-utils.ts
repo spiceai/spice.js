@@ -122,7 +122,10 @@ export function jsonToArrowTable(schema: any[], rows: any[]): Table {
     schema.forEach((col: any) => {
       columns[col.name] = [];
     });
-    return tableFromArrays(columns);
+    const table = tableFromArrays(columns);
+    // Attach original schema metadata for type conversion
+    (table as any)._originalSchema = schema;
+    return table;
   }
 
   // Build columns from rows using schema information
@@ -156,7 +159,10 @@ export function jsonToArrowTable(schema: any[], rows: any[]): Table {
   // - Mixed-type arrays
   // - Complex nested structures
   try {
-    return tableFromArrays(columns);
+    const table = tableFromArrays(columns);
+    // Attach original schema metadata for type conversion
+    (table as any)._originalSchema = schema;
+    return table;
   } catch (error) {
     // If tableFromArrays fails, try converting problematic values
     const simpleColumns: { [key: string]: any[] } = {};
@@ -181,7 +187,10 @@ export function jsonToArrowTable(schema: any[], rows: any[]): Table {
 
     // Try again with simplified columns
     try {
-      return tableFromArrays(simpleColumns);
+      const table = tableFromArrays(simpleColumns);
+      // Attach original schema metadata for type conversion
+      (table as any)._originalSchema = schema;
+      return table;
     } catch (secondError) {
       // Last resort: convert everything to strings
       const stringColumns: { [key: string]: any[] } = {};
@@ -192,7 +201,10 @@ export function jsonToArrowTable(schema: any[], rows: any[]): Table {
           return JSON.stringify(val);
         });
       });
-      return tableFromArrays(stringColumns);
+      const table = tableFromArrays(stringColumns);
+      // Attach original schema metadata for type conversion
+      (table as any)._originalSchema = schema;
+      return table;
     }
   }
 }

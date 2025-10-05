@@ -32,6 +32,80 @@ export interface RetryModule {
 }
 
 /**
+ * Helper function to recursively convert timestamps in nested structures
+ */
+function convertTimestampsInValue(value: any, field?: any): any {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  // Handle arrays (Lists)
+  if (Array.isArray(value) && field?.children?.[0]) {
+    const childField = field.children[0];
+    const childType = typeof childField.data_type === 'string' ? childField.data_type : '';
+    
+    if (childType.startsWith('Timestamp') || childType.startsWith('Date')) {
+      // Parse timezone from data_type string like "Timestamp(Nanosecond, Some("UTC"))"
+      const match = childType.match(/Some\("([^"]+)"\)/);
+      const hasTimezone = match !== null;
+      
+      return value.map((item: any) => {
+        if (typeof item === 'string') {
+          let isoString = item;
+          // Remove milliseconds if .000
+          isoString = isoString.replace(/\.000Z$/, '');
+          isoString = isoString.replace(/\.000$/, '');
+          // Add Z back if has timezone, otherwise leave without Z
+          if (hasTimezone && !isoString.endsWith('Z')) {
+            isoString += 'Z';
+          }
+          return isoString;
+        }
+        return item;
+      });
+    }
+  }
+
+  // Handle objects (Structs)
+  if (typeof value === 'object' && !Array.isArray(value) && field?.children) {
+    const converted: any = {};
+    let hasChanges = false;
+
+    for (const key in value) {
+      const childField = field.children.find((f: any) => f.name === key);
+      if (childField) {
+        const childType = typeof childField.data_type === 'string' ? childField.data_type : '';
+        
+        if ((childType.startsWith('Timestamp') || childType.startsWith('Date')) && typeof value[key] === 'string') {
+          // Parse timezone from data_type string
+          const match = childType.match(/Some\("([^"]+)"\)/);
+          const hasTimezone = match !== null;
+          
+          let isoString = value[key];
+          // Remove milliseconds if .000
+          isoString = isoString.replace(/\.000Z$/, '');
+          isoString = isoString.replace(/\.000$/, '');
+          // Add Z back if has timezone, otherwise leave without Z
+          if (hasTimezone && !isoString.endsWith('Z')) {
+            isoString += 'Z';
+          }
+          converted[key] = isoString;
+          hasChanges = true;
+        } else {
+          converted[key] = value[key];
+        }
+      } else {
+        converted[key] = value[key];
+      }
+    }
+
+    return hasChanges ? converted : value;
+  }
+
+  return value;
+}
+
+/**
  * Helper function to recursively convert Arrow structures to plain JavaScript
  */
 function convertArrowValue(value: any, field?: any): any {
@@ -39,15 +113,32 @@ function convertArrowValue(value: any, field?: any): any {
     return value;
   }
 
+  // Handle string timestamps (from JSON responses)
+  if (typeof value === 'string' && field?.type) {
+    const typeStr = field.type.toString();
+    if (typeStr.startsWith('Timestamp') || typeStr.startsWith('Date')) {
+      const hasTimezone = field.type.timezone != null;
+      let isoString = value;
+      // Remove milliseconds if .000
+      isoString = isoString.replace(/\.000Z$/, '');
+      isoString = isoString.replace(/\.000$/, '');
+      // Add Z back if has timezone, otherwise leave without Z
+      if (hasTimezone && !isoString.endsWith('Z')) {
+        isoString += 'Z';
+      }
+      return isoString;
+    }
+  }
+
   // Handle Date objects - check if field has timezone info
   if (value instanceof Date) {
     const hasTimezone = field?.type?.timezone != null;
     let isoString = value.toISOString();
-    // Remove .000 milliseconds if present (before removing Z)
-    isoString = isoString.replace(/\.000Z$/, 'Z');
-    // Only remove 'Z' suffix if no timezone specified
-    if (!hasTimezone) {
-      isoString = isoString.replace(/Z$/, '');
+    // Remove milliseconds if .000
+    isoString = isoString.replace(/\.000Z$/, '');
+    // Add Z back if has timezone, otherwise leave without Z
+    if (hasTimezone) {
+      isoString += 'Z';
     }
     return isoString;
   }
@@ -103,24 +194,72 @@ function wrapTableForDecimalConversion(table: Table): Table {
   (table as any).toArray = function () {
     const rows = originalToArray();
 
+    // Use original schema if available (from jsonToArrowTable)
+    const originalSchema = (table as any)._originalSchema;
+    
     // Check which fields need conversion
     const decimalFields = table.schema.fields.filter((f) =>
       f.type.toString().startsWith('Decimal'),
     );
-    const timestampFields = table.schema.fields.filter(
-      (f) =>
-        f.type.toString().startsWith('Timestamp') ||
-        f.type.toString().startsWith('Date'),
-    );
-    const listFields = table.schema.fields.filter(
-      (f) =>
-        f.type.toString().startsWith('List<') || f.type.toString() === 'List',
-    );
-    const structFields = table.schema.fields.filter(
-      (f) =>
-        f.type.toString().startsWith('Struct<') ||
-        f.type.toString() === 'Struct',
-    );
+    
+    // For timestamp fields, use original schema metadata if available
+    let timestampFields: any[];
+    if (originalSchema && Array.isArray(originalSchema)) {
+      timestampFields = originalSchema
+        .filter((f: any) => {
+          const dataType = typeof f.data_type === 'string' ? f.data_type : '';
+          return dataType.startsWith('Timestamp') || dataType.startsWith('Date');
+        })
+        .map((f: any) => {
+          // Parse timezone from data_type string like "Timestamp(Nanosecond, Some("UTC"))"
+          const dataType = f.data_type;
+          let timezone = null;
+          if (typeof dataType === 'string') {
+            const match = dataType.match(/Some\("([^"]+)"\)/);
+            if (match) {
+              timezone = match[1];
+            }
+          }
+          return {
+            name: f.name,
+            type: {
+              toString: () => f.data_type,
+              timezone: timezone,
+            },
+          };
+        });
+    } else {
+      timestampFields = table.schema.fields.filter(
+        (f) =>
+          f.type.toString().startsWith('Timestamp') ||
+          f.type.toString().startsWith('Date'),
+      );
+    }
+    
+    // For list/struct fields, use original schema if available
+    let listFields: any[];
+    let structFields: any[];
+    
+    if (originalSchema && Array.isArray(originalSchema)) {
+      listFields = originalSchema.filter((f: any) => {
+        const dataType = typeof f.data_type === 'string' ? f.data_type : '';
+        return dataType === 'List' || dataType.startsWith('List<');
+      });
+      structFields = originalSchema.filter((f: any) => {
+        const dataType = typeof f.data_type === 'string' ? f.data_type : '';
+        return dataType === 'Struct' || dataType.startsWith('Struct<');
+      });
+    } else {
+      listFields = table.schema.fields.filter(
+        (f) =>
+          f.type.toString().startsWith('List<') || f.type.toString() === 'List',
+      );
+      structFields = table.schema.fields.filter(
+        (f) =>
+          f.type.toString().startsWith('Struct<') ||
+          f.type.toString() === 'Struct',
+      );
+    }
 
     // If no special fields, return rows as-is to avoid unnecessary processing
     if (
@@ -175,11 +314,11 @@ function wrapTableForDecimalConversion(table: Table): Table {
           if (value instanceof Date) {
             ensureConvertedRow();
             let isoString = value.toISOString();
-            // Remove .000 milliseconds if present (before removing Z)
-            isoString = isoString.replace(/\.000Z$/, 'Z');
-            // Remove 'Z' suffix for timestamps without timezone
-            if (!hasTimezone) {
-              isoString = isoString.replace(/Z$/, '');
+            // Remove milliseconds if .000
+            isoString = isoString.replace(/\.000Z$/, '');
+            // Add Z back if has timezone, otherwise leave without Z
+            if (hasTimezone) {
+              isoString += 'Z';
             }
             convertedRow[field.name] = isoString;
           } else if (typeof value === 'number') {
@@ -187,10 +326,23 @@ function wrapTableForDecimalConversion(table: Table): Table {
             // Handle numeric timestamps
             const date = new Date(value);
             let isoString = date.toISOString();
-            // Remove .000 milliseconds if present (before removing Z)
-            isoString = isoString.replace(/\.000Z$/, 'Z');
-            if (!hasTimezone) {
-              isoString = isoString.replace(/Z$/, '');
+            // Remove milliseconds if .000
+            isoString = isoString.replace(/\.000Z$/, '');
+            // Add Z back if has timezone, otherwise leave without Z
+            if (hasTimezone) {
+              isoString += 'Z';
+            }
+            convertedRow[field.name] = isoString;
+          } else if (typeof value === 'string') {
+            ensureConvertedRow();
+            // Handle string timestamps (from JSON responses)
+            let isoString = value;
+            // Remove milliseconds if .000
+            isoString = isoString.replace(/\.000Z$/, '');
+            isoString = isoString.replace(/\.000$/, '');
+            // Add Z back if has timezone, otherwise leave without Z
+            if (hasTimezone && !isoString.endsWith('Z')) {
+              isoString += 'Z';
             }
             convertedRow[field.name] = isoString;
           }
@@ -201,11 +353,38 @@ function wrapTableForDecimalConversion(table: Table): Table {
       for (const field of listFields.concat(structFields)) {
         const value = row[field.name];
         if (value !== null && value !== undefined) {
-          const converted = convertArrowValue(value, field);
-          // Only update if conversion actually changed the value
-          if (converted !== value) {
-            ensureConvertedRow();
-            convertedRow[field.name] = converted;
+          // Find corresponding field in original schema
+          const originalField = originalSchema?.find((f: any) => f.name === field.name);
+          
+          // If value is a JSON string, parse it first, convert timestamps, then stringify back
+          if (typeof value === 'string') {
+            try {
+              const parsed = JSON.parse(value);
+              const converted = convertTimestampsInValue(parsed, originalField);
+              // Always update if we successfully parsed and converted
+              const shouldUpdate = JSON.stringify(converted) !== JSON.stringify(parsed);
+              if (shouldUpdate) {
+                ensureConvertedRow();
+                convertedRow[field.name] = JSON.stringify(converted);
+              }
+            } catch (e) {
+              // Not valid JSON, keep as-is
+            }
+          } else if (typeof value === 'object' && (Array.isArray(value) || value.constructor === Object || value.constructor?.name === 'StructRow')) {
+            // If value is already an object/array (not stringified), convert it directly
+            const converted = convertTimestampsInValue(value, originalField);
+            const shouldUpdate = JSON.stringify(converted) !== JSON.stringify(value);
+            if (shouldUpdate) {
+              ensureConvertedRow();
+              convertedRow[field.name] = converted;
+            }
+          } else {
+            const converted = convertArrowValue(value, field);
+            // Only update if conversion actually changed the value
+            if (converted !== value) {
+              ensureConvertedRow();
+              convertedRow[field.name] = converted;
+            }
           }
         }
       }
@@ -645,9 +824,14 @@ export class SpiceClient {
 
           // Convert Date objects to ISO 8601 strings
           if (value instanceof Date) {
-            const isoString = value.toISOString();
-            // Remove timezone suffix (Z) if the original type doesn't have timezone
-            return hasTimezone ? isoString : isoString.replace(/Z$/, '');
+            let isoString = value.toISOString();
+            // Remove milliseconds if .000
+            isoString = isoString.replace(/\.000Z$/, '');
+            // Add Z back if has timezone, otherwise leave without Z
+            if (hasTimezone) {
+              isoString += 'Z';
+            }
+            return isoString;
           }
 
           // Convert numeric timestamps/dates to ISO 8601 strings
@@ -658,9 +842,14 @@ export class SpiceClient {
               typeStr.startsWith('Date64')
             ) {
               const date = new Date(value);
-              const isoString = date.toISOString();
-              // Remove timezone suffix (Z) if the original type doesn't have timezone
-              return hasTimezone ? isoString : isoString.replace(/Z$/, '');
+              let isoString = date.toISOString();
+              // Remove milliseconds if .000
+              isoString = isoString.replace(/\.000Z$/, '');
+              // Add Z back if has timezone, otherwise leave without Z
+              if (hasTimezone) {
+                isoString += 'Z';
+              }
+              return isoString;
             }
             return value;
           }

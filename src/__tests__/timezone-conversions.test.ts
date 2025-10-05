@@ -61,7 +61,7 @@ describe('Timezone Conversions', () => {
       const result = await client.sql('SELECT * FROM test');
       const rows = result.toArray();
 
-      expect(rows[0].ts_with_tz).toBe('2024-01-15T10:30:00.000Z');
+      expect(rows[0].ts_with_tz).toBe('2024-01-15T10:30:00Z');
       expect(rows[0].ts_with_tz).toMatch(/Z$/); // Should end with Z
     });
   });
@@ -93,8 +93,8 @@ describe('Timezone Conversions', () => {
       const result = await client.sql('SELECT * FROM test');
       const rows = result.toArray();
 
-      expect(rows[0].ts_no_tz).toBe('2024-01-15T10:30:00.000Z');
-      expect(rows[0].ts_no_tz).toMatch(/Z$/); // Currently keeps Z even without timezone
+      expect(rows[0].ts_no_tz).toBe('2024-01-15T10:30:00');
+      expect(rows[0].ts_no_tz).not.toMatch(/Z$/); // Should not end with Z
     });
   });
 
@@ -125,8 +125,8 @@ describe('Timezone Conversions', () => {
       const result = await client.sql('SELECT * FROM test');
       const rows = result.toArray();
 
-      expect(rows[0].date_col).toBe('2024-01-15T00:00:00.000Z');
-      expect(rows[0].date_col).toMatch(/Z$/); // Currently keeps Z even for dates
+      expect(rows[0].date_col).toBe('2024-01-15T00:00:00');
+      expect(rows[0].date_col).not.toMatch(/Z$/); // Date types don't have timezone
     });
   });
 
@@ -176,10 +176,7 @@ describe('Timezone Conversions', () => {
 
       // List is returned as JSON string
       const tsList = JSON.parse(rows[0].ts_list);
-      expect(tsList).toEqual([
-        '2024-01-15T10:30:00.000Z',
-        '2024-01-16T15:45:00.000Z',
-      ]);
+      expect(tsList).toEqual(['2024-01-15T10:30:00Z', '2024-01-16T15:45:00Z']);
       tsList.forEach((ts: string) => {
         expect(ts).toMatch(/Z$/);
       });
@@ -236,11 +233,11 @@ describe('Timezone Conversions', () => {
       const result = await client.sql('SELECT * FROM test');
       const rows = result.toArray();
 
-      expect(rows[0].event.created_at).toBe('2024-01-15T10:30:00.000Z');
+      expect(rows[0].event.created_at).toBe('2024-01-15T10:30:00Z');
       expect(rows[0].event.created_at).toMatch(/Z$/);
 
-      expect(rows[0].event.local_time).toBe('2024-01-15T10:30:00.000Z');
-      expect(rows[0].event.local_time).toMatch(/Z$/); // Currently keeps Z even without timezone
+      expect(rows[0].event.local_time).toBe('2024-01-15T10:30:00');
+      expect(rows[0].event.local_time).not.toMatch(/Z$/); // Should not have Z without timezone
     });
   });
 
