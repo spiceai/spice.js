@@ -966,12 +966,132 @@ export class SpiceClient {
       const jsonData = await response.json();
       const executionTime = Date.now() - startTime;
 
+      // Process timestamps in the data to match sql() behavior
+      const schema = jsonData.schema || { fields: [] };
+      const data = jsonData.data || jsonData.rows || []; // Find timestamp and date fields in the schema
+      const timestampFields = (schema.fields || []).filter((f: any) => {
+        const dataType = f.data_type;
+        if (typeof dataType === 'string') {
+          return (
+            dataType.startsWith('Timestamp') || dataType.startsWith('Date')
+          );
+        } else if (dataType && typeof dataType === 'object') {
+          return 'Timestamp' in dataType;
+        }
+        return false;
+      });
+
+      // Process each row to convert timestamps
+      const processedData = data.map((row: any) => {
+        // Handle array-based rows (preserve array format)
+        if (Array.isArray(row)) {
+          // For array-based rows, create a map of field index to field metadata
+          const fieldByIndex = new Map<number, any>();
+          (schema.fields || []).forEach((field: any, index: number) => {
+            fieldByIndex.set(index, field);
+          });
+
+          return row.map((value: any, index: number) => {
+            const field = fieldByIndex.get(index);
+            if (
+              field &&
+              value !== null &&
+              value !== undefined &&
+              typeof value === 'string'
+            ) {
+              const dataType = field.data_type;
+              // Check if this is a timestamp/date field
+              let isTimestamp = false;
+              if (typeof dataType === 'string') {
+                isTimestamp =
+                  dataType.startsWith('Timestamp') ||
+                  dataType.startsWith('Date');
+              } else if (dataType && typeof dataType === 'object') {
+                isTimestamp = 'Timestamp' in dataType;
+              }
+
+              if (isTimestamp) {
+                // Determine if field has timezone
+                let hasTimezone = false;
+                if (typeof dataType === 'string') {
+                  hasTimezone = dataType.includes('Some(');
+                } else if (
+                  dataType &&
+                  typeof dataType === 'object' &&
+                  'Timestamp' in dataType
+                ) {
+                  hasTimezone = dataType.Timestamp[1] !== null;
+                }
+
+                // Process the timestamp string
+                let isoString = value;
+                // Remove .000 milliseconds and any Z suffix
+                isoString = isoString.replace(/\.000Z?$/, '');
+                // Remove any remaining Z if no timezone
+                if (!hasTimezone && isoString.endsWith('Z')) {
+                  isoString = isoString.slice(0, -1);
+                }
+                // Add Z if has timezone and doesn't already have it
+                if (hasTimezone && !isoString.endsWith('Z')) {
+                  isoString += 'Z';
+                }
+                return isoString;
+              }
+            }
+            return value;
+          });
+        }
+
+        // Handle object-based rows
+        const processedRow: any = { ...row };
+
+        for (const field of timestampFields) {
+          const value = row[field.name];
+          if (
+            value !== null &&
+            value !== undefined &&
+            typeof value === 'string'
+          ) {
+            // Determine if field has timezone
+            let hasTimezone = false;
+            const dataType = field.data_type;
+
+            if (typeof dataType === 'string') {
+              // Parse timezone from string like "Timestamp(Nanosecond, Some("UTC"))"
+              hasTimezone = dataType.includes('Some(');
+            } else if (
+              dataType &&
+              typeof dataType === 'object' &&
+              'Timestamp' in dataType
+            ) {
+              // Parse from object format like { Timestamp: ['Millisecond', 'UTC'] }
+              hasTimezone = dataType.Timestamp[1] !== null;
+            }
+
+            // Process the timestamp string
+            let isoString = value;
+            // Remove .000 milliseconds and any Z suffix
+            isoString = isoString.replace(/\.000Z?$/, '');
+            // Remove any remaining Z if no timezone
+            if (!hasTimezone && isoString.endsWith('Z')) {
+              isoString = isoString.slice(0, -1);
+            }
+            // Add Z if has timezone and doesn't already have it
+            if (hasTimezone && !isoString.endsWith('Z')) {
+              isoString += 'Z';
+            }
+            processedRow[field.name] = isoString;
+          }
+        }
+
+        return processedRow;
+      });
+
       // Response is already in V1 format, just ensure proper structure
       return {
-        row_count:
-          jsonData.row_count || (jsonData.data || jsonData.rows || []).length,
-        schema: jsonData.schema || { fields: [] },
-        data: jsonData.data || jsonData.rows || [],
+        row_count: jsonData.row_count || processedData.length,
+        schema: schema,
+        data: processedData,
         execution_time_ms: executionTime,
       };
     }
