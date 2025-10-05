@@ -83,7 +83,7 @@ describe('Browser SpiceClient', () => {
         'http://localhost:8090/health',
         expect.objectContaining({
           method: 'GET',
-        }),
+        })
       );
     });
 
@@ -100,7 +100,7 @@ describe('Browser SpiceClient', () => {
 
     test('isSpiceHealthy should return false on network error', async () => {
       (global.fetch as jest.Mock).mockRejectedValueOnce(
-        new Error('Network error'),
+        new Error('Network error')
       );
 
       const result = await client.isSpiceHealthy();
@@ -167,7 +167,7 @@ describe('Browser SpiceClient', () => {
             // Local OSS runtime uses application/json
             Accept: 'application/json',
           }),
-        }),
+        })
       );
     });
 
@@ -302,7 +302,7 @@ describe('Browser SpiceClient', () => {
       // Verify HTTP endpoint was called
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/v1/sql'),
-        expect.any(Object),
+        expect.any(Object)
       );
     });
 
@@ -330,7 +330,7 @@ describe('Browser SpiceClient', () => {
           headers: expect.objectContaining({
             'User-Agent': expect.stringContaining('spice.js'),
           }),
-        }),
+        })
       );
     });
   });
@@ -362,7 +362,7 @@ describe('Browser SpiceClient', () => {
         'http://localhost:8090/v1/nsql',
         expect.objectContaining({
           method: 'POST',
-        }),
+        })
       );
     });
 
@@ -413,7 +413,7 @@ describe('Browser SpiceClient', () => {
       });
 
       await expect(
-        client.refreshAcceleration('nonexistent_dataset'),
+        client.refreshAcceleration('nonexistent_dataset')
       ).rejects.toThrow();
     });
   });
@@ -457,7 +457,7 @@ describe('Browser SpiceClient', () => {
           headers: expect.objectContaining({
             'X-API-Key': 'test-api-key-123',
           }),
-        }),
+        })
       );
     });
 
@@ -510,7 +510,7 @@ describe('Browser SpiceClient', () => {
             'X-Custom-Header': 'custom-value',
             'X-Another-Header': 'another-value',
           }),
-        }),
+        })
       );
     });
   });
@@ -573,7 +573,7 @@ describe('Browser SpiceClient', () => {
         });
 
         const sqlResult = await client.sql(
-          'SELECT id, int4_column, text_column, bool_column FROM test_table ORDER BY id',
+          'SELECT id, int4_column, text_column, bool_column FROM test_table ORDER BY id'
         );
 
         // Mock for sqlJson() - returns JSON format
@@ -590,7 +590,7 @@ describe('Browser SpiceClient', () => {
         });
 
         const sqlJsonResult = await client.sqlJson(
-          'SELECT id, int4_column, text_column, bool_column FROM test_table ORDER BY id',
+          'SELECT id, int4_column, text_column, bool_column FROM test_table ORDER BY id'
         );
 
         // Convert Arrow table to array for comparison
@@ -751,8 +751,8 @@ describe('Browser SpiceClient', () => {
           data: [
             {
               id: 1,
-              created_at: '2021-08-09T10:42:19.000Z',
-              date_column: '2021-08-09T00:00:00.000Z',
+              created_at: '2021-08-09T10:42:19',
+              date_column: '2021-08-09',
             },
           ],
           row_count: 1,
@@ -792,7 +792,7 @@ describe('Browser SpiceClient', () => {
         expect(sqlRows[0].id).toBe(jsonRows[0].id);
         expect(typeof jsonRows[0].created_at).toBe('string');
         expect(jsonRows[0].created_at).toMatch(
-          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/
         );
 
         // In HTTP mode, both should get the same timestamp string
@@ -852,7 +852,7 @@ describe('Browser SpiceClient', () => {
         });
 
         const sqlResult = await client.sql(
-          "SELECT id, value, value * 2 as doubled, CASE WHEN value > 5 THEN 'high' ELSE 'low' END as category FROM test_table",
+          "SELECT id, value, value * 2 as doubled, CASE WHEN value > 5 THEN 'high' ELSE 'low' END as category FROM test_table"
         );
 
         // Mock sqlJson()
@@ -869,7 +869,7 @@ describe('Browser SpiceClient', () => {
         });
 
         const sqlJsonResult = await client.sqlJson(
-          "SELECT id, value, value * 2 as doubled, CASE WHEN value > 5 THEN 'high' ELSE 'low' END as category FROM test_table",
+          "SELECT id, value, value * 2 as doubled, CASE WHEN value > 5 THEN 'high' ELSE 'low' END as category FROM test_table"
         );
 
         const sqlRows = sqlResult.toArray();
@@ -950,14 +950,14 @@ describe('Browser SpiceClient', () => {
 
         // Verify schema structure matches
         expect(sqlResult.schema.fields.length).toBe(
-          sqlJsonResult.schema.fields.length,
+          sqlJsonResult.schema.fields.length
         );
         expect(sqlResult.schema.fields.length).toBe(3);
 
         // Verify field names match
         const sqlFieldNames = sqlResult.schema.fields.map((f: any) => f.name);
         const jsonFieldNames = sqlJsonResult.schema.fields.map(
-          (f: any) => f.name,
+          (f: any) => f.name
         );
         expect(sqlFieldNames).toEqual(jsonFieldNames);
         expect(sqlFieldNames).toEqual(['id', 'name', 'timestamp_col']);
@@ -983,7 +983,7 @@ describe('Browser SpiceClient', () => {
         });
 
         await expect(
-          client.sql('SELECT * FROM nonexistent_table'),
+          client.sql('SELECT * FROM nonexistent_table')
         ).rejects.toThrow();
 
         // Mock sqlJson() error
@@ -995,7 +995,7 @@ describe('Browser SpiceClient', () => {
         });
 
         await expect(
-          client.sqlJson('SELECT * FROM nonexistent_table'),
+          client.sqlJson('SELECT * FROM nonexistent_table')
         ).rejects.toThrow();
       });
     });
