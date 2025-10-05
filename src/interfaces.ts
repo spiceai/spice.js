@@ -55,6 +55,38 @@ export interface NsqlResponse {
   sql: string;
 }
 
+/**
+ * Query parameter value types supported by DataFusion
+ */
+export type QueryParameterValue = 
+  | string 
+  | number 
+  | boolean 
+  | Date 
+  | null 
+  | bigint
+  | Buffer;
+
+/**
+ * Query parameters for parameterized queries
+ * Can be an object with named parameters or an array for positional parameters
+ */
+export type QueryParameters = 
+  | { [key: string]: QueryParameterValue }
+  | QueryParameterValue[];
+
+/**
+ * Options for SQL queries
+ */
+export interface SqlQueryOptions {
+  /**
+   * Query parameters for parameterized queries
+   * Named parameters: { param1: value1, param2: value2 }
+   * Positional parameters: [value1, value2, value3]
+   */
+  parameters?: QueryParameters;
+}
+
 // Legacy interface for backward compatibility
 /** @deprecated Use RefreshAccelerationOptions instead */
 export interface RefreshOverrides extends RefreshAccelerationOptions {}

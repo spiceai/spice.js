@@ -32,18 +32,11 @@ jobs:
           vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           branch-name: ${{ github.ref_name }}
 
-      - run: |
-          npm run test -t 'cloud'
+      - name: Test
+        run: npm test
+        timeout-minutes: 10
         env:
-          SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }}
-          API_KEY: ${{ secrets.API_KEY }}
-          RELAY_KEY: ${{ secrets.RELAY_KEY }}
-          RELAY_SECRET: ${{ secrets.RELAY_SECRET }}
-          RELAY_URL: ${{ secrets.RELAY_URL }}
-          HTTP_URL: ${{ secrets.HTTP_URL || 'https://data.spiceai.io' }}
-          FLIGHT_URL: ${{ secrets.FLIGHT_URL || 'flight.spiceai.io:443' }}
-          VERCEL_ENDPOINT: ${{ steps.vercel.outputs.vercel-api-endpoint }}
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          SPICE_API_KEY: ${{ secrets.SPICE_API_KEY }}
 
   publish-npm:
     needs: build

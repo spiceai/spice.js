@@ -5,7 +5,7 @@ export async function GET(request: NextRequest) {
   try {
     // Use API key from X-API-KEY header or environment variable
     const apiKey = request.headers.get('X-API-KEY');
-    const key = apiKey || process.env.SPICEAI_API_KEY;
+    const key = apiKey || process.env.SPICE_API_KEY;
 
     // Initialize SpiceClient
     const client = new SpiceClient(key);

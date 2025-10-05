@@ -184,7 +184,7 @@ function DiffViewer({
 
 export default function TestPage() {
   const [apiKey, setApiKey] = useState<string>(
-    process.env.NEXT_PUBLIC_SPICEAI_API_KEY || '',
+    process.env.NEXT_PUBLIC_SPICE_API_KEY || '',
   );
   const [healthStatus, setHealthStatus] = useState<string>('Not checked');
   const [readyStatus, setReadyStatus] = useState<string>('Not checked');

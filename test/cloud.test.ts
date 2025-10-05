@@ -5,7 +5,7 @@ import 'dotenv/config';
 describe('cloud', () => {
   dotenv.config();
 
-  const api_key = process.env.SPICEAI_API_KEY;
+  const api_key = process.env.SPICE_API_KEY;
 
   if (!api_key) {
     throw 'API_KEY environment variable not set';

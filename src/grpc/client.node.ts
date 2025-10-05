@@ -102,7 +102,7 @@ function loadProtoFromContent(content: string): any {
     const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
     return arrow.flight.protocol;
   } catch (error: any) {
-    console.error(
+    console.warn(
       '[spice.js] Failed to load proto from content:',
       error.message
     );
@@ -232,7 +232,72 @@ export class GrpcFlightClient {
     );
   }
 
-  async executeQuery(queryText: string): Promise<EventEmitter> {
+  /**
+   * Substitutes parameters directly into SQL query
+   * This is a temporary implementation until Apache Flight SQL parameter binding is supported
+   */
+  private substituteParameters(queryText: string, parameters: any): string {
+    if (Array.isArray(parameters)) {
+      // Positional parameters - Replace $1, $2, etc.
+      let result = queryText;
+      parameters.forEach((value, index) => {
+        const placeholder = `$${index + 1}`;
+        const sqlValue = this.formatSqlValue(value);
+        result = result.replace(
+          new RegExp(`\\${placeholder}\\b`, 'g'),
+          sqlValue
+        );
+      });
+      return result;
+    } else {
+      // Named parameters - Replace $param_name
+      let result = queryText;
+      for (const [name, value] of Object.entries(parameters)) {
+        const placeholder = `$${name}`;
+        const sqlValue = this.formatSqlValue(value);
+        result = result.replace(
+          new RegExp(`\\${placeholder}\\b`, 'g'),
+          sqlValue
+        );
+      }
+      return result;
+    }
+  }
+
+  /**
+   * Formats a value for SQL query string
+   */
+  private formatSqlValue(value: any): string {
+    if (value === null) {
+      return 'NULL';
+    }
+    if (value instanceof Date) {
+      return `'${value.toISOString()}'`;
+    }
+    if (typeof value === 'string') {
+      // Escape single quotes in strings
+      return `'${value.replace(/'/g, "''")}'`;
+    }
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
+    if (typeof value === 'number') {
+      return value.toString();
+    }
+    if (typeof value === 'boolean') {
+      return value ? 'TRUE' : 'FALSE';
+    }
+    if (Buffer.isBuffer(value)) {
+      return `'${value.toString('base64')}'`;
+    }
+    // For other types, try to stringify
+    return `'${String(value)}'`;
+  }
+
+  async executeQuery(
+    queryText: string,
+    parameters?: any
+  ): Promise<EventEmitter> {
     const meta = new grpc.Metadata();
     meta.set('authorization', `Bearer ${this.apiKey || ''}`);
     meta.set('User-Agent', this.userAgent);
@@ -240,12 +305,24 @@ export class GrpcFlightClient {
     meta.set('grpc-accept-encoding', 'gzip,deflate');
 
     const client: FlightClient = this.createClient(meta);
-    const queryBuff = Buffer.from(queryText, 'utf8');
+
+    // If parameters are provided, substitute them into the query
+    // This is a safe approach that works with current Flight SQL implementations
+    let finalQuery = queryText;
+    if (
+      parameters &&
+      ((Array.isArray(parameters) && parameters.length > 0) ||
+        (!Array.isArray(parameters) && Object.keys(parameters).length > 0))
+    ) {
+      finalQuery = this.substituteParameters(queryText, parameters);
+    }
+
+    const commandBuff = Buffer.from(finalQuery, 'utf8');
 
     const flightTicket = await new Promise<Ticket>((resolve, reject) => {
       // GetFlightInfo returns FlightInfo that have endpoints with ticket to call DoGet with
       client.GetFlightInfo(
-        { type: DescriptorType.CMD, cmd: queryBuff },
+        { type: DescriptorType.CMD, cmd: commandBuff },
         (err: any, result: FlightInfo) => {
           if (err) {
             reject(err);

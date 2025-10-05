@@ -12,6 +12,8 @@ import {
   type RefreshAccelerationResponse,
   type NsqlOptions,
   type NsqlResponse,
+  type SqlQueryOptions,
+  type QueryParameters,
 } from './interfaces';
 import type { GrpcFlightClient } from './grpc/client.node';
 import {
@@ -505,11 +507,13 @@ export class SpiceClient {
     // Determine transport mode
     let transportMode: string;
     if (supportsGrpc && this._grpcClient) {
-      transportMode = this._flightOnly
-        ? `Arrow Flight (gRPC) only`
-        : `Arrow Flight (gRPC) with HTTP fallback`;
+      const protocols: string[] = [];
+      protocols.push('Arrow Flight');
+      if (!this._flightOnly) protocols.push('HTTP');
+      
+      transportMode = protocols.join(' → ');
     } else if (supportsGrpc && !this._grpcClient) {
-      transportMode = 'HTTP only (gRPC client not initialized)';
+      transportMode = 'HTTP only (Flight client not initialized)';
     } else {
       transportMode = 'HTTP only';
     }
@@ -546,46 +550,87 @@ export class SpiceClient {
     console.debug(configLines.join('\n'));
   }
 
+  /**
+   * Converts parameters for HTTP endpoint format
+   */
+  private convertParametersForHttp(parameters?: QueryParameters): any[] {
+    if (!parameters) {
+      return [];
+    }
+    
+    if (Array.isArray(parameters)) {
+      // Positional parameters - convert to simple array
+      return parameters.map(val => {
+        if (val === null) return null;
+        if (val instanceof Date) return val.toISOString();
+        if (typeof val === 'bigint') return val.toString();
+        // Check if it's a Buffer-like object (has toString method and type property)
+        if (val && typeof (val as any).toString === 'function' && (val as any).type === 'Buffer') {
+          return (val as any).toString('base64');
+        }
+        return val;
+      });
+    } else {
+      // Named parameters - convert to array of {name, value} objects
+      return Object.entries(parameters).map(([name, value]) => {
+        let serializedValue: any = value;
+        if (value instanceof Date) serializedValue = value.toISOString();
+        else if (typeof value === 'bigint') serializedValue = value.toString();
+        else if (value && typeof (value as any).toString === 'function' && (value as any).type === 'Buffer') {
+          serializedValue = (value as any).toString('base64');
+        }
+        
+        return { name, value: serializedValue };
+      });
+    }
+  }
+
   private async doQueryRequest(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined,
+    parameters?: QueryParameters,
+    onData?: ((data: Table) => void),
   ): Promise<Table> {
-    // Try gRPC if available
+    // Transport hierarchy:
+    // 1. Try gRPC Flight SQL (custom proto with parameter substitution)
+    // 2. Fallback to HTTP
+    
+    // Try gRPC Flight SQL if available
     if (this._grpcClient) {
       const useGrpc = await this._grpcClient.ensureInitialized();
       if (useGrpc) {
-        return this.doGrpcQueryRequest(queryText, onData);
+        return this.doGrpcQueryRequest(queryText, parameters, onData);
       }
 
       // If flightOnly mode is enabled and gRPC failed, throw error
       if (this._flightOnly) {
         throw new Error(
-          'gRPC Arrow Flight connection failed and flightOnly mode is enabled. Cannot fallback to HTTP.',
+          'Arrow Flight connection failed and flightOnly mode is enabled. Cannot fallback to HTTP.',
         );
       }
     }
 
-    // If flightOnly mode is enabled but no gRPC client, throw error
+    // If flightOnly mode is enabled but no Flight client available, throw error
     if (this._flightOnly) {
       throw new Error(
-        'flightOnly mode is enabled but gRPC client is not available on this platform',
+        'flightOnly mode is enabled but Arrow Flight client is not available on this platform',
       );
     }
 
     // Fallback to HTTP
-    return this.doHttpQueryRequest(queryText, onData);
+    return this.doHttpQueryRequest(queryText, parameters, onData);
   }
 
   private async doGrpcQueryRequest(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined,
+    parameters?: QueryParameters,
+    onData?: ((data: Table) => void),
   ): Promise<Table> {
     if (!this._grpcClient) {
       throw new Error('gRPC client not initialized');
     }
 
     try {
-      const resultStream = await this._grpcClient.executeQuery(queryText);
+      const resultStream = await this._grpcClient.executeQuery(queryText, parameters);
 
       // indicates that data has been partially or fully sent
       let isDataAlreadySent = false;
@@ -627,20 +672,28 @@ export class SpiceClient {
 
   private async doHttpQueryRequest(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined,
+    parameters?: QueryParameters,
+    onData?: ((data: Table) => void),
   ): Promise<Table> {
     // Use appropriate Accept header based on endpoint (use cached value)
     const acceptHeader = this._isSpiceCloud
       ? 'application/vnd.spiceai.sql.v1+json' // data.spiceai.io returns schema with 'data' field
       : 'application/json'; // OSS returns plain JSON array
 
+    // Prepare request body with parameters
+    const httpParameters = this.convertParametersForHttp(parameters);
+    const requestBody = JSON.stringify({ 
+      sql: queryText, 
+      parameters: httpParameters 
+    });
+
     const response = await this.fetchInternal(
       'POST',
       '/v1/sql',
       undefined,
-      queryText,
+      requestBody,
       {
-        'Content-Type': 'text/plain',
+        'Content-Type': 'application/json',
         Accept: acceptHeader,
       },
     );
@@ -734,16 +787,52 @@ export class SpiceClient {
 
   /**
    * Executes a SQL query and returns results as Arrow Tables.
-   * @param queryText - The SQL query to execute
-   * @param onData - Optional callback for streaming results
+   * Supports parameterized queries when options.parameters is provided.
+   * 
+   * @param queryText - The SQL query to execute. Use $1, $2 for positional parameters or $param_name for named parameters.
+   * @param optionsOrCallback - Either SqlQueryOptions with parameters, or a callback function for streaming results
+   * @param onData - Optional callback for streaming results (used when second parameter is SqlQueryOptions)
    * @returns Promise resolving to the final Arrow Table
+   * 
+   * @example
+   * // Simple query
+   * await client.sql('SELECT * FROM table LIMIT 10');
+   * 
+   * @example
+   * // Parameterized query with positional parameters
+   * await client.sql('SELECT * FROM table WHERE id = $1 AND status = $2', { parameters: [123, 'active'] });
+   * 
+   * @example
+   * // Parameterized query with named parameters
+   * await client.sql('SELECT * FROM table WHERE id = $id AND status = $status', { 
+   *   parameters: { id: 123, status: 'active' }
+   * });
+   * 
+   * @example
+   * // With streaming callback
+   * await client.sql('SELECT * FROM table', (table) => console.log(table.numRows));
    */
   async sql(
     queryText: string,
-    onData?: ((data: Table) => void) | undefined,
+    optionsOrCallback?: SqlQueryOptions | ((data: Table) => void),
+    onData?: ((data: Table) => void),
   ): Promise<Table> {
+    // Handle overloaded signatures
+    let options: SqlQueryOptions | undefined;
+    let callback: ((data: Table) => void) | undefined;
+
+    if (typeof optionsOrCallback === 'function') {
+      // Legacy signature: sql(query, callback)
+      callback = optionsOrCallback;
+      options = undefined;
+    } else {
+      // New signature: sql(query, options, callback)
+      options = optionsOrCallback;
+      callback = onData;
+    }
+
     return this._retry.retryWithExponentialBackoff<Table>(
-      () => this.doQueryRequest(queryText, onData),
+      () => this.doQueryRequest(queryText, options?.parameters, callback),
       this._maxRetries,
     );
   }

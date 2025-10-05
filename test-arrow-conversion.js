@@ -2,7 +2,7 @@ const { SpiceClient } = require('./dist/node/index.js');
 
 const client = new SpiceClient({
   httpUrl: 'https://data.spiceai.io',
-  apiKey: process.env.SPICEAI_API_KEY || 'test',
+  apiKey: process.env.SPICE_API_KEY || 'test',
 });
 
 async function test() {

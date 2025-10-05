@@ -62,6 +62,25 @@ const main = async () => {
 main();
 ```
 
+### Automatic Transport Selection
+
+The SpiceClient automatically selects the best available transport protocol in this order:
+
+1. **Arrow Flight SQL** - gRPC protocol with parameter substitution  
+2. **HTTP/HTTPS** - Fallback for browser environments or when Flight is unavailable
+
+For parameterized queries, the SDK provides secure parameter binding:
+
+```js
+// Parameterized query using Flight SQL or HTTP
+const table = await client.sql(
+  'SELECT * FROM taxi_trips WHERE passenger_count = $1 AND trip_distance > $2 LIMIT 10',
+  { parameters: [2, 5.0] }
+);
+```
+
+The SDK handles all protocol negotiation automatically - you just write standard SQL with parameters.
+
 ## Upgrading from v2 to v3
 
 Version 3.0 represents a major evolution of the SDK with cross-platform support, new APIs, and enhanced reliability.
@@ -377,7 +396,7 @@ pnpm add @spiceai/spice@latest
 
 ## API Methods
 
-### `sql(query: string, onData?: callback)` - Execute SQL queries
+### `sql(query: string, options?: SqlQueryOptions, onData?: callback)` - Execute SQL queries
 
 The `sql()` method executes SQL queries and returns results as Apache Arrow tables. This is the recommended method for querying data.
 
@@ -561,6 +580,47 @@ The `SpiceClient` automatically handles environments where Apache Arrow Flight g
 
 Both gRPC and HTTP modes support compression (gzip, deflate) to reduce bandwidth usage. This ensures the SDK works efficiently in any environment without configuration changes. See [docs/http-fallback.md](./docs/http-fallback.md) for more details.
 
+## Advanced
+
+### Parameterized Queries
+
+The SpiceClient automatically supports parameterized queries through its `.sql()` method. Parameters are handled transparently using the best available protocol (Flight SQL → HTTP).
+
+**Basic usage:**
+
+```js
+import { SpiceClient } from '@spiceai/spice';
+
+const client = new SpiceClient({
+  apiKey: 'YOUR_API_KEY',
+  httpUrl: 'https://data.spiceai.io',
+  flightUrl: 'flight.spiceai.io:443',
+});
+
+// Positional parameters (using $1, $2, etc.)
+const table = await client.sql(
+  'SELECT * FROM taxi_trips WHERE trip_distance > $1 AND passenger_count >= $2 LIMIT 10',
+  { parameters: [5.0, 2] }
+);
+
+console.table(table.toArray());
+```
+
+**Transport Hierarchy:**
+
+When parameters are provided, the SDK automatically:
+
+1. **Uses Flight SQL** - Client-side parameter substitution with Arrow Flight
+2. **Falls back to HTTP** - Sends parameters as JSON if Flight is unavailable
+
+**Key benefits:**
+
+- **SQL Injection Prevention**: Parameters are properly escaped and validated
+- **Type Safety**: Parameters maintain their data types
+- **Automatic fallback**: Works in all environments (Node.js and browser)
+
+For more information, see [docs/PARAMETERIZED_QUERIES.md](./docs/PARAMETERIZED_QUERIES.md).
+
 ## Documentation
 
 Check out our [API documentation](https://docs.spice.ai/sdks/node.js-sdk) to learn more about how to use the Node.js SDK.
@@ -577,6 +637,26 @@ npm run test:perf
 
 For more details, see [docs/PERFORMANCE_TESTING.md](./docs/PERFORMANCE_TESTING.md).
 
-## Running tests locally
+## Development
+
+### Environment Setup
+
+For development and testing, you'll need to set up environment variables:
+
+1. Copy the example environment file:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edit `.env` and add your [Spice.ai](https://spice.ai) API key:
+
+   ```env
+   SPICE_API_KEY=your_api_key_here
+   ```
+
+The `.env` file is automatically loaded by the test suite and can be used by examples.
+
+### Running Tests Locally
 
 Run the tests with `make test`. For more information, see [CONTRIBUTING.md](./CONTRIBUTING.md)

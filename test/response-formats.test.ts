@@ -1,4 +1,3 @@
-import dotenv from 'dotenv';
 import { SpiceClient } from '../';
 import 'dotenv/config';
 
@@ -9,13 +8,11 @@ import 'dotenv/config';
  * 1. application/json - Legacy format with rowCount, schema (with type objects), and rows
  * 2. application/vnd.spiceai.sql.v1+json - New format with row_count, schema.fields, and data
  */
-describe('Response Format Tests', () => {
-  dotenv.config();
-
-  const api_key = process.env.SPICEAI_API_KEY;
+describe('Response Formats Integration Tests', () => {
+  const api_key = process.env.SPICE_API_KEY;
 
   if (!api_key) {
-    throw new Error('SPICEAI_API_KEY environment variable not set');
+    throw new Error('SPICE_API_KEY environment variable not set');
   }
 
   const HTTP_DATA_PATH = process.env.HTTP_URL || 'https://data.spiceai.io';
@@ -179,7 +176,7 @@ describe('Response Format Tests', () => {
       expect(['Utf8', 'VARCHAR']).toContain(
         typeof repoField!.data_type === 'string'
           ? repoField!.data_type
-          : (repoField!.data_type as any).name,
+          : (repoField!.data_type as any).name
       );
     }, 30000);
 
@@ -187,14 +184,14 @@ describe('Response Format Tests', () => {
       const result = await cloudClient.sqlJson('SELECT * FROM pulls LIMIT 1');
 
       const additionsField = result.schema.fields.find(
-        (f) => f.name === 'additions',
+        (f) => f.name === 'additions'
       );
       expect(additionsField).toBeDefined();
       // data_type can be "Int64" or "BIGINT" depending on the format
       expect(['Int64', 'BIGINT']).toContain(
         typeof additionsField!.data_type === 'string'
           ? additionsField!.data_type
-          : (additionsField!.data_type as any).name,
+          : (additionsField!.data_type as any).name
       );
     }, 30000);
 
@@ -202,14 +199,14 @@ describe('Response Format Tests', () => {
       const result = await cloudClient.sqlJson('SELECT * FROM pulls LIMIT 1');
 
       const assigneesField = result.schema.fields.find(
-        (f) => f.name === 'assignees',
+        (f) => f.name === 'assignees'
       );
       expect(assigneesField).toBeDefined();
       // LIST types can be represented differently
       const dataType = assigneesField!.data_type;
       expect(
         typeof dataType === 'object' ||
-          (typeof dataType === 'string' && dataType.includes('List')),
+          (typeof dataType === 'string' && dataType.includes('List'))
       ).toBe(true);
     }, 30000);
 
@@ -217,13 +214,13 @@ describe('Response Format Tests', () => {
       const result = await cloudClient.sqlJson('SELECT * FROM pulls LIMIT 1');
 
       const closedAtField = result.schema.fields.find(
-        (f) => f.name === 'closed_at',
+        (f) => f.name === 'closed_at'
       );
       expect(closedAtField).toBeDefined();
       // TIMESTAMP types can be objects or strings
       const dataType = closedAtField!.data_type;
       expect(typeof dataType === 'object' || typeof dataType === 'string').toBe(
-        true,
+        true
       );
     }, 30000);
 
@@ -231,7 +228,7 @@ describe('Response Format Tests', () => {
       const result = await cloudClient.sqlJson('SELECT * FROM pulls LIMIT 1');
 
       const discussionField = result.schema.fields.find(
-        (f) => f.name === 'discussion',
+        (f) => f.name === 'discussion'
       );
       expect(discussionField).toBeDefined();
       // Complex nested types
@@ -246,7 +243,7 @@ describe('Response Format Tests', () => {
       // Some merged_at values might be null (for closed/unmerged PRs)
       const hasNullMergedAt = result.data.some((row) => row.merged_at === null);
       const hasNonNullMergedAt = result.data.some(
-        (row) => row.merged_at !== null,
+        (row) => row.merged_at !== null
       );
 
       // Verify that the data contains both null and non-null values if present
@@ -273,7 +270,7 @@ describe('Response Format Tests', () => {
 
       // Find a row with non-empty arrays
       const rowWithAssignees = result.data.find(
-        (row) => row.assignees.length > 0,
+        (row) => row.assignees.length > 0
       );
       const rowWithLabels = result.data.find((row) => row.labels.length > 0);
       const rowWithHashes = result.data.find((row) => row.hashes.length > 0);
@@ -301,7 +298,7 @@ describe('Response Format Tests', () => {
   describe('Specific Data Validation from Examples', () => {
     test('should match expected structure from first example PR', async () => {
       const result = await cloudClient.sqlJson(
-        'SELECT * FROM pulls WHERE number = 1 LIMIT 1',
+        'SELECT * FROM pulls WHERE number = 1 LIMIT 1'
       );
 
       if (result.data.length > 0) {
@@ -321,7 +318,7 @@ describe('Response Format Tests', () => {
 
     test('should handle PR with MERGED state', async () => {
       const result = await cloudClient.sqlJson(
-        "SELECT * FROM pulls WHERE state = 'MERGED' LIMIT 1",
+        "SELECT * FROM pulls WHERE state = 'MERGED' LIMIT 1"
       );
 
       if (result.data.length > 0) {
@@ -335,7 +332,7 @@ describe('Response Format Tests', () => {
 
     test('should handle PR with CLOSED state', async () => {
       const result = await cloudClient.sqlJson(
-        "SELECT * FROM pulls WHERE state = 'CLOSED' AND merged_at IS NULL LIMIT 1",
+        "SELECT * FROM pulls WHERE state = 'CLOSED' AND merged_at IS NULL LIMIT 1"
       );
 
       if (result.data.length > 0) {
@@ -379,7 +376,7 @@ describe('Response Format Tests', () => {
   describe('Error Handling', () => {
     test('should throw error for invalid table', async () => {
       await expect(
-        cloudClient.sql('SELECT * FROM nonexistent_table LIMIT 1'),
+        cloudClient.sql('SELECT * FROM nonexistent_table LIMIT 1')
       ).rejects.toThrow();
     });
 
@@ -389,7 +386,7 @@ describe('Response Format Tests', () => {
 
     test('should throw error for invalid column', async () => {
       await expect(
-        cloudClient.sql('SELECT nonexistent_column FROM pulls LIMIT 1'),
+        cloudClient.sql('SELECT nonexistent_column FROM pulls LIMIT 1')
       ).rejects.toThrow();
     });
   });
@@ -397,7 +394,7 @@ describe('Response Format Tests', () => {
   describe('Edge Cases', () => {
     test('should handle empty result set', async () => {
       const result = await cloudClient.sqlJson(
-        'SELECT * FROM pulls WHERE false',
+        'SELECT * FROM pulls WHERE false'
       );
 
       expect(result.row_count).toBe(0);

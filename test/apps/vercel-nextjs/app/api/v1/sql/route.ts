@@ -19,16 +19,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use API key from X-API-KEY header or environment variable
+    // Get API key from header or environment variable
     const apiKey = request.headers.get('X-API-KEY');
-    const key = apiKey || process.env.SPICEAI_API_KEY;
+    const key = apiKey || process.env.SPICE_API_KEY;
 
     if (!key) {
       return new Response(
         JSON.stringify({
           success: false,
           error:
-            'Missing API key. Provide X-API-KEY header or set SPICEAI_API_KEY environment variable.',
+            'Missing API key. Provide X-API-KEY header or set SPICE_API_KEY environment variable.',
         }),
         {
           status: 401,

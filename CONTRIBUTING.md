@@ -30,8 +30,18 @@ To develop locally:
 
 4. To run the tests, create a `.env` file with your [Spice.ai](https://spice.ai) API Key:
 
+   ```bash
+   # Copy the example file
+   cp .env.example .env
+   
+   # Edit .env and add your API key
+   # SPICE_API_KEY=your_api_key_here
+   ```
+
+   Or set the environment variable directly:
+
    ```env
-   API_KEY=<Spice.ai API Key>
+   SPICE_API_KEY=<Spice.ai API Key>
    ```
 
 5. Run the tests with:
