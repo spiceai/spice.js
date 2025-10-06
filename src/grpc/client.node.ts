@@ -102,10 +102,7 @@ function loadProtoFromContent(content: string): any {
     const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
     return arrow.flight.protocol;
   } catch (error: any) {
-    console.error(
-      '[spice.js] Failed to load proto from content:',
-      error.message
-    );
+    console.log('[spice.js] Failed to load proto from content:', error.message);
     throw error;
   }
 }
