@@ -323,8 +323,8 @@ function wrapTableForDecimalConversion(table: Table): Table {
             let isoString = value.toISOString();
             // Remove milliseconds if .000
             isoString = isoString.replace(/\.000Z$/, '');
-            // Add Z back if has timezone, otherwise leave without Z
-            if (hasTimezone) {
+            // Add Z back if has timezone and doesn't already have it
+            if (hasTimezone && !isoString.endsWith('Z')) {
               isoString += 'Z';
             }
             convertedRow[field.name] = isoString;
@@ -335,8 +335,8 @@ function wrapTableForDecimalConversion(table: Table): Table {
             let isoString = date.toISOString();
             // Remove milliseconds if .000
             isoString = isoString.replace(/\.000Z$/, '');
-            // Add Z back if has timezone, otherwise leave without Z
-            if (hasTimezone) {
+            // Add Z back if has timezone and doesn't already have it
+            if (hasTimezone && !isoString.endsWith('Z')) {
               isoString += 'Z';
             }
             convertedRow[field.name] = isoString;
@@ -843,8 +843,8 @@ export class SpiceClient {
             let isoString = value.toISOString();
             // Remove milliseconds if .000
             isoString = isoString.replace(/\.000Z$/, '');
-            // Add Z back if has timezone, otherwise leave without Z
-            if (hasTimezone) {
+            // Add Z back if has timezone and doesn't already have it
+            if (hasTimezone && !isoString.endsWith('Z')) {
               isoString += 'Z';
             }
             return isoString;
@@ -861,8 +861,8 @@ export class SpiceClient {
               let isoString = date.toISOString();
               // Remove milliseconds if .000
               isoString = isoString.replace(/\.000Z$/, '');
-              // Add Z back if has timezone, otherwise leave without Z
-              if (hasTimezone) {
+              // Add Z back if has timezone and doesn't already have it
+              if (hasTimezone && !isoString.endsWith('Z')) {
                 isoString += 'Z';
               }
               return isoString;
