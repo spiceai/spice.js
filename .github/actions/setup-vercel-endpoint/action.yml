@@ -44,8 +44,8 @@ runs:
           echo "Detected tag/release: ${BRANCH_NAME}, using production endpoint"
         else
           # For branches, construct the git branch preview URL
-          # Replace / with - and convert to lowercase for Vercel format
-          BRANCH_SLUG=$(echo "$BRANCH_NAME" | sed 's/\//-/g' | tr '[:upper:]' '[:lower:]')
+          # Remove periods, replace / with - and convert to lowercase for Vercel format
+          BRANCH_SLUG=$(echo "$BRANCH_NAME" | sed 's/\.//g' | sed 's/\//-/g' | tr '[:upper:]' '[:lower:]')
           VERCEL_ENDPOINT="https://spice-js-git-${BRANCH_SLUG}-spice.vercel.app"
           echo "Detected branch: ${BRANCH_NAME}, using preview endpoint"
         fi
