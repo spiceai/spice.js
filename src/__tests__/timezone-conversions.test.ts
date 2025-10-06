@@ -30,7 +30,7 @@ describe('Timezone Conversions', () => {
         httpUrl: 'http://localhost:8090',
       },
       mockPlatform,
-      mockRetry,
+      mockRetry
     );
   });
 
