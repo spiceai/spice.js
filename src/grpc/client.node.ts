@@ -20,7 +20,7 @@ const PROTO_DOWNLOAD_URL =
 const PACKAGE_PATH = __dirname.includes('.next')
   ? path.join(
       __dirname.substring(0, __dirname.indexOf('.next')),
-      './node_modules/@spiceai/spice/dist/node/'
+      './node_modules/@spiceai/spice/dist/node/',
     )
   : path.join(__dirname, '..');
 const fullProtoPath = path.join(PACKAGE_PATH, PROTO_PATH);
@@ -43,7 +43,7 @@ async function downloadProtoFile(): Promise<string> {
 
     if (!response.ok) {
       throw new Error(
-        `Failed to download proto: ${response.status} ${response.statusText}`
+        `Failed to download proto: ${response.status} ${response.statusText}`,
       );
     }
 
@@ -66,10 +66,6 @@ async function loadProtoContent(): Promise<string | null> {
   if (fs.existsSync(fullProtoPath)) {
     return fs.readFileSync(fullProtoPath, 'utf-8');
   }
-
-  console.warn(
-    '[spice.js] Local Flight.proto not found, attempting to download...'
-  );
 
   // Try to download
   try {
@@ -140,7 +136,7 @@ export class GrpcFlightClient {
     apiKey: string | undefined,
     flightUrl: string,
     userAgent: string,
-    flightTlsEnabled: boolean
+    flightTlsEnabled: boolean,
   ) {
     this.apiKey = apiKey;
     this.flightUrl = flightUrl;
@@ -181,7 +177,7 @@ export class GrpcFlightClient {
       this.useGrpc = true;
     } catch (error: any) {
       console.warn(
-        `[spice.js] gRPC initialization failed: ${error.message}. Using HTTP endpoint.`
+        `[spice.js] gRPC initialization failed: ${error.message}. Using HTTP endpoint.`,
       );
       this.useGrpc = false;
     }
@@ -208,7 +204,7 @@ export class GrpcFlightClient {
       return new flightProto.FlightService(
         this.flightUrl,
         grpc.credentials.createInsecure(),
-        channelOptions
+        channelOptions,
       );
     }
 
@@ -220,21 +216,31 @@ export class GrpcFlightClient {
       grpc.credentials.createFromMetadataGenerator(metaCallback);
     const combCreds = grpc.credentials.combineChannelCredentials(
       creds,
-      callCreds
+      callCreds,
     );
     return new flightProto.FlightService(
       this.flightUrl,
       combCreds,
-      channelOptions
+      channelOptions,
     );
   }
 
-  async executeQuery(queryText: string): Promise<EventEmitter> {
+  async executeQuery(
+    queryText: string,
+    headers?: { [key: string]: string },
+  ): Promise<EventEmitter> {
     const meta = new grpc.Metadata();
     meta.set('authorization', `Bearer ${this.apiKey || ''}`);
     meta.set('User-Agent', this.userAgent);
     // Advertise that we accept compressed responses
     meta.set('grpc-accept-encoding', 'gzip,deflate');
+
+    // Add custom headers as Flight metadata
+    if (headers) {
+      Object.entries(headers).forEach(([key, value]) => {
+        meta.set(key, value);
+      });
+    }
 
     const client: FlightClient = this.createClient(meta);
     const queryBuff = Buffer.from(queryText, 'utf8');
@@ -253,7 +259,7 @@ export class GrpcFlightClient {
             return;
           }
           resolve(result.endpoint[0].ticket);
-        }
+        },
       );
     });
 

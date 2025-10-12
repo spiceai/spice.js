@@ -418,6 +418,64 @@ The response includes:
 - `data`: Array of row objects
 - `execution_time_ms`: Query execution time in milliseconds
 
+#### Custom Headers
+
+Both `sql()` and `sqlJson()` methods support passing custom headers that are automatically translated to the appropriate transport mechanism:
+
+- **HTTP headers** when using HTTP transport
+- **Flight metadata** when using gRPC/Arrow Flight transport
+
+```js
+// Define custom headers
+const headers = {
+  'X-Custom-Header': 'custom-value',
+  'X-Request-ID': '12345',
+  'X-Tenant-ID': 'tenant-abc',
+};
+
+// Use with sql() - headers as 3rd parameter
+const table = await spiceClient.sql(
+  'SELECT * FROM my_table LIMIT 10',
+  undefined, // no streaming callback
+  headers, // custom headers
+);
+
+// Use with sqlJson() - headers as 2nd parameter
+const result = await spiceClient.sqlJson(
+  'SELECT * FROM my_table LIMIT 10',
+  headers, // custom headers
+);
+
+// With streaming and custom headers
+await spiceClient.sql(
+  'SELECT * FROM large_table',
+  (chunk) => {
+    console.log('Chunk received:', chunk.numRows, 'rows');
+  },
+  headers, // custom headers
+);
+```
+
+**TypeScript usage:**
+
+```typescript
+import { SpiceClient, QueryHeaders } from '@spiceai/spice';
+
+const headers: QueryHeaders = {
+  'X-Custom-Header': 'value',
+  'X-Request-ID': '12345',
+};
+
+const result = await spiceClient.sqlJson('SELECT * FROM table', headers);
+```
+
+This is useful for:
+
+- Request tracking and correlation
+- Multi-tenancy scenarios
+- Custom authentication/authorization
+- Passing context to query execution
+
 #### `isSpiceHealthy()` - Check Spice runtime health
 
 The `isSpiceHealthy()` method checks if the Spice runtime is healthy. This endpoint is **unauthenticated** and does not require an API key.

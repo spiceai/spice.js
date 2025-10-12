@@ -22,5 +22,6 @@ export type {
   RefreshAccelerationResponse,
   NsqlOptions,
   NsqlResponse,
+  QueryHeaders,
   RefreshOverrides, // deprecated, kept for backward compatibility
 } from './interfaces';

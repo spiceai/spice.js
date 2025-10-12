@@ -27,7 +27,7 @@ export interface RetryModule {
   dontRetry(err: any): void;
   retryWithExponentialBackoff<T>(
     operation: any,
-    maxRetries: number
+    maxRetries: number,
   ): Promise<T>;
 }
 
@@ -204,7 +204,7 @@ function wrapTableForDecimalConversion(table: Table): Table {
 
     // Check which fields need conversion
     const decimalFields = table.schema.fields.filter((f) =>
-      f.type.toString().startsWith('Decimal')
+      f.type.toString().startsWith('Decimal'),
     );
 
     // For timestamp fields, use original schema metadata if available
@@ -239,7 +239,7 @@ function wrapTableForDecimalConversion(table: Table): Table {
       timestampFields = table.schema.fields.filter(
         (f) =>
           f.type.toString().startsWith('Timestamp') ||
-          f.type.toString().startsWith('Date')
+          f.type.toString().startsWith('Date'),
       );
     }
 
@@ -259,12 +259,12 @@ function wrapTableForDecimalConversion(table: Table): Table {
     } else {
       listFields = table.schema.fields.filter(
         (f) =>
-          f.type.toString().startsWith('List<') || f.type.toString() === 'List'
+          f.type.toString().startsWith('List<') || f.type.toString() === 'List',
       );
       structFields = table.schema.fields.filter(
         (f) =>
           f.type.toString().startsWith('Struct<') ||
-          f.type.toString() === 'Struct'
+          f.type.toString() === 'Struct',
       );
     }
 
@@ -362,7 +362,7 @@ function wrapTableForDecimalConversion(table: Table): Table {
         if (value !== null && value !== undefined) {
           // Find corresponding field in original schema
           const originalField = originalSchema?.find(
-            (f: any) => f.name === field.name
+            (f: any) => f.name === field.name,
           );
 
           // If value is a JSON string, parse it first, convert timestamps, then stringify back
@@ -429,7 +429,7 @@ export class SpiceClient {
     params: string | SpiceClientConfig = {},
     platform: PlatformAdapter,
     retry: RetryModule,
-    GrpcClientClass?: typeof GrpcFlightClient
+    GrpcClientClass?: typeof GrpcFlightClient,
   ) {
     this._retry = retry;
     this._maxRetries = retry.FLIGHT_QUERY_MAX_RETRIES;
@@ -490,7 +490,7 @@ export class SpiceClient {
         this._apiKey,
         this._flightUrl,
         this._userAgent,
-        this._flightTlsEnabled
+        this._flightTlsEnabled,
       );
     }
 
@@ -531,7 +531,7 @@ export class SpiceClient {
       configLines.push(
         `   Flight URL: ${this._flightUrl}${
           this._flightTlsEnabled ? ' (TLS)' : ''
-        }`
+        }`,
       );
     }
 
@@ -543,7 +543,7 @@ export class SpiceClient {
       configLines.push(
         `   Custom Headers: ${
           Object.keys(this._customHeaders).length
-        } header(s)`
+        } header(s)`,
       );
     }
 
@@ -552,19 +552,20 @@ export class SpiceClient {
 
   private async doQueryRequest(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined
+    onData: ((data: Table) => void) | undefined = undefined,
+    headers?: { [key: string]: string },
   ): Promise<Table> {
     // Try gRPC if available
     if (this._grpcClient) {
       const useGrpc = await this._grpcClient.ensureInitialized();
       if (useGrpc) {
-        return this.doGrpcQueryRequest(queryText, onData);
+        return this.doGrpcQueryRequest(queryText, onData, headers);
       }
 
       // If flightOnly mode is enabled and gRPC failed, throw error
       if (this._flightOnly) {
         throw new Error(
-          'gRPC Arrow Flight connection failed and flightOnly mode is enabled. Cannot fallback to HTTP.'
+          'gRPC Arrow Flight connection failed and flightOnly mode is enabled. Cannot fallback to HTTP.',
         );
       }
     }
@@ -572,24 +573,28 @@ export class SpiceClient {
     // If flightOnly mode is enabled but no gRPC client, throw error
     if (this._flightOnly) {
       throw new Error(
-        'flightOnly mode is enabled but gRPC client is not available on this platform'
+        'flightOnly mode is enabled but gRPC client is not available on this platform',
       );
     }
 
     // Fallback to HTTP
-    return this.doHttpQueryRequest(queryText, onData);
+    return this.doHttpQueryRequest(queryText, onData, headers);
   }
 
   private async doGrpcQueryRequest(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined
+    onData: ((data: Table) => void) | undefined = undefined,
+    headers?: { [key: string]: string },
   ): Promise<Table> {
     if (!this._grpcClient) {
       throw new Error('gRPC client not initialized');
     }
 
     try {
-      const resultStream = await this._grpcClient.executeQuery(queryText);
+      const resultStream = await this._grpcClient.executeQuery(
+        queryText,
+        headers,
+      );
 
       // indicates that data has been partially or fully sent
       let isDataAlreadySent = false;
@@ -605,7 +610,7 @@ export class SpiceClient {
         } else if (onData) {
           isDataAlreadySent = true;
           const chunkTable = wrapTableForDecimalConversion(
-            tableFromIPC([schema, ipcMessage])
+            tableFromIPC([schema, ipcMessage]),
           );
           onData(chunkTable);
         }
@@ -631,28 +636,36 @@ export class SpiceClient {
 
   private async doHttpQueryRequest(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined
+    onData: ((data: Table) => void) | undefined = undefined,
+    headers?: { [key: string]: string },
   ): Promise<Table> {
     // Use appropriate Accept header based on endpoint (use cached value)
     const acceptHeader = this._isSpiceCloud
       ? 'application/vnd.spiceai.sql.v1+json' // data.spiceai.io returns schema with 'data' field
       : 'application/json'; // OSS returns plain JSON array
 
+    const requestHeaders: { [key: string]: string } = {
+      'Content-Type': 'text/plain',
+      Accept: acceptHeader,
+    };
+
+    // Merge custom headers if provided
+    if (headers) {
+      Object.assign(requestHeaders, headers);
+    }
+
     const response = await this.fetchInternal(
       'POST',
       '/v1/sql',
       undefined,
       queryText,
-      {
-        'Content-Type': 'text/plain',
-        Accept: acceptHeader,
-      }
+      requestHeaders,
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `HTTP query failed with status ${response.status}: ${errorText}`
+        `HTTP query failed with status ${response.status}: ${errorText}`,
       );
     }
 
@@ -676,7 +689,7 @@ export class SpiceClient {
   private parseStreamingResponse(
     lines: string[],
     onData: ((data: Table) => void) | undefined,
-    isSpiceAI: boolean
+    isSpiceAI: boolean,
   ): Table {
     const allRows: any[] = [];
     let schema: any[] = [];
@@ -698,7 +711,7 @@ export class SpiceClient {
           // Send partial results if callback provided
           if (onData) {
             const partialTable = wrapTableForDecimalConversion(
-              jsonToArrowTable(schema, sqlV1.data)
+              jsonToArrowTable(schema, sqlV1.data),
             );
             onData(partialTable);
           }
@@ -714,7 +727,7 @@ export class SpiceClient {
   private parseSingleResponse(
     body: string,
     onData: ((data: Table) => void) | undefined,
-    isSpiceAI: boolean
+    isSpiceAI: boolean,
   ): Table {
     try {
       const jsonData = JSON.parse(body);
@@ -733,7 +746,7 @@ export class SpiceClient {
       throw new Error(
         `Failed to parse query response: ${
           error instanceof Error ? error.message : 'Unknown error'
-        }`
+        }`,
       );
     }
   }
@@ -742,15 +755,17 @@ export class SpiceClient {
    * Executes a SQL query and returns results as Arrow Tables.
    * @param queryText - The SQL query to execute
    * @param onData - Optional callback for streaming results
+   * @param headers - Optional headers to pass with the request (HTTP headers for HTTP, Flight metadata for gRPC)
    * @returns Promise resolving to the final Arrow Table
    */
   async sql(
     queryText: string,
-    onData?: ((data: Table) => void) | undefined
+    onData?: ((data: Table) => void) | undefined,
+    headers?: { [key: string]: string },
   ): Promise<Table> {
     return this._retry.retryWithExponentialBackoff<Table>(
-      () => this.doQueryRequest(queryText, onData),
-      this._maxRetries
+      () => this.doQueryRequest(queryText, onData, headers),
+      this._maxRetries,
     );
   }
 
@@ -759,18 +774,23 @@ export class SpiceClient {
    */
   async query(
     queryText: string,
-    onData?: ((data: Table) => void) | undefined
+    onData?: ((data: Table) => void) | undefined,
+    headers?: { [key: string]: string },
   ): Promise<Table> {
-    return this.sql(queryText, onData);
+    return this.sql(queryText, onData, headers);
   }
 
   /**
    * Executes a SQL query and returns results as JSON with schema metadata.
    * Uses gRPC/Arrow if available, otherwise falls back to HTTP.
    * @param queryText - The SQL query to execute
+   * @param headers - Optional headers to pass with the request (HTTP headers for HTTP, Flight metadata for gRPC)
    * @returns Promise resolving to an object containing row_count, schema, data, and execution_time_ms
    */
-  async sqlJson(queryText: string): Promise<SqlV1JsonResponse> {
+  async sqlJson(
+    queryText: string,
+    headers?: { [key: string]: string },
+  ): Promise<SqlV1JsonResponse> {
     const startTime = Date.now();
 
     // Check if we should use gRPC/Arrow
@@ -781,7 +801,7 @@ export class SpiceClient {
       // If flightOnly mode is enabled and gRPC failed, throw error
       if (!useGrpc && this._flightOnly) {
         throw new Error(
-          'gRPC Arrow Flight connection failed and flightOnly mode is enabled. Cannot fallback to HTTP.'
+          'gRPC Arrow Flight connection failed and flightOnly mode is enabled. Cannot fallback to HTTP.',
         );
       }
     }
@@ -789,7 +809,7 @@ export class SpiceClient {
     // If flightOnly mode is enabled but no gRPC client, throw error
     if (this._flightOnly && !useGrpc) {
       throw new Error(
-        'flightOnly mode is enabled but gRPC client is not available on this platform'
+        'flightOnly mode is enabled but gRPC client is not available on this platform',
       );
     }
 
@@ -799,72 +819,56 @@ export class SpiceClient {
       let schema: any = null;
       let fields: any[] = [];
 
-      await this.sql(queryText, (table) => {
-        // Capture schema from first chunk
-        if (!schema) {
-          schema = {
-            fields: table.schema.fields.map((field) =>
-              serializeArrowField(field)
-            ),
-          };
-          fields = table.schema.fields;
-        }
-
-        // Helper function to recursively convert values, handling nested structures
-        const convertValue = (value: any, field: any): any => {
-          // Handle null/undefined
-          if (value === null || value === undefined) {
-            return value;
+      await this.sql(
+        queryText,
+        (table) => {
+          // Capture schema from first chunk
+          if (!schema) {
+            schema = {
+              fields: table.schema.fields.map((field) =>
+                serializeArrowField(field),
+              ),
+            };
+            fields = table.schema.fields;
           }
 
-          // Get type information
-          const typeStr = field.type.toString();
-          const hasTimezone = field.type.timezone != null;
-
-          // Handle Apache Arrow Decimal types (DecimalBigNum)
-          // These need to be converted using their scale factor
-          if (
-            typeStr.startsWith('Decimal') &&
-            value.constructor?.name === 'DecimalBigNum'
-          ) {
-            try {
-              // Get the string representation and scale
-              const decimalStr = value.toString();
-              const scale = field.type.scale || 0;
-
-              // Apply the scale to get the actual decimal value
-              if (scale > 0) {
-                const scaled = parseFloat(decimalStr) / Math.pow(10, scale);
-                return scaled;
-              }
-              return parseFloat(decimalStr);
-            } catch (error) {
-              // If conversion fails, return as string
-              return value.toString();
+          // Helper function to recursively convert values, handling nested structures
+          const convertValue = (value: any, field: any): any => {
+            // Handle null/undefined
+            if (value === null || value === undefined) {
+              return value;
             }
-          }
 
-          // Convert Date objects to ISO 8601 strings
-          if (value instanceof Date) {
-            let isoString = value.toISOString();
-            // Remove milliseconds if .000
-            isoString = isoString.replace(/\.000Z$/, '');
-            // Add Z back if has timezone and doesn't already have it
-            if (hasTimezone && !isoString.endsWith('Z')) {
-              isoString += 'Z';
-            }
-            return isoString;
-          }
+            // Get type information
+            const typeStr = field.type.toString();
+            const hasTimezone = field.type.timezone != null;
 
-          // Convert numeric timestamps/dates to ISO 8601 strings
-          if (typeof value === 'number') {
+            // Handle Apache Arrow Decimal types (DecimalBigNum)
+            // These need to be converted using their scale factor
             if (
-              typeStr.startsWith('Timestamp') ||
-              typeStr.startsWith('Date32') ||
-              typeStr.startsWith('Date64')
+              typeStr.startsWith('Decimal') &&
+              value.constructor?.name === 'DecimalBigNum'
             ) {
-              const date = new Date(value);
-              let isoString = date.toISOString();
+              try {
+                // Get the string representation and scale
+                const decimalStr = value.toString();
+                const scale = field.type.scale || 0;
+
+                // Apply the scale to get the actual decimal value
+                if (scale > 0) {
+                  const scaled = parseFloat(decimalStr) / Math.pow(10, scale);
+                  return scaled;
+                }
+                return parseFloat(decimalStr);
+              } catch (error) {
+                // If conversion fails, return as string
+                return value.toString();
+              }
+            }
+
+            // Convert Date objects to ISO 8601 strings
+            if (value instanceof Date) {
+              let isoString = value.toISOString();
               // Remove milliseconds if .000
               isoString = isoString.replace(/\.000Z$/, '');
               // Add Z back if has timezone and doesn't already have it
@@ -873,74 +877,97 @@ export class SpiceClient {
               }
               return isoString;
             }
-            return value;
-          }
 
-          // Convert BigInt to number if within safe range, otherwise to string
-          if (typeof value === 'bigint') {
+            // Convert numeric timestamps/dates to ISO 8601 strings
+            if (typeof value === 'number') {
+              if (
+                typeStr.startsWith('Timestamp') ||
+                typeStr.startsWith('Date32') ||
+                typeStr.startsWith('Date64')
+              ) {
+                const date = new Date(value);
+                let isoString = date.toISOString();
+                // Remove milliseconds if .000
+                isoString = isoString.replace(/\.000Z$/, '');
+                // Add Z back if has timezone and doesn't already have it
+                if (hasTimezone && !isoString.endsWith('Z')) {
+                  isoString += 'Z';
+                }
+                return isoString;
+              }
+              return value;
+            }
+
+            // Convert BigInt to number if within safe range, otherwise to string
+            if (typeof value === 'bigint') {
+              if (
+                value >= BigInt(Number.MIN_SAFE_INTEGER) &&
+                value <= BigInt(Number.MAX_SAFE_INTEGER)
+              ) {
+                return Number(value);
+              }
+              return value.toString();
+            }
+
+            // Handle arrays (from List types) - recursively process elements
             if (
-              value >= BigInt(Number.MIN_SAFE_INTEGER) &&
-              value <= BigInt(Number.MAX_SAFE_INTEGER)
+              Array.isArray(value) &&
+              field.type.children &&
+              field.type.children.length > 0
             ) {
-              return Number(value);
+              const childField = field.type.children[0];
+              return value.map((item) => convertValue(item, childField));
             }
-            return value.toString();
-          }
 
-          // Handle arrays (from List types) - recursively process elements
-          if (
-            Array.isArray(value) &&
-            field.type.children &&
-            field.type.children.length > 0
-          ) {
-            const childField = field.type.children[0];
-            return value.map((item) => convertValue(item, childField));
-          }
+            // Handle objects (from Struct types) - recursively process fields
+            if (typeof value === 'object' && field.type.children) {
+              const result: any = {};
+              for (const childField of field.type.children) {
+                if (childField.name in value) {
+                  result[childField.name] = convertValue(
+                    value[childField.name],
+                    childField,
+                  );
+                }
+              }
+              return result;
+            }
 
-          // Handle objects (from Struct types) - recursively process fields
-          if (typeof value === 'object' && field.type.children) {
-            const result: any = {};
-            for (const childField of field.type.children) {
-              if (childField.name in value) {
-                result[childField.name] = convertValue(
-                  value[childField.name],
-                  childField
-                );
+            // Return value as-is for primitive types
+            return value;
+          };
+
+          // Use toArray() to properly convert Arrow values to JavaScript objects
+          // This handles Decimal types and other special Arrow representations correctly
+          const rows = table.toArray();
+
+          // Optimize: Create a field map once per chunk instead of per row
+          const fieldMap = new Map(fields.map((field) => [field.name, field]));
+
+          for (const row of rows) {
+            const convertedRow: any = {};
+
+            // Apply conversions based on schema information
+            for (const columnName in row) {
+              if (Object.prototype.hasOwnProperty.call(row, columnName)) {
+                const field = fieldMap.get(columnName);
+                if (field) {
+                  convertedRow[columnName] = convertValue(
+                    row[columnName],
+                    field,
+                  );
+                } else {
+                  // Field not in schema, keep as-is
+                  convertedRow[columnName] = row[columnName];
+                }
               }
             }
-            return result;
+
+            allRows.push(convertedRow);
           }
-
-          // Return value as-is for primitive types
-          return value;
-        };
-
-        // Use toArray() to properly convert Arrow values to JavaScript objects
-        // This handles Decimal types and other special Arrow representations correctly
-        const rows = table.toArray();
-
-        // Optimize: Create a field map once per chunk instead of per row
-        const fieldMap = new Map(fields.map((field) => [field.name, field]));
-
-        for (const row of rows) {
-          const convertedRow: any = {};
-
-          // Apply conversions based on schema information
-          for (const columnName in row) {
-            if (Object.prototype.hasOwnProperty.call(row, columnName)) {
-              const field = fieldMap.get(columnName);
-              if (field) {
-                convertedRow[columnName] = convertValue(row[columnName], field);
-              } else {
-                // Field not in schema, keep as-is
-                convertedRow[columnName] = row[columnName];
-              }
-            }
-          }
-
-          allRows.push(convertedRow);
-        }
-      });
+        },
+        headers,
+      );
 
       const executionTime = Date.now() - startTime;
       return {
@@ -951,21 +978,28 @@ export class SpiceClient {
       };
     } else {
       // HTTP mode: Get JSON directly without Arrow conversion to preserve types
+      const requestHeaders: { [key: string]: string } = {
+        'Content-Type': 'text/plain',
+        Accept: 'application/vnd.spiceai.sql.v1+json',
+      };
+
+      // Merge custom headers if provided
+      if (headers) {
+        Object.assign(requestHeaders, headers);
+      }
+
       const response = await this.fetchInternal(
         'POST',
         '/v1/sql',
         undefined,
         queryText,
-        {
-          'Content-Type': 'text/plain',
-          Accept: 'application/vnd.spiceai.sql.v1+json',
-        }
+        requestHeaders,
       );
 
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(
-          `HTTP query failed with status ${response.status}: ${errorText}`
+          `HTTP query failed with status ${response.status}: ${errorText}`,
         );
       }
 
@@ -1123,13 +1157,13 @@ export class SpiceClient {
       'POST',
       '/v1/nsql',
       undefined,
-      JSON.stringify(request)
+      JSON.stringify(request),
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `NSQL request failed: ${response.status} ${response.statusText} - ${errorText}`
+        `NSQL request failed: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -1157,7 +1191,7 @@ export class SpiceClient {
    */
   async refreshAcceleration(
     dataset: string,
-    options?: RefreshAccelerationOptions
+    options?: RefreshAccelerationOptions,
   ): Promise<RefreshAccelerationResponse> {
     if (!this._httpUrl) {
       throw new Error('HTTP URL is required for refresh operation');
@@ -1169,13 +1203,13 @@ export class SpiceClient {
       'POST',
       `/v1/datasets/${encodeURIComponent(dataset)}/acceleration/refresh`,
       undefined,
-      body
+      body,
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Failed to refresh dataset '${dataset}': ${response.status} ${response.statusText} - ${errorText}`
+        `Failed to refresh dataset '${dataset}': ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -1246,7 +1280,7 @@ export class SpiceClient {
     path: string,
     params?: { [key: string]: string },
     body?: string,
-    customHeaders?: { [key: string]: string }
+    customHeaders?: { [key: string]: string },
   ) {
     const url =
       params && Object.keys(params).length
