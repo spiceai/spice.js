@@ -55,6 +55,10 @@ export interface NsqlResponse {
   sql: string;
 }
 
+export interface QueryHeaders {
+  [key: string]: string;
+}
+
 // Legacy interface for backward compatibility
 /** @deprecated Use RefreshAccelerationOptions instead */
 export interface RefreshOverrides extends RefreshAccelerationOptions {}
