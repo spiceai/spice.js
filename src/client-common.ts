@@ -12,6 +12,8 @@ import {
   type RefreshAccelerationResponse,
   type NsqlOptions,
   type NsqlResponse,
+  type SearchOptions,
+  type SearchResponse,
 } from './interfaces';
 import type { GrpcFlightClient } from './grpc/client.node';
 import {
@@ -1169,6 +1171,60 @@ export class SpiceClient {
 
     const result = await response.json();
     return result as NsqlResponse;
+  }
+
+  /**
+   * Perform a hybrid search operation on a dataset.
+   *
+   * The search combines multiple search techniques:
+   * - Vector similarity search (semantic matching via embeddings)
+   * - Keyword/fulltext search (exact and fuzzy text matching)
+   * - Metadata filtering (SQL WHERE conditions)
+   *
+   * The datasets queried should have an embedding column, and the
+   * appropriate embedding model loaded for vector similarity search.
+   *
+   * @param query - The search query text for semantic and keyword matching
+   * @param options - Optional search parameters including datasets, limit, filters, etc.
+   * @returns Promise resolving to the search results with duration and matches
+   */
+  async search(
+    query: string,
+    options?: SearchOptions,
+  ): Promise<SearchResponse> {
+    if (!this._httpUrl) {
+      throw new Error('HTTP URL is required for search operation');
+    }
+
+    if (!query) {
+      throw new Error('query parameter is required for search operation');
+    }
+
+    const request = {
+      text: query,
+      datasets: options?.datasets,
+      limit: options?.limit,
+      additional_columns: options?.additional_columns,
+      where: options?.where,
+      keywords: options?.keywords,
+    };
+
+    const response = await this.fetchInternal(
+      'POST',
+      '/v1/search',
+      undefined,
+      JSON.stringify(request),
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Search request failed: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    const result = await response.json();
+    return result as SearchResponse;
   }
 
   /**
