@@ -1,7 +1,7 @@
 {
   "name": "@spiceai/spice",
   "description": "JS + TS SDK for spice.ai",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "engines": {
     "node": ">=20.0.0"
   },
