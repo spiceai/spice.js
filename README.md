@@ -370,7 +370,7 @@ pnpm add @spiceai/spice@latest
 ### Need Help?
 
 - 📖 [Full Documentation](https://docs.spice.ai/sdks/node.js-sdk)
-- 💬 [Join our Discord](https://discord.gg/kZnTfneP5u)
+- 💬 [Join our Slack](http://spiceai.org/slack)
 - 🐛 [Report Issues](https://github.com/spiceai/spice.js/issues)
 - 📝 [View Changelog](https://github.com/spiceai/spice.js/releases)
 - 📦 [npm Package](https://www.npmjs.com/package/@spiceai/spice)
