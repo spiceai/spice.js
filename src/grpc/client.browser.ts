@@ -7,7 +7,7 @@ export class GrpcFlightClient {
     _apiKey: string | undefined,
     _flightUrl: string,
     _userAgent: string,
-    _flightTlsEnabled: boolean
+    _flightTlsEnabled: boolean,
   ) {
     // No-op constructor
   }
@@ -16,7 +16,10 @@ export class GrpcFlightClient {
     return false;
   }
 
-  async executeQuery(_queryText: string): Promise<any> {
+  async executeQuery(
+    _queryText: string,
+    _headers?: { [key: string]: string },
+  ): Promise<any> {
     throw new Error('gRPC is not supported in browser environments');
   }
 }

@@ -87,6 +87,81 @@ export interface SqlQueryOptions {
   parameters?: QueryParameters;
 }
 
+export interface SearchOptions {
+  /**
+   * The datasets to search. If None, search across all datasets.
+   * For available datasets, use the list_datasets tool and ensure can_search_documents==true.
+   */
+  datasets?: string[] | null;
+  /**
+   * Number of documents to return for each dataset
+   */
+  limit?: number | null;
+  /**
+   * Additional columns to return from the dataset. If the column is a primary key,
+   * it will be returned within the response under .primary_key, not .data.
+   */
+  additional_columns?: string[];
+  /**
+   * An SQL filter predicate to apply. Format: 'WHERE where_cond'.
+   */
+  where?: string | null;
+  /**
+   * Keywords to include in the search for keyword/fulltext matching
+   */
+  keywords?: string[] | null;
+}
+
+export interface SearchMatch {
+  /**
+   * The name of the dataset where the match was found
+   */
+  dataset: string;
+  /**
+   * The similarity of the match to the query
+   */
+  score: number;
+  /**
+   * The matches for this result
+   */
+  matches: {
+    [key: string]: any;
+  };
+  /**
+   * Primary key(s) identifying the matched item in the dataset
+   */
+  primary_key: {
+    [key: string]: any;
+  };
+  /**
+   * Additional data from the dataset requested by the user
+   */
+  data: {
+    [key: string]: any;
+  };
+  /**
+   * Metadata associated with the match
+   */
+  metadata: {
+    [key: string]: any;
+  };
+}
+
+export interface SearchResponse {
+  /**
+   * Total time taken to execute the search, in milliseconds
+   */
+  duration_ms: number;
+  /**
+   * List of matches that were found in the datasets
+   */
+  results: SearchMatch[];
+}
+
+export interface QueryHeaders {
+  [key: string]: string;
+}
+
 // Legacy interface for backward compatibility
 /** @deprecated Use RefreshAccelerationOptions instead */
 export interface RefreshOverrides extends RefreshAccelerationOptions {}

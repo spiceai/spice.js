@@ -389,7 +389,7 @@ pnpm add @spiceai/spice@latest
 ### Need Help?
 
 - 📖 [Full Documentation](https://docs.spice.ai/sdks/node.js-sdk)
-- 💬 [Join our Discord](https://discord.gg/kZnTfneP5u)
+- 💬 [Join our Slack](http://spiceai.org/slack)
 - 🐛 [Report Issues](https://github.com/spiceai/spice.js/issues)
 - 📝 [View Changelog](https://github.com/spiceai/spice.js/releases)
 - 📦 [npm Package](https://www.npmjs.com/package/@spiceai/spice)
@@ -436,6 +436,64 @@ The response includes:
 - `schema`: Schema information with field names and types
 - `data`: Array of row objects
 - `execution_time_ms`: Query execution time in milliseconds
+
+#### Custom Headers
+
+Both `sql()` and `sqlJson()` methods support passing custom headers that are automatically translated to the appropriate transport mechanism:
+
+- **HTTP headers** when using HTTP transport
+- **Flight metadata** when using gRPC/Arrow Flight transport
+
+```js
+// Define custom headers
+const headers = {
+  'X-Custom-Header': 'custom-value',
+  'X-Request-ID': '12345',
+  'X-Tenant-ID': 'tenant-abc',
+};
+
+// Use with sql() - headers as 3rd parameter
+const table = await spiceClient.sql(
+  'SELECT * FROM my_table LIMIT 10',
+  undefined, // no streaming callback
+  headers, // custom headers
+);
+
+// Use with sqlJson() - headers as 2nd parameter
+const result = await spiceClient.sqlJson(
+  'SELECT * FROM my_table LIMIT 10',
+  headers, // custom headers
+);
+
+// With streaming and custom headers
+await spiceClient.sql(
+  'SELECT * FROM large_table',
+  (chunk) => {
+    console.log('Chunk received:', chunk.numRows, 'rows');
+  },
+  headers, // custom headers
+);
+```
+
+**TypeScript usage:**
+
+```typescript
+import { SpiceClient, QueryHeaders } from '@spiceai/spice';
+
+const headers: QueryHeaders = {
+  'X-Custom-Header': 'value',
+  'X-Request-ID': '12345',
+};
+
+const result = await spiceClient.sqlJson('SELECT * FROM table', headers);
+```
+
+This is useful for:
+
+- Request tracking and correlation
+- Multi-tenancy scenarios
+- Custom authentication/authorization
+- Passing context to query execution
 
 #### `isSpiceHealthy()` - Check Spice runtime health
 

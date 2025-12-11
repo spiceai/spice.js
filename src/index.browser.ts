@@ -24,5 +24,9 @@ export type {
   SqlQueryOptions,
   QueryParameters,
   QueryParameterValue,
+  SearchOptions,
+  SearchResponse,
+  SearchMatch,
+  QueryHeaders,
   RefreshOverrides, // deprecated, kept for backward compatibility
 } from './interfaces';

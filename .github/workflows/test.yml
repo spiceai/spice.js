@@ -141,7 +141,7 @@ jobs:
 
   vercel-setup:
     name: Setup Vercel Endpoint
-    runs-on: ubuntu-latest
+    runs-on: spiceai-dev-runners
     outputs:
       vercel-api-endpoint: ${{ steps.vercel.outputs.vercel-api-endpoint }}
     steps:
