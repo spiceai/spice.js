@@ -145,8 +145,8 @@ function DiffViewer({
                         color: part.added
                           ? '#28a745'
                           : part.removed
-                          ? '#d73a49'
-                          : '#666',
+                            ? '#d73a49'
+                            : '#666',
                         padding: '2px 8px',
                         textAlign: 'center',
                         fontWeight: '600',
@@ -184,20 +184,20 @@ function DiffViewer({
 
 export default function TestPage() {
   const [apiKey, setApiKey] = useState<string>(
-    process.env.NEXT_PUBLIC_SPICEAI_API_KEY || ''
+    process.env.NEXT_PUBLIC_SPICEAI_API_KEY || '',
   );
   const [healthStatus, setHealthStatus] = useState<string>('Not checked');
   const [readyStatus, setReadyStatus] = useState<string>('Not checked');
   const [refreshProxyResult, setRefreshProxyResult] = useState<any>(null);
   const [refreshDirectResult, setRefreshDirectResult] = useState<any>(null);
   const [customQuery, setCustomQuery] = useState<string>(
-    'SELECT 1 as num, 2 as value'
+    'SELECT 1 as num, 2 as value',
   );
   const [queryProxyResult, setQueryProxyResult] = useState<any>(null);
   const [queryDirectResult, setQueryDirectResult] = useState<any>(null);
   const [useJsonFormat, setUseJsonFormat] = useState<boolean>(false);
   const [nsqlQuery, setNsqlQuery] = useState<string>(
-    'Show me the first 5 rows'
+    'Show me the first 5 rows',
   );
   const [nsqlProxyResult, setNsqlProxyResult] = useState<any>(null);
   const [nsqlDirectResult, setNsqlDirectResult] = useState<any>(null);
@@ -218,7 +218,7 @@ export default function TestPage() {
         httpUrl: '/api',
         apiKey: apiKey || undefined,
       }),
-    [apiKey]
+    [apiKey],
   );
 
   const directClient = useMemo(
@@ -227,14 +227,14 @@ export default function TestPage() {
         httpUrl: 'https://data.spiceai.io',
         apiKey: apiKey || undefined,
       }),
-    [apiKey]
+    [apiKey],
   );
 
   // Helper function to extract detailed error information
   const getErrorDetails = (
     err: unknown,
     context: string,
-    endpoint?: string
+    endpoint?: string,
   ): string => {
     const details: string[] = [`❌ ${context} failed\n`];
 
@@ -248,7 +248,7 @@ export default function TestPage() {
       // Check for fetch/network errors
       if (err.name === 'TypeError' && err.message.includes('fetch')) {
         details.push(
-          '\n⚠️ Network error - check your connection and endpoint URL'
+          '\n⚠️ Network error - check your connection and endpoint URL',
         );
       }
     } else if (typeof err === 'object' && err !== null) {
@@ -364,17 +364,17 @@ export default function TestPage() {
       setRefreshProxyResult(
         proxyResult.status === 'fulfilled'
           ? proxyResult.value
-          : { error: proxyResult.reason?.toString() }
+          : { error: proxyResult.reason?.toString() },
       );
       setRefreshDirectResult(
         directResult.status === 'fulfilled'
           ? directResult.value
-          : { error: directResult.reason?.toString() }
+          : { error: directResult.reason?.toString() },
       );
     } catch (err) {
       const errorDetails = getErrorDetails(
         err,
-        'Dataset refresh (eth.recent_blocks)'
+        'Dataset refresh (eth.recent_blocks)',
       );
       setError(errorDetails);
       setRefreshProxyResult(null);
@@ -400,12 +400,12 @@ export default function TestPage() {
         setQueryProxyResult(
           proxyResult.status === 'fulfilled'
             ? proxyResult.value
-            : { error: proxyResult.reason?.toString() }
+            : { error: proxyResult.reason?.toString() },
         );
         setQueryDirectResult(
           directResult.status === 'fulfilled'
             ? directResult.value
-            : { error: directResult.reason?.toString() }
+            : { error: directResult.reason?.toString() },
         );
       } else {
         // Use sql() for Arrow Table format
@@ -429,7 +429,7 @@ export default function TestPage() {
               proxyResult.status === 'rejected'
                 ? proxyResult.reason?.toString()
                 : 'No data',
-          }
+          },
         );
         setQueryDirectResult(
           directRows || {
@@ -437,7 +437,7 @@ export default function TestPage() {
               directResult.status === 'rejected'
                 ? directResult.reason?.toString()
                 : 'No data',
-          }
+          },
         );
       }
     } catch (err) {
@@ -468,12 +468,12 @@ export default function TestPage() {
       setNsqlProxyResult(
         proxyResult.status === 'fulfilled'
           ? proxyResult.value
-          : { error: proxyResult.reason?.toString() }
+          : { error: proxyResult.reason?.toString() },
       );
       setNsqlDirectResult(
         directResult.status === 'fulfilled'
           ? directResult.value
-          : { error: directResult.reason?.toString() }
+          : { error: directResult.reason?.toString() },
       );
     } catch (err) {
       const errorDetails = getErrorDetails(err, 'NSQL query');

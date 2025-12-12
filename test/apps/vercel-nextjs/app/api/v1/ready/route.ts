@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
       {
         status: 503,
         headers: { 'Content-Type': 'text/plain' },
-      }
+      },
     );
   }
 }
