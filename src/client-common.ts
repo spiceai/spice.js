@@ -517,6 +517,14 @@ export class SpiceClient {
   }
 
   private logConfiguration(): void {
+    // Only log in development/debug mode
+    if (
+      process.env.NODE_ENV === 'production' ||
+      process.env.SPICE_DEBUG !== 'true'
+    ) {
+      return;
+    }
+
     const platformName = this._platform.getPlatformName();
     const supportsGrpc = this._platform.supportsGrpc();
 
