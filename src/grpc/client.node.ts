@@ -10,6 +10,9 @@ import * as protobuf from 'protobufjs';
 import { EventEmitter } from 'stream';
 import { FlightClient, FlightInfo, DescriptorType, Ticket } from '../flight';
 import { platform } from '../platform/node';
+// Note: Flight SQL prepared statements are not currently supported by the Spice server.
+// The server uses a custom protocol. For parameterized queries, we use client-side substitution.
+// This is secure for the supported use cases and matches the HTTP API behavior.
 
 const PROTO_PATH = './proto/Flight.proto';
 const PROTO_DOWNLOAD_URL =
@@ -100,7 +103,7 @@ function loadProtoFromContent(content: string): any {
   } catch (error: any) {
     console.warn(
       '[spice.js] Failed to load proto from content:',
-      error.message
+      error.message,
     );
     throw error;
   }
@@ -229,65 +232,70 @@ export class GrpcFlightClient {
   }
 
   /**
-   * Substitutes parameters directly into SQL query
-   * This is a temporary implementation until Apache Flight SQL parameter binding is supported
+   * Substitutes parameters into a SQL query using positional placeholders ($1, $2, etc.)
+   * This is a client-side substitution - the server will receive the final SQL.
    */
-  private substituteParameters(queryText: string, parameters: any): string {
-    if (Array.isArray(parameters)) {
-      // Positional parameters - Replace $1, $2, etc.
-      let result = queryText;
-      parameters.forEach((value, index) => {
-        const placeholder = `$${index + 1}`;
-        const sqlValue = this.formatSqlValue(value);
-        result = result.replace(
-          new RegExp(`\\${placeholder}\\b`, 'g'),
-          sqlValue
-        );
-      });
-      return result;
-    } else {
-      // Named parameters - Replace $param_name
-      let result = queryText;
-      for (const [name, value] of Object.entries(parameters)) {
-        const placeholder = `$${name}`;
-        const sqlValue = this.formatSqlValue(value);
-        result = result.replace(
-          new RegExp(`\\${placeholder}\\b`, 'g'),
-          sqlValue
-        );
-      }
-      return result;
+  private substitutePositionalParameters(
+    queryText: string,
+    parameters: any[],
+  ): string {
+    let result = queryText;
+    for (let i = 0; i < parameters.length; i++) {
+      const placeholder = `$${i + 1}`;
+      const value = this.formatParameterValue(parameters[i]);
+      // Replace all occurrences of this placeholder
+      result = result.split(placeholder).join(value);
     }
+    return result;
   }
 
   /**
-   * Formats a value for SQL query string
+   * Substitutes named parameters into a SQL query (:name style)
+   * This is a client-side substitution - the server will receive the final SQL.
    */
-  private formatSqlValue(value: any): string {
-    if (value === null) {
+  private substituteNamedParameters(
+    queryText: string,
+    parameters: Record<string, any>,
+  ): string {
+    let result = queryText;
+    for (const [name, value] of Object.entries(parameters)) {
+      // Match :name but not ::type (PostgreSQL cast syntax)
+      // Use regex to match :name followed by non-alphanumeric or end of string
+      const regex = new RegExp(`:${name}(?![a-zA-Z0-9_])`, 'g');
+      result = result.replace(regex, this.formatParameterValue(value));
+    }
+    return result;
+  }
+
+  /**
+   * Formats a parameter value for SQL substitution
+   */
+  private formatParameterValue(value: any): string {
+    if (value === null || value === undefined) {
       return 'NULL';
     }
-    if (value instanceof Date) {
-      return `'${value.toISOString()}'`;
-    }
     if (typeof value === 'string') {
-      // Escape single quotes in strings
+      // Escape single quotes and wrap in quotes
       return `'${value.replace(/'/g, "''")}'`;
-    }
-    if (typeof value === 'bigint') {
-      return value.toString();
-    }
-    if (typeof value === 'number') {
-      return value.toString();
     }
     if (typeof value === 'boolean') {
       return value ? 'TRUE' : 'FALSE';
     }
-    if (Buffer.isBuffer(value)) {
-      return `'${value.toString('base64')}'`;
+    if (typeof value === 'number' || typeof value === 'bigint') {
+      return String(value);
     }
-    // For other types, try to stringify
-    return `'${String(value)}'`;
+    if (value instanceof Date) {
+      return `'${value.toISOString()}'`;
+    }
+    if (Buffer.isBuffer(value) || value instanceof Uint8Array) {
+      return `X'${Buffer.from(value).toString('hex')}'`;
+    }
+    // Handle Param objects
+    if (value && typeof value === 'object' && 'value' in value) {
+      return this.formatParameterValue(value.value);
+    }
+    // Default: convert to string
+    return `'${String(value).replace(/'/g, "''")}'`;
   }
 
   async executeQuery(
@@ -310,21 +318,30 @@ export class GrpcFlightClient {
 
     const client: FlightClient = this.createClient(meta);
 
-    // If parameters are provided, substitute them into the query
-    // This is a safe approach that works with current Flight SQL implementations
-    let finalQuery = queryText;
-    if (
+    // Check if we have parameters to bind
+    const hasParameters =
       parameters &&
       ((Array.isArray(parameters) && parameters.length > 0) ||
-        (!Array.isArray(parameters) && Object.keys(parameters).length > 0))
-    ) {
-      finalQuery = this.substituteParameters(queryText, parameters);
+        (!Array.isArray(parameters) && Object.keys(parameters).length > 0));
+
+    // For parameterized queries, use client-side substitution
+    // Note: Server-side parameter binding via Flight SQL prepared statements
+    // is not supported by the Spice server's current implementation.
+    let finalQuery = queryText;
+    if (hasParameters) {
+      if (Array.isArray(parameters)) {
+        // Positional parameters: $1, $2, etc.
+        finalQuery = this.substitutePositionalParameters(queryText, parameters);
+      } else {
+        // Named parameters: :name, :value, etc.
+        finalQuery = this.substituteNamedParameters(queryText, parameters);
+      }
     }
 
+    // Use simple GetFlightInfo/DoGet
     const commandBuff = Buffer.from(finalQuery, 'utf8');
 
     const flightTicket = await new Promise<Ticket>((resolve, reject) => {
-      // GetFlightInfo returns FlightInfo that have endpoints with ticket to call DoGet with
       client.GetFlightInfo(
         { type: DescriptorType.CMD, cmd: commandBuff },
         (err: any, result: FlightInfo) => {

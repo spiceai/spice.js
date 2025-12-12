@@ -50,7 +50,7 @@ const PROTO_DOWNLOAD_URL =
 const PACKAGE_PATH = __dirname.includes('.next')
   ? path.join(
       __dirname.substring(0, __dirname.indexOf('.next')),
-      './node_modules/@spiceai/spice/'
+      './node_modules/@spiceai/spice/',
     )
   : __dirname;
 const fullProtoPath = path.join(PACKAGE_PATH, PROTO_PATH);
@@ -68,7 +68,7 @@ async function downloadProtoFile(): Promise<string> {
 
     if (!response.ok) {
       throw new Error(
-        `Failed to download proto: ${response.status} ${response.statusText}`
+        `Failed to download proto: ${response.status} ${response.statusText}`,
       );
     }
 
@@ -93,7 +93,7 @@ async function loadProtoContent(): Promise<string | null> {
   }
 
   console.warn(
-    '[spice.js] Local Flight.proto not found, attempting to download...'
+    '[spice.js] Local Flight.proto not found, attempting to download...',
   );
 
   // Try to download
@@ -132,7 +132,7 @@ function loadProtoFromContent(content: string): any {
   } catch (error: any) {
     console.warn(
       '[spice.js] Failed to load proto from content:',
-      error.message
+      error.message,
     );
     throw error;
   }
@@ -243,7 +243,7 @@ class SpiceClient {
       this._useGrpc = true;
     } catch (error: any) {
       console.warn(
-        `[spice.js] gRPC initialization failed: ${error.message}. Using HTTP endpoint.`
+        `[spice.js] gRPC initialization failed: ${error.message}. Using HTTP endpoint.`,
       );
       this._useGrpc = false;
     }
@@ -272,7 +272,7 @@ class SpiceClient {
       return new flightProto.FlightService(
         this._flightUrl,
         grpc.credentials.createInsecure(),
-        channelOptions
+        channelOptions,
       );
     }
 
@@ -284,12 +284,12 @@ class SpiceClient {
       grpc.credentials.createFromMetadataGenerator(metaCallback);
     const combCreds = grpc.credentials.combineChannelCredentials(
       creds,
-      callCreds
+      callCreds,
     );
     return new flightProto.FlightService(
       this._flightUrl,
       combCreds,
-      channelOptions
+      channelOptions,
     );
   }
 
@@ -309,7 +309,7 @@ class SpiceClient {
         ...parameters.map((val, idx) => ({
           position: idx,
           value: this.serializeParameterValue(val),
-        }))
+        })),
       );
     } else {
       // Named parameters
@@ -349,7 +349,7 @@ class SpiceClient {
    */
   private createFlightSqlCommand(
     queryText: string,
-    parameters?: QueryParameters
+    parameters?: QueryParameters,
   ): Buffer {
     if (
       !parameters ||
@@ -379,7 +379,7 @@ class SpiceClient {
     if (Array.isArray(parameters)) {
       // Positional parameters - DataFusion uses $1, $2, etc.
       paramArray.push(
-        ...parameters.map((val) => this.serializeParameterValue(val))
+        ...parameters.map((val) => this.serializeParameterValue(val)),
       );
     } else {
       // Named parameters - DataFusion uses $param_name
@@ -428,7 +428,7 @@ class SpiceClient {
   private async getResultStream(
     queryText: string,
     parameters?: QueryParameters,
-    getFlightClient: ((client: FlightClient) => void) | undefined = undefined
+    getFlightClient: ((client: FlightClient) => void) | undefined = undefined,
   ): Promise<EventEmitter> {
     const meta = new grpc.Metadata();
     meta.set('authorization', `Bearer ${this._apiKey || ''}`);
@@ -455,7 +455,7 @@ class SpiceClient {
             return;
           }
           resolve(result.endpoint[0].ticket);
-        }
+        },
       );
     });
 
@@ -496,7 +496,7 @@ class SpiceClient {
   async sql(
     queryText: string,
     optionsOrCallback?: SqlQueryOptions | ((data: Table) => void),
-    onData?: (data: Table) => void
+    onData?: (data: Table) => void,
   ): Promise<Table> {
     // Handle overloaded signatures
     let options: SqlQueryOptions | undefined;
@@ -520,7 +520,7 @@ class SpiceClient {
    */
   async query(
     queryText: string,
-    onData?: ((data: Table) => void) | undefined
+    onData?: ((data: Table) => void) | undefined,
   ): Promise<Table> {
     return this.sql(queryText, onData);
   }
@@ -540,7 +540,7 @@ class SpiceClient {
       if (!schema) {
         schema = {
           fields: table.schema.fields.map((field) =>
-            serializeArrowField(field)
+            serializeArrowField(field),
           ),
         };
       }
@@ -593,13 +593,13 @@ class SpiceClient {
       'POST',
       '/v1/nsql',
       undefined,
-      JSON.stringify(request)
+      JSON.stringify(request),
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `NSQL request failed: ${response.status} ${response.statusText} - ${errorText}`
+        `NSQL request failed: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -610,7 +610,7 @@ class SpiceClient {
   private async doQueryRequest(
     queryText: string,
     parameters?: QueryParameters,
-    onData?: (data: Table) => void
+    onData?: (data: Table) => void,
   ): Promise<Table> {
     // Wait for initialization to complete
     const useGrpc = await this.ensureInitialized();
@@ -619,12 +619,12 @@ class SpiceClient {
       const sqlJsonResponse = await this.doHttpQueryRequest(
         queryText,
         parameters,
-        onData
+        onData,
       );
       // Convert SqlJsonResponse to Arrow Table
       return jsonToArrowTable(
         sqlJsonResponse.schema.fields,
-        sqlJsonResponse.data
+        sqlJsonResponse.data,
       );
     }
 
@@ -636,7 +636,7 @@ class SpiceClient {
         parameters,
         (c: FlightClient) => {
           client = c;
-        }
+        },
       );
 
       // indicates that data has been partially or fully sent
@@ -680,7 +680,7 @@ class SpiceClient {
   private async doHttpQueryRequest(
     queryText: string,
     parameters?: QueryParameters,
-    onData?: (data: Table) => void
+    onData?: (data: Table) => void,
   ): Promise<SqlV1JsonResponse> {
     const startTime = Date.now();
 
@@ -692,13 +692,13 @@ class SpiceClient {
       '/v1/sql',
       undefined,
       JSON.stringify({ sql: queryText, parameters: httpParameters }),
-      { Accept: 'application/vnd.spiceai.sql.v1+json' }
+      { Accept: 'application/vnd.spiceai.sql.v1+json' },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `HTTP query failed with status ${response.status}: ${errorText}`
+        `HTTP query failed with status ${response.status}: ${errorText}`,
       );
     }
 
@@ -754,7 +754,7 @@ class SpiceClient {
    */
   async refreshAcceleration(
     dataset: string,
-    options?: RefreshAccelerationOptions
+    options?: RefreshAccelerationOptions,
   ): Promise<RefreshAccelerationResponse> {
     if (!this._httpUrl) {
       throw new Error('HTTP URL is required for refresh operation');
@@ -766,13 +766,13 @@ class SpiceClient {
       'POST',
       `/v1/datasets/${encodeURIComponent(dataset)}/acceleration/refresh`,
       undefined,
-      body
+      body,
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Failed to refresh dataset '${dataset}': ${response.status} ${response.statusText} - ${errorText}`
+        `Failed to refresh dataset '${dataset}': ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -784,7 +784,7 @@ class SpiceClient {
     path: string,
     params?: { [key: string]: string },
     body?: string,
-    customHeaders?: { [key: string]: string }
+    customHeaders?: { [key: string]: string },
   ) {
     const url =
       params && Object.keys(params).length

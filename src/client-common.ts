@@ -31,7 +31,7 @@ export interface RetryModule {
   dontRetry(err: any): void;
   retryWithExponentialBackoff<T>(
     operation: any,
-    maxRetries: number
+    maxRetries: number,
   ): Promise<T>;
 }
 
@@ -208,7 +208,7 @@ function wrapTableForDecimalConversion(table: Table): Table {
 
     // Check which fields need conversion
     const decimalFields = table.schema.fields.filter((f) =>
-      f.type.toString().startsWith('Decimal')
+      f.type.toString().startsWith('Decimal'),
     );
 
     // For timestamp fields, use original schema metadata if available
@@ -243,7 +243,7 @@ function wrapTableForDecimalConversion(table: Table): Table {
       timestampFields = table.schema.fields.filter(
         (f) =>
           f.type.toString().startsWith('Timestamp') ||
-          f.type.toString().startsWith('Date')
+          f.type.toString().startsWith('Date'),
       );
     }
 
@@ -263,12 +263,12 @@ function wrapTableForDecimalConversion(table: Table): Table {
     } else {
       listFields = table.schema.fields.filter(
         (f) =>
-          f.type.toString().startsWith('List<') || f.type.toString() === 'List'
+          f.type.toString().startsWith('List<') || f.type.toString() === 'List',
       );
       structFields = table.schema.fields.filter(
         (f) =>
           f.type.toString().startsWith('Struct<') ||
-          f.type.toString() === 'Struct'
+          f.type.toString() === 'Struct',
       );
     }
 
@@ -366,7 +366,7 @@ function wrapTableForDecimalConversion(table: Table): Table {
         if (value !== null && value !== undefined) {
           // Find corresponding field in original schema
           const originalField = originalSchema?.find(
-            (f: any) => f.name === field.name
+            (f: any) => f.name === field.name,
           );
 
           // If value is a JSON string, parse it first, convert timestamps, then stringify back
@@ -429,11 +429,15 @@ export class SpiceClient {
   private _isSpiceCloud: boolean = false;
   private _flightOnly: boolean = false;
 
+  // Default Spice Cloud endpoints
+  private static readonly DEFAULT_CLOUD_HTTP = 'https://data.spiceai.io';
+  private static readonly DEFAULT_CLOUD_FLIGHT = 'flight.spiceai.io:443';
+
   public constructor(
     params: string | SpiceClientConfig = {},
     platform: PlatformAdapter,
     retry: RetryModule,
-    GrpcClientClass?: typeof GrpcFlightClient
+    GrpcClientClass?: typeof GrpcFlightClient,
   ) {
     this._retry = retry;
     this._maxRetries = retry.FLIGHT_QUERY_MAX_RETRIES;
@@ -442,8 +446,8 @@ export class SpiceClient {
     // support legacy constructor with api_key as first argument
     if (typeof params === 'string') {
       this._apiKey = params;
-      this._httpUrl = 'https://data.spiceai.io';
-      this._flightUrl = 'flight.spiceai.io:443';
+      this._httpUrl = SpiceClient.DEFAULT_CLOUD_HTTP;
+      this._flightUrl = SpiceClient.DEFAULT_CLOUD_FLIGHT;
       this._userAgent = platform.getUserAgent();
       this._flightOnly = false;
     } else {
@@ -458,9 +462,19 @@ export class SpiceClient {
       } = params;
 
       this._apiKey = apiKey;
-      this._httpUrl = httpUrl || 'http://127.0.0.1:8090';
-      this._flightUrl = flightUrl || '127.0.0.1:50051';
       this._flightOnly = flightOnly || false;
+
+      // Determine default endpoints based on whether API key is provided
+      const isCloudMode = apiKey && !httpUrl && !flightUrl;
+
+      this._httpUrl =
+        httpUrl ||
+        (isCloudMode
+          ? SpiceClient.DEFAULT_CLOUD_HTTP
+          : 'http://127.0.0.1:8090');
+      this._flightUrl =
+        flightUrl ||
+        (isCloudMode ? SpiceClient.DEFAULT_CLOUD_FLIGHT : '127.0.0.1:50051');
 
       // More explicit TLS check to avoid false positives
       const isLocalhost =
@@ -494,7 +508,7 @@ export class SpiceClient {
         this._apiKey,
         this._flightUrl,
         this._userAgent,
-        this._flightTlsEnabled
+        this._flightTlsEnabled,
       );
     }
 
@@ -522,7 +536,7 @@ export class SpiceClient {
 
     // Determine endpoint (use cached value)
     const endpoint = this._isSpiceCloud
-      ? 'Spice Cloud (data.spiceai.io)'
+      ? `Spice Cloud (${new URL(this._httpUrl).hostname})`
       : this._httpUrl;
 
     // Build configuration message
@@ -619,7 +633,7 @@ export class SpiceClient {
       // If flightOnly mode is enabled and gRPC failed, throw error
       if (this._flightOnly) {
         throw new Error(
-          'Arrow Flight connection failed and flightOnly mode is enabled. Cannot fallback to HTTP.'
+          'Arrow Flight connection failed and flightOnly mode is enabled. Cannot fallback to HTTP.',
         );
       }
     }
@@ -627,7 +641,7 @@ export class SpiceClient {
     // If flightOnly mode is enabled but no Flight client available, throw error
     if (this._flightOnly) {
       throw new Error(
-        'flightOnly mode is enabled but Arrow Flight client is not available on this platform'
+        'flightOnly mode is enabled but Arrow Flight client is not available on this platform',
       );
     }
 
@@ -666,7 +680,7 @@ export class SpiceClient {
         } else if (onData) {
           isDataAlreadySent = true;
           const chunkTable = wrapTableForDecimalConversion(
-            tableFromIPC([schema, ipcMessage])
+            tableFromIPC([schema, ipcMessage]),
           );
           onData(chunkTable);
         }
@@ -729,7 +743,7 @@ export class SpiceClient {
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `HTTP query failed with status ${response.status}: ${errorText}`
+        `HTTP query failed with status ${response.status}: ${errorText}`,
       );
     }
 
@@ -753,7 +767,7 @@ export class SpiceClient {
   private parseStreamingResponse(
     lines: string[],
     onData: ((data: Table) => void) | undefined,
-    isSpiceAI: boolean
+    isSpiceAI: boolean,
   ): Table {
     const allRows: any[] = [];
     let schema: any[] = [];
@@ -775,7 +789,7 @@ export class SpiceClient {
           // Send partial results if callback provided
           if (onData) {
             const partialTable = wrapTableForDecimalConversion(
-              jsonToArrowTable(schema, sqlV1.data)
+              jsonToArrowTable(schema, sqlV1.data),
             );
             onData(partialTable);
           }
@@ -791,7 +805,7 @@ export class SpiceClient {
   private parseSingleResponse(
     body: string,
     onData: ((data: Table) => void) | undefined,
-    isSpiceAI: boolean
+    isSpiceAI: boolean,
   ): Table {
     try {
       const jsonData = JSON.parse(body);
@@ -864,7 +878,8 @@ export class SpiceClient {
     }
 
     return this._retry.retryWithExponentialBackoff<Table>(
-      () => this.doQueryRequest(queryText, options?.parameters, callback, headers),
+      () =>
+        this.doQueryRequest(queryText, options?.parameters, callback, headers),
       this._maxRetries,
     );
   }
@@ -901,7 +916,7 @@ export class SpiceClient {
       // If flightOnly mode is enabled and gRPC failed, throw error
       if (!useGrpc && this._flightOnly) {
         throw new Error(
-          'gRPC Arrow Flight connection failed and flightOnly mode is enabled. Cannot fallback to HTTP.'
+          'gRPC Arrow Flight connection failed and flightOnly mode is enabled. Cannot fallback to HTTP.',
         );
       }
     }
@@ -909,7 +924,7 @@ export class SpiceClient {
     // If flightOnly mode is enabled but no gRPC client, throw error
     if (this._flightOnly && !useGrpc) {
       throw new Error(
-        'flightOnly mode is enabled but gRPC client is not available on this platform'
+        'flightOnly mode is enabled but gRPC client is not available on this platform',
       );
     }
 
@@ -1100,7 +1115,7 @@ export class SpiceClient {
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(
-          `HTTP query failed with status ${response.status}: ${errorText}`
+          `HTTP query failed with status ${response.status}: ${errorText}`,
         );
       }
 
@@ -1258,13 +1273,13 @@ export class SpiceClient {
       'POST',
       '/v1/nsql',
       undefined,
-      JSON.stringify(request)
+      JSON.stringify(request),
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `NSQL request failed: ${response.status} ${response.statusText} - ${errorText}`
+        `NSQL request failed: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -1346,7 +1361,7 @@ export class SpiceClient {
    */
   async refreshAcceleration(
     dataset: string,
-    options?: RefreshAccelerationOptions
+    options?: RefreshAccelerationOptions,
   ): Promise<RefreshAccelerationResponse> {
     if (!this._httpUrl) {
       throw new Error('HTTP URL is required for refresh operation');
@@ -1358,13 +1373,13 @@ export class SpiceClient {
       'POST',
       `/v1/datasets/${encodeURIComponent(dataset)}/acceleration/refresh`,
       undefined,
-      body
+      body,
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Failed to refresh dataset '${dataset}': ${response.status} ${response.statusText} - ${errorText}`
+        `Failed to refresh dataset '${dataset}': ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -1435,7 +1450,7 @@ export class SpiceClient {
     path: string,
     params?: { [key: string]: string },
     body?: string,
-    customHeaders?: { [key: string]: string }
+    customHeaders?: { [key: string]: string },
   ) {
     const url =
       params && Object.keys(params).length
