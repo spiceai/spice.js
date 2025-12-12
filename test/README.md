@@ -187,7 +187,7 @@ Example GitHub Actions workflow:
 
 For cloud tests, set:
 
-- `SPICE_API_KEY` - Your Spice.ai API key
+- `SPICEAI_API_KEY` - Your Spice.ai API key
 - `HTTP_URL` - HTTP endpoint (optional, defaults to https://data.spiceai.io)
 - `FLIGHT_URL` - Flight endpoint (optional, defaults to flight.spiceai.io:443)
 

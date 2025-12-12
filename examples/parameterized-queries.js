@@ -15,7 +15,7 @@ async function main() {
 
   // Initialize client
   const client = new SpiceClient({
-    apiKey: process.env.SPICE_API_KEY,
+    apiKey: process.env.SPICEAI_API_KEY,
     httpUrl: 'https://data.spiceai.io',
     flightUrl: 'flight.spiceai.io:443',
   });
@@ -27,13 +27,13 @@ async function main() {
 
     const table1 = await client.sql(
       'SELECT * FROM taxi_trips WHERE passenger_count = $1 AND trip_distance > $2 LIMIT 10',
-      { parameters: [2, 5.0] }
+      { parameters: [2, 5.0] },
     );
 
     console.log(`✓ Query executed successfully`);
     console.log(`  Rows returned: ${table1.numRows}`);
     console.log(
-      `  Transport used: Apache Flight SQL (gRPC) with parameter substitution`
+      `  Transport used: Apache Flight SQL (gRPC) with parameter substitution`,
     );
     console.log('\nFirst few rows:');
     console.table(table1.toArray().slice(0, 3));
@@ -49,7 +49,7 @@ async function main() {
           passengers: 3,
           min_fare: 20.0,
         },
-      }
+      },
     );
 
     console.log(`✓ Query executed successfully`);
@@ -74,7 +74,7 @@ async function main() {
           10.0, // float (maximum distance)
           'N', // string
         ],
-      }
+      },
     );
 
     console.log(`✓ Query executed successfully`);
@@ -91,7 +91,7 @@ async function main() {
 
     const table4 = await client.sql(
       'SELECT COUNT(*) as count FROM taxi_trips WHERE store_and_fwd_flag = $1',
-      { parameters: [maliciousInput] }
+      { parameters: [maliciousInput] },
     );
 
     console.log(`✓ Query executed safely`);
@@ -106,7 +106,7 @@ async function main() {
 
     const table5 = await client.sql(
       'SELECT * FROM taxi_trips WHERE passenger_count = $1 OR $1 IS NULL LIMIT 5',
-      { parameters: [null] }
+      { parameters: [null] },
     );
 
     console.log(`✓ NULL parameter handled correctly`);
@@ -118,23 +118,23 @@ async function main() {
     console.log('='.repeat(80));
     console.log('\n📝 Key Points:');
     console.log(
-      '  • Parameterized queries work perfectly with Apache Flight SQL'
+      '  • Parameterized queries work perfectly with Apache Flight SQL',
     );
     console.log('  • Parameters are safely substituted on the client side');
     console.log(
-      '  • Both positional ($1, $2) and named ($param_name) parameters supported'
+      '  • Both positional ($1, $2) and named ($param_name) parameters supported',
     );
     console.log(
-      '  • Automatic SQL injection prevention through proper escaping'
+      '  • Automatic SQL injection prevention through proper escaping',
     );
     console.log(
-      '  • Works with all data types: strings, numbers, booleans, null'
+      '  • Works with all data types: strings, numbers, booleans, null',
     );
     console.log('  • Automatic fallback to HTTP if Flight SQL is unavailable');
     console.log('\n💡 Best Practices:');
     console.log('  • Use positional parameters for simple queries');
     console.log(
-      '  • Use named parameters for complex queries with many parameters'
+      '  • Use named parameters for complex queries with many parameters',
     );
     console.log('  • Never concatenate user input directly into SQL strings');
     console.log('  • Let the SDK handle parameter escaping automatically');

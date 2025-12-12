@@ -54,7 +54,7 @@ const main = async () => {
   // });
 
   const table = await spiceClient.sql(
-    'SELECT trip_distance, total_amount FROM taxi_trips ORDER BY trip_distance DESC LIMIT 10;'
+    'SELECT trip_distance, total_amount FROM taxi_trips ORDER BY trip_distance DESC LIMIT 10;',
   );
   console.table(table.toArray());
 };
@@ -75,7 +75,7 @@ For parameterized queries, the SDK provides secure parameter binding:
 // Parameterized query using Flight SQL or HTTP
 const table = await client.sql(
   'SELECT * FROM taxi_trips WHERE passenger_count = $1 AND trip_distance > $2 LIMIT 10',
-  { parameters: [2, 5.0] }
+  { parameters: [2, 5.0] },
 );
 ```
 
@@ -566,7 +566,7 @@ The `nsql()` method converts natural language queries into SQL and executes them
 ```js
 // Basic natural language query
 const result = await spiceClient.nsql(
-  'Show me the top 5 customers by total sales'
+  'Show me the top 5 customers by total sales',
 );
 
 console.log('Generated SQL:', result.sql);
@@ -580,7 +580,7 @@ const result = await spiceClient.nsql(
     datasets: ['taxi_trips'], // Limit to specific datasets
     model: 'nql', // Specify the model (default: 'nql')
     sample_data_enabled: true, // Include sample data in context (default: true)
-  }
+  },
 );
 
 // Access the generated SQL
@@ -658,7 +658,7 @@ const client = new SpiceClient({
 // Positional parameters (using $1, $2, etc.)
 const table = await client.sql(
   'SELECT * FROM taxi_trips WHERE trip_distance > $1 AND passenger_count >= $2 LIMIT 10',
-  { parameters: [5.0, 2] }
+  { parameters: [5.0, 2] },
 );
 
 console.table(table.toArray());
@@ -710,7 +710,7 @@ For development and testing, you'll need to set up environment variables:
 2. Edit `.env` and add your [Spice.ai](https://spice.ai) API key:
 
    ```env
-   SPICE_API_KEY=your_api_key_here
+   SPICEAI_API_KEY=your_api_key_here
    ```
 
 The `.env` file is automatically loaded by the test suite and can be used by examples.

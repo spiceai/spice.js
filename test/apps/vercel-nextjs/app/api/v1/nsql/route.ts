@@ -15,25 +15,25 @@ export async function POST(request: NextRequest) {
         {
           status: 400,
           headers: { 'Content-Type': 'application/json' },
-        }
+        },
       );
     }
 
     // Get API key from header or environment variable
     const apiKey = request.headers.get('X-API-KEY');
-    const key = apiKey || process.env.SPICE_API_KEY;
+    const key = apiKey || process.env.SPICEAI_API_KEY;
 
     if (!key) {
       return new Response(
         JSON.stringify({
           success: false,
           error:
-            'Missing API key. Provide X-API-KEY header or set SPICE_API_KEY environment variable.',
+            'Missing API key. Provide X-API-KEY header or set SPICEAI_API_KEY environment variable.',
         }),
         {
           status: 401,
           headers: { 'Content-Type': 'application/json' },
-        }
+        },
       );
     }
 
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
           {
             status: 401,
             headers: { 'Content-Type': 'application/json' },
-          }
+          },
         );
       }
 
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         {
           status: 500,
           headers: { 'Content-Type': 'application/json' },
-        }
+        },
       );
     }
   } catch (error) {
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
-      }
+      },
     );
   }
 }

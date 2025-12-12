@@ -42,10 +42,10 @@ This creates a symlink: `node_modules/@spiceai/spice → ../../../`
 
 ```bash
 # For server-side API routes
-SPICE_API_KEY=your_api_key_here
+SPICEAI_API_KEY=your_api_key_here
 
 # For browser test page (must be prefixed with NEXT_PUBLIC_)
-NEXT_PUBLIC_SPICE_API_KEY=your_api_key_here
+NEXT_PUBLIC_SPICEAI_API_KEY=your_api_key_here
 ```
 
 4. **Run the app**:
@@ -100,7 +100,7 @@ Interactive test page that uses the **browser build** of SpiceClient:
 - SQL query execution
 - All operations run client-side using the browser build
 
-**Note:** This page requires `NEXT_PUBLIC_SPICE_API_KEY` environment variable to be set.
+**Note:** This page requires `NEXT_PUBLIC_SPICEAI_API_KEY` environment variable to be set.
 
 ## API Endpoint
 
@@ -168,7 +168,7 @@ Or **Error message** if query fails:
 vercel
 ```
 
-2. Set the `SPICE_API_KEY` environment variable in your Vercel project settings
+2. Set the `SPICEAI_API_KEY` environment variable in your Vercel project settings
 
 3. Test the endpoint:
 
@@ -197,7 +197,7 @@ Run the cloud tests against your Vercel deployment:
 
 ```bash
 # From the root of spice.js repository
-SPICE_API_KEY=your-api-key VERCEL_ENDPOINT=https://your-app.vercel.app npm test -- cloud.test.ts
+SPICEAI_API_KEY=your-api-key VERCEL_ENDPOINT=https://your-app.vercel.app npm test -- cloud.test.ts
 ```
 
 This will run tests against:
@@ -208,7 +208,7 @@ This will run tests against:
 Skip Vercel tests by not setting `VERCEL_ENDPOINT`:
 
 ```bash
-SPICE_API_KEY=your-api-key npm test -- cloud.test.ts
+SPICEAI_API_KEY=your-api-key npm test -- cloud.test.ts
 ```
 
 ## Expected Behavior

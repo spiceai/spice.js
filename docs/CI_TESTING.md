@@ -156,7 +156,7 @@ The CI uses the same commands as local development:
 
 ### Required for Cloud Tests
 
-- `SPICE_API_KEY` - Spice.ai API key (from GitHub Secrets)
+- `SPICEAI_API_KEY` - Spice.ai API key (from GitHub Secrets)
 
 ### Optional
 
@@ -308,7 +308,7 @@ npm run test:browser
 npm run test:node
 
 # Cloud tests (requires API key)
-SPICE_API_KEY=your_key npm run test -- test/cloud.test.ts
+SPICEAI_API_KEY=your_key npm run test -- test/cloud.test.ts
 ```
 
 ## Performance

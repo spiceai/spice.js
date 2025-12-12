@@ -2,7 +2,7 @@ const { SpiceClient } = require('./dist/node/index.js');
 
 const client = new SpiceClient({
   httpUrl: 'https://data.spiceai.io',
-  apiKey: process.env.SPICE_API_KEY || 'test',
+  apiKey: process.env.SPICEAI_API_KEY || 'test',
 });
 
 async function test() {
@@ -16,7 +16,7 @@ async function test() {
     console.log('\nChecking specific fields:');
     const row = sqlRows[0];
     console.log(
-      `hashes type: ${typeof row.hashes}, isArray: ${Array.isArray(row.hashes)}`
+      `hashes type: ${typeof row.hashes}, isArray: ${Array.isArray(row.hashes)}`,
     );
     console.log(`hashes value: ${JSON.stringify(row.hashes)}`);
     console.log(`hashes constructor: ${row.hashes?.constructor?.name}`);
@@ -26,14 +26,14 @@ async function test() {
 
     console.log(
       `\nreview_comments type: ${typeof row.review_comments}, isArray: ${Array.isArray(
-        row.review_comments
-      )}`
+        row.review_comments,
+      )}`,
     );
     console.log(
-      `review_comments value: ${JSON.stringify(row.review_comments)}`
+      `review_comments value: ${JSON.stringify(row.review_comments)}`,
     );
     console.log(
-      `review_comments constructor: ${row.review_comments?.constructor?.name}`
+      `review_comments constructor: ${row.review_comments?.constructor?.name}`,
     );
     if (
       row.review_comments &&
@@ -41,8 +41,8 @@ async function test() {
     ) {
       console.log(
         `review_comments.toArray(): ${JSON.stringify(
-          row.review_comments.toArray()
-        ).substring(0, 200)}`
+          row.review_comments.toArray(),
+        ).substring(0, 200)}`,
       );
     }
 
@@ -58,8 +58,8 @@ async function test() {
     console.log(`\nJSON hashes: ${JSON.stringify(jsonRow.hashes)}`);
     console.log(
       `JSON review_comments: ${JSON.stringify(
-        jsonRow.review_comments
-      ).substring(0, 200)}`
+        jsonRow.review_comments,
+      ).substring(0, 200)}`,
     );
     console.log(`JSON changed_files: ${JSON.stringify(jsonRow.changed_files)}`);
     console.log(`JSON closed_at: ${JSON.stringify(jsonRow.closed_at)}`);

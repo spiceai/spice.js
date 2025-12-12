@@ -9,10 +9,10 @@ import * as path from 'path';
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 // Ensure API key is available for tests that need it
-if (!process.env.SPICE_API_KEY) {
+if (!process.env.SPICEAI_API_KEY) {
   console.warn(
-    '⚠️  Warning: SPICE_API_KEY not set in environment. ' +
+    '⚠️  Warning: SPICEAI_API_KEY not set in environment. ' +
       'Some integration tests will be skipped. ' +
-      'Copy .env.example to .env and add your API key to run all tests.'
+      'Copy .env.example to .env and add your API key to run all tests.',
   );
 }

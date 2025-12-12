@@ -35,13 +35,13 @@ To develop locally:
    cp .env.example .env
 
    # Edit .env and add your API key
-   # SPICE_API_KEY=your_api_key_here
+   # SPICEAI_API_KEY=your_api_key_here
    ```
 
    Or set the environment variable directly:
 
    ```env
-   SPICE_API_KEY=<Spice.ai API Key>
+   SPICEAI_API_KEY=<Spice.ai API Key>
    ```
 
 5. Run the tests with:

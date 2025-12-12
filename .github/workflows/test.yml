@@ -187,7 +187,7 @@ jobs:
         run: npm test -- test/cloud.test.ts
         timeout-minutes: 10
         env:
-          SPICE_API_KEY: ${{ secrets.SPICE_API_KEY }} # spice.ai/spiceai/spice-js
+          SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }} # spice.ai/spiceai/spice-js
           HTTP_URL: ${{ secrets.HTTP_URL || 'https://data.spiceai.io' }}
           FLIGHT_URL: ${{ secrets.FLIGHT_URL || 'flight.spiceai.io:443' }}
           VERCEL_ENDPOINT: ${{ needs.vercel-setup.outputs.vercel-api-endpoint }}

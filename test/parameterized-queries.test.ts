@@ -15,10 +15,10 @@ import 'dotenv/config';
 describe('Parameterized Queries', () => {
   dotenv.config();
 
-  const api_key = process.env.SPICE_API_KEY;
+  const api_key = process.env.SPICEAI_API_KEY;
 
   if (!api_key) {
-    throw 'SPICE_API_KEY environment variable not set';
+    throw 'SPICEAI_API_KEY environment variable not set';
   }
 
   // URLs can be overridden via env vars (HTTP_URL, FLIGHT_URL)
