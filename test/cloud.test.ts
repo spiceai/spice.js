@@ -30,10 +30,12 @@ describe('cloud', () => {
     vercelCustomHeaders['x-vercel-protection-bypass'] = vercelBypassSecret;
   }
 
+  // Vercel endpoint only supports HTTP (no gRPC/Flight)
+  // Set flightUrl to empty string to disable gRPC attempts
   const vercelClient = new SpiceClient({
     apiKey: api_key,
     httpUrl: VERCEL_ENDPOINT,
-    flightUrl: FLIGHT_PATH,
+    flightUrl: '', // Disable gRPC for Vercel - HTTP only
     customHeaders:
       Object.keys(vercelCustomHeaders).length > 0
         ? vercelCustomHeaders
