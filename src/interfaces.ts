@@ -12,6 +12,12 @@ export interface SpiceClientConfig {
    */
   flightOnly?: boolean;
   /**
+   * If true, only use HTTP transport without attempting gRPC Arrow Flight.
+   * Useful for environments that only support HTTP (e.g., Vercel serverless).
+   * @default false
+   */
+  httpOnly?: boolean;
+  /**
    * Enable or disable logging output from the library.
    * When false, all console output is suppressed.
    * @default true

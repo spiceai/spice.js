@@ -430,6 +430,7 @@ export class SpiceClient {
   private _retry: RetryModule;
   private _isSpiceCloud: boolean = false;
   private _flightOnly: boolean = false;
+  private _httpOnly: boolean = false;
   private _logger: Logger;
 
   // Default Spice Cloud endpoints
@@ -463,6 +464,7 @@ export class SpiceClient {
         userAgent,
         customHeaders,
         flightOnly,
+        httpOnly,
         logging,
       } = params;
 
@@ -471,6 +473,12 @@ export class SpiceClient {
 
       this._apiKey = apiKey;
       this._flightOnly = flightOnly || false;
+      this._httpOnly = httpOnly || false;
+
+      // Validate mutually exclusive options
+      if (this._flightOnly && this._httpOnly) {
+        throw new Error('flightOnly and httpOnly cannot both be true');
+      }
 
       // Determine default endpoints based on whether API key is provided
       const isCloudMode = apiKey && !httpUrl && !flightUrl;
@@ -510,8 +518,8 @@ export class SpiceClient {
       this._isSpiceCloud = false;
     }
 
-    // Initialize gRPC client if platform supports it
-    if (platform.supportsGrpc() && GrpcClientClass) {
+    // Initialize gRPC client if platform supports it and not in httpOnly mode
+    if (platform.supportsGrpc() && GrpcClientClass && !this._httpOnly) {
       this._grpcClient = new GrpcClientClass(
         this._apiKey,
         this._flightUrl,
@@ -539,7 +547,9 @@ export class SpiceClient {
 
     // Determine transport mode
     let transportMode: string;
-    if (supportsGrpc && this._grpcClient) {
+    if (this._httpOnly) {
+      transportMode = 'HTTP only (httpOnly mode)';
+    } else if (supportsGrpc && this._grpcClient) {
       const protocols: string[] = [];
       protocols.push('Arrow Flight');
       if (!this._flightOnly) protocols.push('HTTP');

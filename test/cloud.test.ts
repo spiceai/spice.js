@@ -31,11 +31,11 @@ describe('cloud', () => {
   }
 
   // Vercel endpoint only supports HTTP (no gRPC/Flight)
-  // Set flightUrl to empty string to disable gRPC attempts
+  // Use httpOnly mode to skip gRPC initialization entirely
   const vercelClient = new SpiceClient({
     apiKey: api_key,
     httpUrl: VERCEL_ENDPOINT,
-    flightUrl: '', // Disable gRPC for Vercel - HTTP only
+    httpOnly: true, // Force HTTP-only mode for Vercel
     customHeaders:
       Object.keys(vercelCustomHeaders).length > 0
         ? vercelCustomHeaders
