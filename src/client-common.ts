@@ -25,6 +25,7 @@ import {
   serializeArrowField,
 } from './arrow-utils';
 import { Logger } from './logger';
+import { Param } from './param';
 
 // Retry will be imported by the platform-specific entry point
 export interface RetryModule {
@@ -587,6 +588,21 @@ export class SpiceClient {
   }
 
   /**
+   * Extracts the value from a Param object or returns the value directly
+   */
+  private extractParamValue(val: any): any {
+    // Handle Param objects
+    if (val instanceof Param) {
+      return val.value;
+    }
+    // Handle legacy Param-like objects
+    if (val && typeof val === 'object' && 'value' in val && 'type' in val) {
+      return val.value;
+    }
+    return val;
+  }
+
+  /**
    * Converts parameters for HTTP endpoint format
    */
   private convertParametersForHttp(parameters?: QueryParameters): any[] {
@@ -597,31 +613,35 @@ export class SpiceClient {
     if (Array.isArray(parameters)) {
       // Positional parameters - convert to simple array
       return parameters.map((val) => {
-        if (val === null) return null;
-        if (val instanceof Date) return val.toISOString();
-        if (typeof val === 'bigint') return val.toString();
+        const extractedVal = this.extractParamValue(val);
+        if (extractedVal === null) return null;
+        if (extractedVal instanceof Date) return extractedVal.toISOString();
+        if (typeof extractedVal === 'bigint') return extractedVal.toString();
         // Check if it's a Buffer-like object (has toString method and type property)
         if (
-          val &&
-          typeof (val as any).toString === 'function' &&
-          (val as any).type === 'Buffer'
+          extractedVal &&
+          typeof (extractedVal as any).toString === 'function' &&
+          (extractedVal as any).type === 'Buffer'
         ) {
-          return (val as any).toString('base64');
+          return (extractedVal as any).toString('base64');
         }
-        return val;
+        return extractedVal;
       });
     } else {
       // Named parameters - convert to array of {name, value} objects
       return Object.entries(parameters).map(([name, value]) => {
-        let serializedValue: any = value;
-        if (value instanceof Date) serializedValue = value.toISOString();
-        else if (typeof value === 'bigint') serializedValue = value.toString();
+        const extractedValue = this.extractParamValue(value);
+        let serializedValue: any = extractedValue;
+        if (extractedValue instanceof Date)
+          serializedValue = extractedValue.toISOString();
+        else if (typeof extractedValue === 'bigint')
+          serializedValue = extractedValue.toString();
         else if (
-          value &&
-          typeof (value as any).toString === 'function' &&
-          (value as any).type === 'Buffer'
+          extractedValue &&
+          typeof (extractedValue as any).toString === 'function' &&
+          (extractedValue as any).type === 'Buffer'
         ) {
-          serializedValue = (value as any).toString('base64');
+          serializedValue = (extractedValue as any).toString('base64');
         }
 
         return { name, value: serializedValue };

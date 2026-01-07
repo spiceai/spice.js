@@ -11,6 +11,7 @@ import { EventEmitter } from 'stream';
 import { FlightClient, FlightInfo, DescriptorType, Ticket } from '../flight';
 import { platform } from '../platform/node';
 import { Logger } from '../logger';
+import { Param } from '../param';
 // Note: Flight SQL prepared statements are not currently supported by the Spice server.
 // The server uses a custom protocol. For parameterized queries, we use client-side substitution.
 // This is secure for the supported use cases and matches the HTTP API behavior.
@@ -288,6 +289,24 @@ export class GrpcFlightClient {
     if (value === null || value === undefined) {
       return 'NULL';
     }
+
+    // Handle Param objects - extract value and potentially use type information
+    if (value instanceof Param) {
+      // For now, we format using the underlying value
+      // Type information could be used for more sophisticated formatting in the future
+      return this.formatParameterValue(value.value);
+    }
+
+    // Handle legacy Param-like objects (for backward compatibility)
+    if (
+      value &&
+      typeof value === 'object' &&
+      'value' in value &&
+      'type' in value
+    ) {
+      return this.formatParameterValue(value.value);
+    }
+
     if (typeof value === 'string') {
       // Escape single quotes and wrap in quotes
       return `'${value.replace(/'/g, "''")}'`;
@@ -303,10 +322,6 @@ export class GrpcFlightClient {
     }
     if (Buffer.isBuffer(value) || value instanceof Uint8Array) {
       return `X'${Buffer.from(value).toString('hex')}'`;
-    }
-    // Handle Param objects
-    if (value && typeof value === 'object' && 'value' in value) {
-      return this.formatParameterValue(value.value);
     }
     // Default: convert to string
     return `'${String(value).replace(/'/g, "''")}'`;

@@ -61,6 +61,8 @@ export interface NsqlResponse {
   sql: string;
 }
 
+import type { Param } from './param';
+
 /**
  * Query parameter value types supported by DataFusion
  */
@@ -71,7 +73,8 @@ export type QueryParameterValue =
   | Date
   | null
   | bigint
-  | Buffer;
+  | Buffer
+  | Param;
 
 /**
  * Query parameters for parameterized queries

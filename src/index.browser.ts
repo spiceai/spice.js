@@ -13,6 +13,18 @@ export class SpiceClient extends SpiceClientCommon {
   }
 }
 
+// Export Param class for explicit Arrow type control
+export { Param } from './param';
+export type {
+  ArrowTypeId,
+  TimeUnit,
+  DecimalOptions,
+  TimestampOptions,
+  DurationOptions,
+  TimeOptions,
+  FixedSizeBinaryOptions,
+} from './param';
+
 export type {
   SpiceClientConfig,
   SchemaField,
