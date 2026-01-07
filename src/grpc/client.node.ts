@@ -10,6 +10,7 @@ import * as protobuf from 'protobufjs';
 import { EventEmitter } from 'stream';
 import { FlightClient, FlightInfo, DescriptorType, Ticket } from '../flight';
 import { platform } from '../platform/node';
+import { Logger } from '../logger';
 
 const PROTO_PATH = './proto/Flight.proto';
 const PROTO_DOWNLOAD_URL =
@@ -33,9 +34,9 @@ let grpcAvailable = false;
 /**
  * Downloads the Flight.proto file from the remote URL and keeps it in memory
  */
-async function downloadProtoFile(): Promise<string> {
+async function downloadProtoFile(logger?: Logger): Promise<string> {
   try {
-    console.log('[spice.js] Downloading Flight.proto from remote source...');
+    logger?.info('[spice.js] Downloading Flight.proto from remote source...');
     const response = await platform.fetch(PROTO_DOWNLOAD_URL, {
       method: 'GET',
       headers: {},
@@ -48,11 +49,11 @@ async function downloadProtoFile(): Promise<string> {
     }
 
     const content = await response.text();
-    console.log('[spice.js] Flight.proto downloaded successfully');
+    logger?.info('[spice.js] Flight.proto downloaded successfully');
 
     return content;
   } catch (error: any) {
-    console.warn(`[spice.js] Failed to download proto file: ${error.message}`);
+    logger?.warn(`[spice.js] Failed to download proto file: ${error.message}`);
     throw error;
   }
 }
@@ -61,7 +62,7 @@ async function downloadProtoFile(): Promise<string> {
  * Loads proto content from local file or downloads it
  * Returns the proto content as a string
  */
-async function loadProtoContent(): Promise<string | null> {
+async function loadProtoContent(logger?: Logger): Promise<string | null> {
   // Try local file first
   if (fs.existsSync(fullProtoPath)) {
     return fs.readFileSync(fullProtoPath, 'utf-8');
@@ -69,7 +70,7 @@ async function loadProtoContent(): Promise<string | null> {
 
   // Try to download
   try {
-    return await downloadProtoFile();
+    return await downloadProtoFile(logger);
   } catch (error) {
     return null;
   }
@@ -78,7 +79,7 @@ async function loadProtoContent(): Promise<string | null> {
 /**
  * Loads proto definition from content in memory using protobufjs
  */
-function loadProtoFromContent(content: string): any {
+function loadProtoFromContent(content: string, logger?: Logger): any {
   try {
     // Parse the proto content directly in memory using protobufjs
     const root = protobuf.parse(content, { keepCase: false }).root;
@@ -98,7 +99,10 @@ function loadProtoFromContent(content: string): any {
     const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
     return arrow.flight.protocol;
   } catch (error: any) {
-    console.log('[spice.js] Failed to load proto from content:', error.message);
+    logger?.info(
+      '[spice.js] Failed to load proto from content:',
+      error.message,
+    );
     throw error;
   }
 }
@@ -131,17 +135,20 @@ export class GrpcFlightClient {
   private flightTlsEnabled: boolean;
   private initPromise: Promise<void>;
   private useGrpc: boolean = grpcAvailable;
+  private logger: Logger;
 
   constructor(
     apiKey: string | undefined,
     flightUrl: string,
     userAgent: string,
     flightTlsEnabled: boolean,
+    logger?: Logger,
   ) {
     this.apiKey = apiKey;
     this.flightUrl = flightUrl;
     this.userAgent = userAgent;
     this.flightTlsEnabled = flightTlsEnabled;
+    this.logger = logger || new Logger(true);
     this.initPromise = this.initialize();
   }
 
@@ -157,7 +164,7 @@ export class GrpcFlightClient {
     try {
       // Check if we already have proto content in memory
       if (!protoContent) {
-        protoContent = await loadProtoContent();
+        protoContent = await loadProtoContent(this.logger);
       }
 
       if (!protoContent) {
@@ -166,7 +173,7 @@ export class GrpcFlightClient {
       }
 
       // Load the proto from content
-      const proto = loadProtoFromContent(protoContent);
+      const proto = loadProtoFromContent(protoContent, this.logger);
 
       if (!proto?.FlightService) {
         throw new Error('Invalid proto file structure');
@@ -176,7 +183,7 @@ export class GrpcFlightClient {
       grpcAvailable = true;
       this.useGrpc = true;
     } catch (error: any) {
-      console.warn(
+      this.logger.warn(
         `[spice.js] gRPC initialization failed: ${error.message}. Using HTTP endpoint.`,
       );
       this.useGrpc = false;
