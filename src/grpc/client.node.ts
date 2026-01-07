@@ -238,34 +238,44 @@ export class GrpcFlightClient {
   /**
    * Substitutes parameters into a SQL query using positional placeholders ($1, $2, etc.)
    * This is a client-side substitution - the server will receive the final SQL.
+   * Parameters are processed in reverse order to avoid $1 matching the '1' in $10.
    */
   private substitutePositionalParameters(
     queryText: string,
     parameters: any[],
   ): string {
     let result = queryText;
-    for (let i = 0; i < parameters.length; i++) {
-      const placeholder = `$${i + 1}`;
+    // Process parameters in reverse order (highest to lowest) to avoid
+    // $1 replacing the '1' in $10, $11, etc.
+    for (let i = parameters.length - 1; i >= 0; i--) {
       const value = this.formatParameterValue(parameters[i]);
-      // Replace all occurrences of this placeholder
-      result = result.split(placeholder).join(value);
+      // Use regex to match $N not followed by another digit
+      const regex = new RegExp(`\\$${i + 1}(?![0-9])`, 'g');
+      result = result.replace(regex, value);
     }
     return result;
   }
 
   /**
-   * Substitutes named parameters into a SQL query (:name style)
+   * Substitutes named parameters into a SQL query ($name style)
    * This is a client-side substitution - the server will receive the final SQL.
+   * Uses PostgreSQL-style $param_name syntax for consistency with positional $1, $2 placeholders.
    */
   private substituteNamedParameters(
     queryText: string,
     parameters: Record<string, any>,
   ): string {
     let result = queryText;
-    for (const [name, value] of Object.entries(parameters)) {
-      // Match :name but not ::type (PostgreSQL cast syntax)
-      // Use regex to match :name followed by non-alphanumeric or end of string
-      const regex = new RegExp(`:${name}(?![a-zA-Z0-9_])`, 'g');
+    // Sort parameter names by length (descending) to avoid partial matches
+    // e.g., $name should be replaced before $n
+    const sortedNames = Object.keys(parameters).sort(
+      (a, b) => b.length - a.length,
+    );
+    for (const name of sortedNames) {
+      const value = parameters[name];
+      // Match $name followed by non-alphanumeric or end of string
+      // This ensures $name_extra won't match when looking for $name
+      const regex = new RegExp(`\\$${name}(?![a-zA-Z0-9_])`, 'g');
       result = result.replace(regex, this.formatParameterValue(value));
     }
     return result;
@@ -337,7 +347,7 @@ export class GrpcFlightClient {
         // Positional parameters: $1, $2, etc.
         finalQuery = this.substitutePositionalParameters(queryText, parameters);
       } else {
-        // Named parameters: :name, :value, etc.
+        // Named parameters: $name, $param, etc.
         finalQuery = this.substituteNamedParameters(queryText, parameters);
       }
     }

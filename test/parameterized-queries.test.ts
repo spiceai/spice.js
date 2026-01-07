@@ -1,4 +1,3 @@
-import dotenv from 'dotenv';
 import { SpiceClient } from '../';
 import 'dotenv/config';
 
@@ -13,12 +12,11 @@ import 'dotenv/config';
  * 6. Edge cases (empty strings, special characters, large numbers)
  */
 describe('Parameterized Queries', () => {
-  dotenv.config();
-
   const api_key = process.env.SPICEAI_API_KEY;
 
   if (!api_key) {
-    throw 'SPICEAI_API_KEY environment variable not set';
+    test.skip('Skipping parameterized queries tests - SPICEAI_API_KEY not set', () => {});
+    return;
   }
 
   // URLs can be overridden via env vars (HTTP_URL, FLIGHT_URL)

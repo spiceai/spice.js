@@ -214,7 +214,6 @@ describe('sqlJson() Transport Mode Awareness', () => {
     // These tests would run against actual Spice Cloud if API key is available
     // They verify that gRPC/Arrow mode also preserves types correctly
 
-    describe('Cloud (flight.spiceai.io:443)', () => {
     const apiKey = process.env.SPICEAI_API_KEY;
 
     if (!apiKey) {
