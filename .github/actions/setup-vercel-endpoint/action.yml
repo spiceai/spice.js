@@ -15,11 +15,11 @@ inputs:
   max-attempts:
     description: 'Maximum number of attempts to wait for deployment'
     required: false
-    default: '30'
+    default: '20'
   wait-interval:
     description: 'Time in seconds to wait between attempts'
     required: false
-    default: '10'
+    default: '60'
 outputs:
   vercel-endpoint:
     description: 'The Vercel endpoint URL'
@@ -92,8 +92,8 @@ runs:
           ATTEMPT=$((ATTEMPT + 1))
           echo "Attempt ${ATTEMPT}/${MAX_ATTEMPTS}: Checking ${HEALTH_URL}"
           
-          # Get both status code and response body
-          RESPONSE=$(eval "curl -s -w '\n%{http_code}' ${CURL_HEADERS} '${HEALTH_URL}'" || echo -e "\n000")
+          # Get both status code and response body with retry and timeout
+          RESPONSE=$(eval "curl -s --retry 3 --retry-delay 2 --connect-timeout 10 --max-time 30 -w '\n%{http_code}' ${CURL_HEADERS} '${HEALTH_URL}'" || echo -e "\n000")
           HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
           BODY=$(echo "$RESPONSE" | sed '$d')
           

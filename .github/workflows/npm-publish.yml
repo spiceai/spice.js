@@ -18,7 +18,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.nodever }}
-      - run: npm install
+          cache: 'npm'
+      - run: npm ci
       - run: npm run build
 
       - name: Run browser tests
@@ -46,9 +47,10 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 18
+          node-version: 20
           registry-url: https://registry.npmjs.org/
-      - run: npm install
+          cache: 'npm'
+      - run: npm ci
       - run: node scripts/update-version.js # ensure the version in version.ts is updated
       - run: npm run build
       - run: npm publish --access public

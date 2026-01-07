@@ -526,11 +526,11 @@ export class SpiceClient {
   }
 
   private logConfiguration(): void {
-    // Only log in development/debug mode
-    if (
-      process.env.NODE_ENV === 'production' ||
-      process.env.SPICE_DEBUG !== 'true'
-    ) {
+    // Only log in development/debug mode (not in production, unless SPICE_DEBUG is set)
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isDebugEnabled = process.env.SPICE_DEBUG === 'true';
+
+    if (isProduction && !isDebugEnabled) {
       return;
     }
 
