@@ -22,6 +22,7 @@ import {
   normalizeSchema,
   serializeArrowField,
 } from './arrow-utils';
+import { Logger } from './logger';
 
 // Retry will be imported by the platform-specific entry point
 export interface RetryModule {
@@ -426,6 +427,7 @@ export class SpiceClient {
   private _retry: RetryModule;
   private _isSpiceCloud: boolean = false;
   private _flightOnly: boolean = false;
+  private _logger: Logger;
 
   public constructor(
     params: string | SpiceClientConfig = {},
@@ -444,6 +446,7 @@ export class SpiceClient {
       this._flightUrl = 'flight.spiceai.io:443';
       this._userAgent = platform.getUserAgent();
       this._flightOnly = false;
+      this._logger = new Logger(true); // Default: logging enabled
     } else {
       const {
         apiKey,
@@ -453,7 +456,11 @@ export class SpiceClient {
         userAgent,
         customHeaders,
         flightOnly,
+        logging,
       } = params;
+
+      // Initialize logger (default: enabled)
+      this._logger = new Logger(logging !== false);
 
       this._apiKey = apiKey;
       this._httpUrl = httpUrl || 'http://127.0.0.1:8090';
@@ -493,6 +500,7 @@ export class SpiceClient {
         this._flightUrl,
         this._userAgent,
         this._flightTlsEnabled,
+        this._logger,
       );
     }
 
@@ -549,7 +557,7 @@ export class SpiceClient {
       );
     }
 
-    console.debug(configLines.join('\n'));
+    this._logger.debug(configLines.join('\n'));
   }
 
   private async doQueryRequest(
@@ -719,7 +727,9 @@ export class SpiceClient {
           }
         }
       } catch (parseError) {
-        console.warn(`[spice.js] Failed to parse JSON line: ${parseError}`);
+        this._logger.warn(
+          `[spice.js] Failed to parse JSON line: ${parseError}`,
+        );
       }
     }
 
