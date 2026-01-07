@@ -11,6 +11,12 @@ export interface SpiceClientConfig {
    * @default false
    */
   flightOnly?: boolean;
+  /**
+   * Enable or disable logging output from the library.
+   * When false, all console output is suppressed.
+   * @default true
+   */
+  logging?: boolean;
 }
 
 export interface SchemaField {
