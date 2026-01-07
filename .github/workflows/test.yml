@@ -144,8 +144,11 @@ jobs:
   vercel-setup:
     name: Setup Vercel Endpoint
     runs-on: spiceai-dev-runners
+    # Don't fail the entire workflow if Vercel is not available
+    continue-on-error: true
     outputs:
       vercel-api-endpoint: ${{ steps.vercel.outputs.vercel-api-endpoint }}
+      vercel-available: ${{ steps.vercel.outcome == 'success' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -161,6 +164,8 @@ jobs:
     name: Cloud Tests (${{ matrix.os }}, Node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
     needs: vercel-setup
+    # Run even if vercel-setup failed (Vercel tests will be skipped)
+    if: ${{ always() }}
     strategy:
       fail-fast: false
       matrix:

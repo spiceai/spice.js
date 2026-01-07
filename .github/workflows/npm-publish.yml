@@ -27,6 +27,8 @@ jobs:
 
       - name: Setup Vercel endpoint
         id: vercel
+        # Don't block tests if Vercel is unavailable - tests will run without Vercel-specific assertions
+        continue-on-error: true
         uses: ./.github/actions/setup-vercel-endpoint
         with:
           vercel-endpoint-override: ${{ secrets.VERCEL_ENDPOINT }}
@@ -38,6 +40,8 @@ jobs:
         timeout-minutes: 10
         env:
           SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }}
+          VERCEL_ENDPOINT: ${{ steps.vercel.outputs.vercel-api-endpoint }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
   publish-npm:
     needs: build
