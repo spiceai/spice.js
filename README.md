@@ -33,6 +33,7 @@ Querying data is done through a `SpiceClient` object that initializes the connec
 - `apiKey` (string, optional): API key to authenticate with the endpoint.
 - `flightUrl` (string, optional): URL of the Flight endpoint to use (default: `localhost:50051`)
 - `httpUrl` (string, optional): URL of the HTTP endpoint to use (default: `http://localhost:8090`)
+- `logging` (boolean, optional): Enable or disable logging output (default: `true`). Set to `false` to silence all library console output.
 
 Read more about the Spice.ai Apache Arrow Flight API at [docs.spice.ai](https://docs.spice.ai/api/sql-query-api/apache-arrow-flight-api).
 
@@ -370,7 +371,7 @@ pnpm add @spiceai/spice@latest
 ### Need Help?
 
 - 📖 [Full Documentation](https://docs.spice.ai/sdks/node.js-sdk)
-- 💬 [Join our Discord](https://discord.gg/kZnTfneP5u)
+- 💬 [Join our Slack](http://spiceai.org/slack)
 - 🐛 [Report Issues](https://github.com/spiceai/spice.js/issues)
 - 📝 [View Changelog](https://github.com/spiceai/spice.js/releases)
 - 📦 [npm Package](https://www.npmjs.com/package/@spiceai/spice)
