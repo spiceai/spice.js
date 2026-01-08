@@ -18,7 +18,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.nodever }}
-      - run: npm install
+          cache: 'npm'
+      - run: npm ci
       - run: npm run build
 
       - name: Run browser tests
@@ -26,22 +27,19 @@ jobs:
 
       - name: Setup Vercel endpoint
         id: vercel
+        # Don't block tests if Vercel is unavailable - tests will run without Vercel-specific assertions
+        continue-on-error: true
         uses: ./.github/actions/setup-vercel-endpoint
         with:
           vercel-endpoint-override: ${{ secrets.VERCEL_ENDPOINT }}
           vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           branch-name: ${{ github.ref_name }}
 
-      - run: |
-          npm run test -t 'cloud'
+      - name: Test
+        run: npm test
+        timeout-minutes: 10
         env:
           SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }}
-          API_KEY: ${{ secrets.API_KEY }}
-          RELAY_KEY: ${{ secrets.RELAY_KEY }}
-          RELAY_SECRET: ${{ secrets.RELAY_SECRET }}
-          RELAY_URL: ${{ secrets.RELAY_URL }}
-          HTTP_URL: ${{ secrets.HTTP_URL || 'https://data.spiceai.io' }}
-          FLIGHT_URL: ${{ secrets.FLIGHT_URL || 'flight.spiceai.io:443' }}
           VERCEL_ENDPOINT: ${{ steps.vercel.outputs.vercel-api-endpoint }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
@@ -53,9 +51,10 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 18
+          node-version: 20
           registry-url: https://registry.npmjs.org/
-      - run: npm install
+          cache: 'npm'
+      - run: npm ci
       - run: node scripts/update-version.js # ensure the version in version.ts is updated
       - run: npm run build
       - run: npm publish --access public

@@ -12,6 +12,8 @@ import {
   type RefreshAccelerationResponse,
   type NsqlOptions,
   type NsqlResponse,
+  type SqlQueryOptions,
+  type QueryParameters,
   type SearchOptions,
   type SearchResponse,
 } from './interfaces';
@@ -23,6 +25,7 @@ import {
   serializeArrowField,
 } from './arrow-utils';
 import { Logger } from './logger';
+import { Param } from './param';
 
 // Retry will be imported by the platform-specific entry point
 export interface RetryModule {
@@ -427,7 +430,12 @@ export class SpiceClient {
   private _retry: RetryModule;
   private _isSpiceCloud: boolean = false;
   private _flightOnly: boolean = false;
+  private _httpOnly: boolean = false;
   private _logger: Logger;
+
+  // Default Spice Cloud endpoints
+  private static readonly DEFAULT_CLOUD_HTTP = 'https://data.spiceai.io';
+  private static readonly DEFAULT_CLOUD_FLIGHT = 'flight.spiceai.io:443';
 
   public constructor(
     params: string | SpiceClientConfig = {},
@@ -442,8 +450,8 @@ export class SpiceClient {
     // support legacy constructor with api_key as first argument
     if (typeof params === 'string') {
       this._apiKey = params;
-      this._httpUrl = 'https://data.spiceai.io';
-      this._flightUrl = 'flight.spiceai.io:443';
+      this._httpUrl = SpiceClient.DEFAULT_CLOUD_HTTP;
+      this._flightUrl = SpiceClient.DEFAULT_CLOUD_FLIGHT;
       this._userAgent = platform.getUserAgent();
       this._flightOnly = false;
       this._logger = new Logger(true); // Default: logging enabled
@@ -456,6 +464,7 @@ export class SpiceClient {
         userAgent,
         customHeaders,
         flightOnly,
+        httpOnly,
         logging,
       } = params;
 
@@ -463,9 +472,25 @@ export class SpiceClient {
       this._logger = new Logger(logging !== false);
 
       this._apiKey = apiKey;
-      this._httpUrl = httpUrl || 'http://127.0.0.1:8090';
-      this._flightUrl = flightUrl || '127.0.0.1:50051';
       this._flightOnly = flightOnly || false;
+      this._httpOnly = httpOnly || false;
+
+      // Validate mutually exclusive options
+      if (this._flightOnly && this._httpOnly) {
+        throw new Error('flightOnly and httpOnly cannot both be true');
+      }
+
+      // Determine default endpoints based on whether API key is provided
+      const isCloudMode = apiKey && !httpUrl && !flightUrl;
+
+      this._httpUrl =
+        httpUrl ||
+        (isCloudMode
+          ? SpiceClient.DEFAULT_CLOUD_HTTP
+          : 'http://127.0.0.1:8090');
+      this._flightUrl =
+        flightUrl ||
+        (isCloudMode ? SpiceClient.DEFAULT_CLOUD_FLIGHT : '127.0.0.1:50051');
 
       // More explicit TLS check to avoid false positives
       const isLocalhost =
@@ -493,8 +518,8 @@ export class SpiceClient {
       this._isSpiceCloud = false;
     }
 
-    // Initialize gRPC client if platform supports it
-    if (platform.supportsGrpc() && GrpcClientClass) {
+    // Initialize gRPC client if platform supports it and not in httpOnly mode
+    if (platform.supportsGrpc() && GrpcClientClass && !this._httpOnly) {
       this._grpcClient = new GrpcClientClass(
         this._apiKey,
         this._flightUrl,
@@ -509,24 +534,36 @@ export class SpiceClient {
   }
 
   private logConfiguration(): void {
+    // Only log in development/debug mode (not in production, unless SPICE_DEBUG is set)
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isDebugEnabled = process.env.SPICE_DEBUG === 'true';
+
+    if (isProduction && !isDebugEnabled) {
+      return;
+    }
+
     const platformName = this._platform.getPlatformName();
     const supportsGrpc = this._platform.supportsGrpc();
 
     // Determine transport mode
     let transportMode: string;
-    if (supportsGrpc && this._grpcClient) {
-      transportMode = this._flightOnly
-        ? `Arrow Flight (gRPC) only`
-        : `Arrow Flight (gRPC) with HTTP fallback`;
+    if (this._httpOnly) {
+      transportMode = 'HTTP only (httpOnly mode)';
+    } else if (supportsGrpc && this._grpcClient) {
+      const protocols: string[] = [];
+      protocols.push('Arrow Flight');
+      if (!this._flightOnly) protocols.push('HTTP');
+
+      transportMode = protocols.join(' → ');
     } else if (supportsGrpc && !this._grpcClient) {
-      transportMode = 'HTTP only (gRPC client not initialized)';
+      transportMode = 'HTTP only (Flight client not initialized)';
     } else {
       transportMode = 'HTTP only';
     }
 
     // Determine endpoint (use cached value)
     const endpoint = this._isSpiceCloud
-      ? 'Spice Cloud (data.spiceai.io)'
+      ? `Spice Cloud (${new URL(this._httpUrl).hostname})`
       : this._httpUrl;
 
     // Build configuration message
@@ -560,40 +597,108 @@ export class SpiceClient {
     this._logger.debug(configLines.join('\n'));
   }
 
+  /**
+   * Extracts the value from a Param object or returns the value directly
+   */
+  private extractParamValue(val: any): any {
+    // Handle Param objects
+    if (val instanceof Param) {
+      return val.value;
+    }
+    // Handle legacy Param-like objects
+    if (val && typeof val === 'object' && 'value' in val && 'type' in val) {
+      return val.value;
+    }
+    return val;
+  }
+
+  /**
+   * Converts parameters for HTTP endpoint format
+   */
+  private convertParametersForHttp(parameters?: QueryParameters): any[] {
+    if (!parameters) {
+      return [];
+    }
+
+    if (Array.isArray(parameters)) {
+      // Positional parameters - convert to simple array
+      return parameters.map((val) => {
+        const extractedVal = this.extractParamValue(val);
+        if (extractedVal === null) return null;
+        if (extractedVal instanceof Date) return extractedVal.toISOString();
+        if (typeof extractedVal === 'bigint') return extractedVal.toString();
+        // Check if it's a Buffer-like object (has toString method and type property)
+        if (
+          extractedVal &&
+          typeof (extractedVal as any).toString === 'function' &&
+          (extractedVal as any).type === 'Buffer'
+        ) {
+          return (extractedVal as any).toString('base64');
+        }
+        return extractedVal;
+      });
+    } else {
+      // Named parameters - convert to array of {name, value} objects
+      return Object.entries(parameters).map(([name, value]) => {
+        const extractedValue = this.extractParamValue(value);
+        let serializedValue: any = extractedValue;
+        if (extractedValue instanceof Date)
+          serializedValue = extractedValue.toISOString();
+        else if (typeof extractedValue === 'bigint')
+          serializedValue = extractedValue.toString();
+        else if (
+          extractedValue &&
+          typeof (extractedValue as any).toString === 'function' &&
+          (extractedValue as any).type === 'Buffer'
+        ) {
+          serializedValue = (extractedValue as any).toString('base64');
+        }
+
+        return { name, value: serializedValue };
+      });
+    }
+  }
+
   private async doQueryRequest(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined,
+    parameters?: QueryParameters,
+    onData?: (data: Table) => void,
     headers?: { [key: string]: string },
   ): Promise<Table> {
-    // Try gRPC if available
+    // Transport hierarchy:
+    // 1. Try gRPC Flight SQL (custom proto with parameter substitution)
+    // 2. Fallback to HTTP
+
+    // Try gRPC Flight SQL if available
     if (this._grpcClient) {
       const useGrpc = await this._grpcClient.ensureInitialized();
       if (useGrpc) {
-        return this.doGrpcQueryRequest(queryText, onData, headers);
+        return this.doGrpcQueryRequest(queryText, parameters, onData, headers);
       }
 
       // If flightOnly mode is enabled and gRPC failed, throw error
       if (this._flightOnly) {
         throw new Error(
-          'gRPC Arrow Flight connection failed and flightOnly mode is enabled. Cannot fallback to HTTP.',
+          'Arrow Flight connection failed and flightOnly mode is enabled. Cannot fallback to HTTP.',
         );
       }
     }
 
-    // If flightOnly mode is enabled but no gRPC client, throw error
+    // If flightOnly mode is enabled but no Flight client available, throw error
     if (this._flightOnly) {
       throw new Error(
-        'flightOnly mode is enabled but gRPC client is not available on this platform',
+        'flightOnly mode is enabled but Arrow Flight client is not available on this platform',
       );
     }
 
     // Fallback to HTTP
-    return this.doHttpQueryRequest(queryText, onData, headers);
+    return this.doHttpQueryRequest(queryText, parameters, onData, headers);
   }
 
   private async doGrpcQueryRequest(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined,
+    parameters?: QueryParameters,
+    onData?: (data: Table) => void,
     headers?: { [key: string]: string },
   ): Promise<Table> {
     if (!this._grpcClient) {
@@ -603,6 +708,7 @@ export class SpiceClient {
     try {
       const resultStream = await this._grpcClient.executeQuery(
         queryText,
+        parameters,
         headers,
       );
 
@@ -646,7 +752,8 @@ export class SpiceClient {
 
   private async doHttpQueryRequest(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined,
+    parameters?: QueryParameters,
+    onData?: (data: Table) => void,
     headers?: { [key: string]: string },
   ): Promise<Table> {
     // Use appropriate Accept header based on endpoint (use cached value)
@@ -654,8 +761,15 @@ export class SpiceClient {
       ? 'application/vnd.spiceai.sql.v1+json' // data.spiceai.io returns schema with 'data' field
       : 'application/json'; // OSS returns plain JSON array
 
+    // Prepare request body with parameters
+    const httpParameters = this.convertParametersForHttp(parameters);
+    const requestBody = JSON.stringify({
+      sql: queryText,
+      parameters: httpParameters,
+    });
+
     const requestHeaders: { [key: string]: string } = {
-      'Content-Type': 'text/plain',
+      'Content-Type': 'application/json',
       Accept: acceptHeader,
     };
 
@@ -668,7 +782,7 @@ export class SpiceClient {
       'POST',
       '/v1/sql',
       undefined,
-      queryText,
+      requestBody,
       requestHeaders,
     );
 
@@ -765,18 +879,55 @@ export class SpiceClient {
 
   /**
    * Executes a SQL query and returns results as Arrow Tables.
-   * @param queryText - The SQL query to execute
-   * @param onData - Optional callback for streaming results
+   * Supports parameterized queries when options.parameters is provided.
+   *
+   * @param queryText - The SQL query to execute. Use $1, $2 for positional parameters or $param_name for named parameters.
+   * @param optionsOrCallback - Either SqlQueryOptions with parameters, or a callback function for streaming results
+   * @param onData - Optional callback for streaming results (used when second parameter is SqlQueryOptions)
    * @param headers - Optional headers to pass with the request (HTTP headers for HTTP, Flight metadata for gRPC)
    * @returns Promise resolving to the final Arrow Table
+   *
+   * @example
+   * // Simple query
+   * await client.sql('SELECT * FROM table LIMIT 10');
+   *
+   * @example
+   * // Parameterized query with positional parameters
+   * await client.sql('SELECT * FROM table WHERE id = $1 AND status = $2', { parameters: [123, 'active'] });
+   *
+   * @example
+   * // Parameterized query with named parameters
+   * await client.sql('SELECT * FROM table WHERE id = $id AND status = $status', {
+   *   parameters: { id: 123, status: 'active' }
+   * });
+   *
+   * @example
+   * // With streaming callback
+   * await client.sql('SELECT * FROM table', (table) => console.log(table.numRows));
    */
   async sql(
     queryText: string,
-    onData?: ((data: Table) => void) | undefined,
+    optionsOrCallback?: SqlQueryOptions | ((data: Table) => void),
+    onData?: (data: Table) => void,
     headers?: { [key: string]: string },
   ): Promise<Table> {
+    // Handle overloaded signatures
+    let options: SqlQueryOptions | undefined;
+    let callback: ((data: Table) => void) | undefined;
+
+    if (typeof optionsOrCallback === 'function') {
+      // Legacy signature: sql(query, callback)
+      callback = optionsOrCallback;
+      options = undefined;
+    } else {
+      // New signature: sql(query, options, callback)
+      options = optionsOrCallback;
+      callback = onData;
+    }
+
     return this._retry.retryWithExponentialBackoff<Table>(
-      () => this.doQueryRequest(queryText, onData, headers),
+      () =>
+        this.doQueryRequest(queryText, options?.parameters, callback, headers),
       this._maxRetries,
     );
   }
@@ -789,7 +940,7 @@ export class SpiceClient {
     onData?: ((data: Table) => void) | undefined,
     headers?: { [key: string]: string },
   ): Promise<Table> {
-    return this.sql(queryText, onData, headers);
+    return this.sql(queryText, onData, undefined, headers);
   }
 
   /**
@@ -978,6 +1129,7 @@ export class SpiceClient {
             allRows.push(convertedRow);
           }
         },
+        undefined,
         headers,
       );
 

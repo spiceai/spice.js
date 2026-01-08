@@ -34,9 +34,10 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build browser bundle
         run: npm run build
@@ -64,9 +65,10 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build project
         run: npm run build
@@ -142,8 +144,11 @@ jobs:
   vercel-setup:
     name: Setup Vercel Endpoint
     runs-on: spiceai-dev-runners
+    # Don't fail the entire workflow if Vercel is not available
+    continue-on-error: true
     outputs:
       vercel-api-endpoint: ${{ steps.vercel.outputs.vercel-api-endpoint }}
+      vercel-available: ${{ steps.vercel.outcome == 'success' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -159,6 +164,8 @@ jobs:
     name: Cloud Tests (${{ matrix.os }}, Node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
     needs: vercel-setup
+    # Run even if vercel-setup failed (Vercel tests will be skipped)
+    if: ${{ always() }}
     strategy:
       fail-fast: false
       matrix:
@@ -176,18 +183,44 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build project
         run: npm run build
 
       - name: Run cloud tests
-        run: npm run test:node -- test/cloud.test.ts
+        run: npm test -- test/cloud.test.ts
+        timeout-minutes: 10
         env:
           SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }} # spice.ai/spiceai/spice-js
           HTTP_URL: ${{ secrets.HTTP_URL || 'https://data.spiceai.io' }}
           FLIGHT_URL: ${{ secrets.FLIGHT_URL || 'flight.spiceai.io:443' }}
           VERCEL_ENDPOINT: ${{ needs.vercel-setup.outputs.vercel-api-endpoint }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+
+  tpch-tests:
+    name: TPCH Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run TPCH integration tests
+        run: npm test -- test/tpch-integration.test.ts
+        timeout-minutes: 15
+        env:
+          SCP_SPICEAI_TPCH_API_KEY: ${{ secrets.SCP_SPICEAI_TPCH_API_KEY }}

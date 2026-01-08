@@ -1,4 +1,3 @@
-import dotenv from 'dotenv';
 import { SpiceClient } from '../';
 import 'dotenv/config';
 
@@ -9,9 +8,7 @@ import 'dotenv/config';
  * 1. application/json - Legacy format with rowCount, schema (with type objects), and rows
  * 2. application/vnd.spiceai.sql.v1+json - New format with row_count, schema.fields, and data
  */
-describe('Response Format Tests', () => {
-  dotenv.config();
-
+describe('Response Formats Integration Tests', () => {
   const api_key = process.env.SPICEAI_API_KEY;
 
   if (!api_key) {

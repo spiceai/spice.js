@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use API key from X-API-KEY header or environment variable
+    // Get API key from header or environment variable
     const apiKey = request.headers.get('X-API-KEY');
     const key = apiKey || process.env.SPICEAI_API_KEY;
 

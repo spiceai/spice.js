@@ -12,6 +12,12 @@ export interface SpiceClientConfig {
    */
   flightOnly?: boolean;
   /**
+   * If true, only use HTTP transport without attempting gRPC Arrow Flight.
+   * Useful for environments that only support HTTP (e.g., Vercel serverless).
+   * @default false
+   */
+  httpOnly?: boolean;
+  /**
    * Enable or disable logging output from the library.
    * When false, all console output is suppressed.
    * @default true
@@ -59,6 +65,41 @@ export interface NsqlResponse {
   };
   data: any[];
   sql: string;
+}
+
+import type { Param } from './param';
+
+/**
+ * Query parameter value types supported by DataFusion
+ */
+export type QueryParameterValue =
+  | string
+  | number
+  | boolean
+  | Date
+  | null
+  | bigint
+  | Buffer
+  | Param;
+
+/**
+ * Query parameters for parameterized queries
+ * Can be an object with named parameters or an array for positional parameters
+ */
+export type QueryParameters =
+  | { [key: string]: QueryParameterValue }
+  | QueryParameterValue[];
+
+/**
+ * Options for SQL queries
+ */
+export interface SqlQueryOptions {
+  /**
+   * Query parameters for parameterized queries
+   * Named parameters: { param1: value1, param2: value2 }
+   * Positional parameters: [value1, value2, value3]
+   */
+  parameters?: QueryParameters;
 }
 
 export interface SearchOptions {

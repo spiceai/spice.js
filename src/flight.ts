@@ -1,4 +1,4 @@
-import { EventEmitter } from "stream";
+import { EventEmitter } from 'stream';
 
 enum DescriptorType {
   UNKNOWN = 0,
@@ -34,6 +34,7 @@ type FlightInfo = {
 };
 
 type FlightData = {
+  flightDescriptor?: FlightDescriptor;
   dataHeader: Buffer;
   appMetadata: Buffer;
   dataBody: Buffer;
@@ -44,12 +45,31 @@ type FlightStatus = {
   details: string;
 };
 
+type Action = {
+  type: string;
+  body: Buffer;
+};
+
+type Result = {
+  body: Buffer;
+};
+
+type PutResult = {
+  appMetadata: Buffer;
+};
+
 type FlightClient = {
   DoGet: (ticket: Ticket) => EventEmitter;
   GetFlightInfo: (
     descriptor: FlightDescriptor,
-    callback: (err: any, result: FlightInfo) => void
+    callback: (err: any, result: FlightInfo) => void,
   ) => void;
+  DoAction: (action: Action) => EventEmitter;
+  DoPut: () => {
+    on: (event: string, callback: (data: any) => void) => void;
+    write: (data: FlightData) => void;
+    end: () => void;
+  };
   close: () => void;
 };
 
@@ -72,5 +92,8 @@ export {
   FlightDescriptor,
   DescriptorType,
   Ticket,
+  Action,
+  Result,
+  PutResult,
   getIpcMessage,
 };

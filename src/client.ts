@@ -26,6 +26,9 @@ import {
   type RefreshAccelerationResponse,
   type NsqlOptions,
   type NsqlResponse,
+  type SqlQueryOptions,
+  type QueryParameters,
+  type QueryParameterValue,
 } from './interfaces';
 import {
   jsonToArrowTable,
@@ -47,7 +50,7 @@ const PROTO_DOWNLOAD_URL =
 const PACKAGE_PATH = __dirname.includes('.next')
   ? path.join(
       __dirname.substring(0, __dirname.indexOf('.next')),
-      './node_modules/@spiceai/spice/'
+      './node_modules/@spiceai/spice/',
     )
   : __dirname;
 const fullProtoPath = path.join(PACKAGE_PATH, PROTO_PATH);
@@ -65,7 +68,7 @@ async function downloadProtoFile(): Promise<string> {
 
     if (!response.ok) {
       throw new Error(
-        `Failed to download proto: ${response.status} ${response.statusText}`
+        `Failed to download proto: ${response.status} ${response.statusText}`,
       );
     }
 
@@ -90,7 +93,7 @@ async function loadProtoContent(): Promise<string | null> {
   }
 
   console.warn(
-    '[spice.js] Local Flight.proto not found, attempting to download...'
+    '[spice.js] Local Flight.proto not found, attempting to download...',
   );
 
   // Try to download
@@ -127,7 +130,10 @@ function loadProtoFromContent(content: string): any {
     const arrow = grpc.loadPackageDefinition(packageDefinition).arrow as any;
     return arrow.flight.protocol;
   } catch (error: any) {
-    console.log('[spice.js] Failed to load proto from content:', error.message);
+    console.warn(
+      '[spice.js] Failed to load proto from content:',
+      error.message,
+    );
     throw error;
   }
 }
@@ -237,7 +243,7 @@ class SpiceClient {
       this._useGrpc = true;
     } catch (error: any) {
       console.warn(
-        `[spice.js] gRPC initialization failed: ${error.message}. Using HTTP endpoint.`
+        `[spice.js] gRPC initialization failed: ${error.message}. Using HTTP endpoint.`,
       );
       this._useGrpc = false;
     }
@@ -266,7 +272,7 @@ class SpiceClient {
       return new flightProto.FlightService(
         this._flightUrl,
         grpc.credentials.createInsecure(),
-        channelOptions
+        channelOptions,
       );
     }
 
@@ -278,18 +284,151 @@ class SpiceClient {
       grpc.credentials.createFromMetadataGenerator(metaCallback);
     const combCreds = grpc.credentials.combineChannelCredentials(
       creds,
-      callCreds
+      callCreds,
     );
     return new flightProto.FlightService(
       this._flightUrl,
       combCreds,
-      channelOptions
+      channelOptions,
     );
+  }
+
+  /**
+   * Encodes query parameters for Apache Flight SQL
+   * Returns a Buffer containing the encoded parameters
+   */
+  private encodeQueryParameters(parameters: QueryParameters): Buffer {
+    // Convert parameters to a simple JSON structure
+    // Apache Flight SQL expects parameters as a serialized structure
+    // For DataFusion, we'll encode as JSON which it can parse
+    const paramArray: any[] = [];
+
+    if (Array.isArray(parameters)) {
+      // Positional parameters
+      paramArray.push(
+        ...parameters.map((val, idx) => ({
+          position: idx,
+          value: this.serializeParameterValue(val),
+        })),
+      );
+    } else {
+      // Named parameters
+      for (const [name, value] of Object.entries(parameters)) {
+        paramArray.push({
+          name,
+          value: this.serializeParameterValue(value),
+        });
+      }
+    }
+
+    return Buffer.from(JSON.stringify({ parameters: paramArray }), 'utf-8');
+  }
+
+  /**
+   * Serializes a parameter value to a JSON-compatible format
+   */
+  private serializeParameterValue(value: QueryParameterValue): any {
+    if (value === null) {
+      return null;
+    }
+    if (value instanceof Date) {
+      return { type: 'timestamp', value: value.toISOString() };
+    }
+    if (typeof value === 'bigint') {
+      return { type: 'bigint', value: value.toString() };
+    }
+    if (Buffer.isBuffer(value)) {
+      return { type: 'binary', value: value.toString('base64') };
+    }
+    // For primitive types (string, number, boolean)
+    return value;
+  }
+
+  /**
+   * Creates a Flight SQL command descriptor for parameterized queries
+   */
+  private createFlightSqlCommand(
+    queryText: string,
+    parameters?: QueryParameters,
+  ): Buffer {
+    if (
+      !parameters ||
+      (Array.isArray(parameters) && parameters.length === 0) ||
+      (!Array.isArray(parameters) && Object.keys(parameters).length === 0)
+    ) {
+      // No parameters, just send the raw SQL
+      return Buffer.from(queryText, 'utf8');
+    }
+
+    // For parameterized queries, create a Flight SQL command structure
+    // This follows Apache Flight SQL protocol for CommandStatementQuery
+    const command = {
+      query: queryText,
+      parameters: this.encodeParametersForFlightSql(parameters),
+    };
+
+    return Buffer.from(JSON.stringify(command), 'utf8');
+  }
+
+  /**
+   * Encodes parameters in a format compatible with Flight SQL
+   */
+  private encodeParametersForFlightSql(parameters: QueryParameters): any[] {
+    const paramArray: any[] = [];
+
+    if (Array.isArray(parameters)) {
+      // Positional parameters - DataFusion uses $1, $2, etc.
+      paramArray.push(
+        ...parameters.map((val) => this.serializeParameterValue(val)),
+      );
+    } else {
+      // Named parameters - DataFusion uses $param_name
+      for (const [name, value] of Object.entries(parameters)) {
+        paramArray.push({
+          name,
+          value: this.serializeParameterValue(value),
+        });
+      }
+    }
+
+    return paramArray;
+  }
+
+  /**
+   * Converts parameters for HTTP endpoint format
+   */
+  private convertParametersForHttp(parameters?: QueryParameters): any[] {
+    if (!parameters) {
+      return [];
+    }
+
+    if (Array.isArray(parameters)) {
+      // Positional parameters - convert to simple array
+      return parameters.map((val) => {
+        if (val === null) return null;
+        if (val instanceof Date) return val.toISOString();
+        if (typeof val === 'bigint') return val.toString();
+        if (Buffer.isBuffer(val)) return val.toString('base64');
+        return val;
+      });
+    } else {
+      // Named parameters - convert to array of {name, value} objects
+      return Object.entries(parameters).map(([name, value]) => {
+        let serializedValue = value;
+        if (value instanceof Date) serializedValue = value.toISOString();
+        else if (typeof value === 'bigint') serializedValue = value.toString();
+        else if (Buffer.isBuffer(value))
+          serializedValue = value.toString('base64');
+
+        return { name, value: serializedValue };
+      });
+    }
   }
 
   private async getResultStream(
     queryText: string,
-    getFlightClient: ((client: FlightClient) => void) | undefined = undefined
+    parameters?: QueryParameters,
+    getFlightClient: ((client: FlightClient) => void) | undefined = undefined,
   ): Promise<EventEmitter> {
     const meta = new grpc.Metadata();
     meta.set('authorization', `Bearer ${this._apiKey || ''}`);
@@ -300,12 +439,12 @@ class SpiceClient {
 
     const client: FlightClient = this.createClient(meta);
 
-    const queryBuff = Buffer.from(queryText, 'utf8');
+    const commandBuff = this.createFlightSqlCommand(queryText, parameters);
 
     const flightTicket = await new Promise<Ticket>((resolve, reject) => {
       // GetFlightInfo returns FlightInfo that have endpoints with ticket to call DoGet with
       client.GetFlightInfo(
-        { type: DescriptorType.CMD, cmd: queryBuff },
+        { type: DescriptorType.CMD, cmd: commandBuff },
         (err: any, result: FlightInfo) => {
           if (err) {
             reject(err);
@@ -316,7 +455,7 @@ class SpiceClient {
             return;
           }
           resolve(result.endpoint[0].ticket);
-        }
+        },
       );
     });
 
@@ -329,15 +468,51 @@ class SpiceClient {
 
   /**
    * Executes a SQL query and returns results as Arrow Tables.
-   * @param queryText - The SQL query to execute
-   * @param onData - Optional callback for streaming results
+   * Supports parameterized queries when options.parameters is provided.
+   *
+   * @param queryText - The SQL query to execute. Use $1, $2 for positional parameters or $param_name for named parameters.
+   * @param optionsOrCallback - Either SqlQueryOptions with parameters, or a callback function for streaming results
+   * @param onData - Optional callback for streaming results (used when second parameter is SqlQueryOptions)
    * @returns Promise resolving to the final Arrow Table
+   *
+   * @example
+   * // Simple query
+   * await client.sql('SELECT * FROM table LIMIT 10');
+   *
+   * @example
+   * // Parameterized query with positional parameters
+   * await client.sql('SELECT * FROM table WHERE id = $1 AND status = $2', { parameters: [123, 'active'] });
+   *
+   * @example
+   * // Parameterized query with named parameters
+   * await client.sql('SELECT * FROM table WHERE id = $id AND status = $status', {
+   *   parameters: { id: 123, status: 'active' }
+   * });
+   *
+   * @example
+   * // With streaming callback
+   * await client.sql('SELECT * FROM table', (table) => console.log(table.numRows));
    */
   async sql(
     queryText: string,
-    onData?: ((data: Table) => void) | undefined
+    optionsOrCallback?: SqlQueryOptions | ((data: Table) => void),
+    onData?: (data: Table) => void,
   ): Promise<Table> {
-    return this.doQueryRequest(queryText, onData);
+    // Handle overloaded signatures
+    let options: SqlQueryOptions | undefined;
+    let callback: ((data: Table) => void) | undefined;
+
+    if (typeof optionsOrCallback === 'function') {
+      // Legacy signature: sql(query, callback)
+      callback = optionsOrCallback;
+      options = undefined;
+    } else {
+      // New signature: sql(query, options, callback)
+      options = optionsOrCallback;
+      callback = onData;
+    }
+
+    return this.doQueryRequest(queryText, options?.parameters, callback);
   }
 
   /**
@@ -345,7 +520,7 @@ class SpiceClient {
    */
   async query(
     queryText: string,
-    onData?: ((data: Table) => void) | undefined
+    onData?: ((data: Table) => void) | undefined,
   ): Promise<Table> {
     return this.sql(queryText, onData);
   }
@@ -365,7 +540,7 @@ class SpiceClient {
       if (!schema) {
         schema = {
           fields: table.schema.fields.map((field) =>
-            serializeArrowField(field)
+            serializeArrowField(field),
           ),
         };
       }
@@ -418,13 +593,13 @@ class SpiceClient {
       'POST',
       '/v1/nsql',
       undefined,
-      JSON.stringify(request)
+      JSON.stringify(request),
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `NSQL request failed: ${response.status} ${response.statusText} - ${errorText}`
+        `NSQL request failed: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -434,17 +609,22 @@ class SpiceClient {
 
   private async doQueryRequest(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined
+    parameters?: QueryParameters,
+    onData?: (data: Table) => void,
   ): Promise<Table> {
     // Wait for initialization to complete
     const useGrpc = await this.ensureInitialized();
 
     if (!useGrpc) {
-      const sqlJsonResponse = await this.doHttpQueryRequest(queryText, onData);
+      const sqlJsonResponse = await this.doHttpQueryRequest(
+        queryText,
+        parameters,
+        onData,
+      );
       // Convert SqlJsonResponse to Arrow Table
       return jsonToArrowTable(
         sqlJsonResponse.schema.fields,
-        sqlJsonResponse.data
+        sqlJsonResponse.data,
       );
     }
 
@@ -453,9 +633,10 @@ class SpiceClient {
     try {
       const resultStream = await this.getResultStream(
         queryText,
+        parameters,
         (c: FlightClient) => {
           client = c;
-        }
+        },
       );
 
       // indicates that data has been partially or fully sent
@@ -498,22 +679,26 @@ class SpiceClient {
 
   private async doHttpQueryRequest(
     queryText: string,
-    onData: ((data: Table) => void) | undefined = undefined
+    parameters?: QueryParameters,
+    onData?: (data: Table) => void,
   ): Promise<SqlV1JsonResponse> {
     const startTime = Date.now();
+
+    // Convert parameters to array format for HTTP endpoint
+    const httpParameters = this.convertParametersForHttp(parameters);
 
     const response = await this.fetchInternal(
       'POST',
       '/v1/sql',
       undefined,
-      JSON.stringify({ sql: queryText, parameters: [] }),
-      { Accept: 'application/vnd.spiceai.sql.v1+json' }
+      JSON.stringify({ sql: queryText, parameters: httpParameters }),
+      { Accept: 'application/vnd.spiceai.sql.v1+json' },
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `HTTP query failed with status ${response.status}: ${errorText}`
+        `HTTP query failed with status ${response.status}: ${errorText}`,
       );
     }
 
@@ -569,7 +754,7 @@ class SpiceClient {
    */
   async refreshAcceleration(
     dataset: string,
-    options?: RefreshAccelerationOptions
+    options?: RefreshAccelerationOptions,
   ): Promise<RefreshAccelerationResponse> {
     if (!this._httpUrl) {
       throw new Error('HTTP URL is required for refresh operation');
@@ -581,13 +766,13 @@ class SpiceClient {
       'POST',
       `/v1/datasets/${encodeURIComponent(dataset)}/acceleration/refresh`,
       undefined,
-      body
+      body,
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Failed to refresh dataset '${dataset}': ${response.status} ${response.statusText} - ${errorText}`
+        `Failed to refresh dataset '${dataset}': ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
@@ -599,7 +784,7 @@ class SpiceClient {
     path: string,
     params?: { [key: string]: string },
     body?: string,
-    customHeaders?: { [key: string]: string }
+    customHeaders?: { [key: string]: string },
   ) {
     const url =
       params && Object.keys(params).length

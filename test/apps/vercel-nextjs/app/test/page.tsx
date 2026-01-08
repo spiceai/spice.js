@@ -286,7 +286,9 @@ export default function TestPage() {
 
       const comparison = [
         `Proxy (/api): ${proxyHealthy ? '✅ Healthy' : '❌ Not Healthy'}`,
-        `Direct (data.spiceai.io): ${directHealthy ? '✅ Healthy' : '❌ Not Healthy'}`,
+        `Direct (data.spiceai.io): ${
+          directHealthy ? '✅ Healthy' : '❌ Not Healthy'
+        }`,
         `Match: ${proxyHealthy === directHealthy ? '✅' : '❌'}`,
       ];
 
@@ -324,7 +326,9 @@ export default function TestPage() {
 
       const comparison = [
         `Proxy (/api): ${proxyReady ? '✅ Ready' : '❌ Not Ready'}`,
-        `Direct (data.spiceai.io): ${directReady ? '✅ Ready' : '❌ Not Ready'}`,
+        `Direct (data.spiceai.io): ${
+          directReady ? '✅ Ready' : '❌ Not Ready'
+        }`,
         `Match: ${proxyReady === directReady ? '✅' : '❌'}`,
       ];
 
@@ -882,7 +886,9 @@ export default function TestPage() {
             <DiffViewer
               proxyResult={queryProxyResult}
               directResult={queryDirectResult}
-              title={`Query Results (${useJsonFormat ? 'JSON' : 'Arrow Table'})`}
+              title={`Query Results (${
+                useJsonFormat ? 'JSON' : 'Arrow Table'
+              })`}
             />
           )}
         </div>

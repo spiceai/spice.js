@@ -197,7 +197,8 @@ describe('Browser SpiceClient', () => {
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'Content-Type': 'text/plain',
+            // Parameterized queries use JSON format
+            'Content-Type': 'application/json',
             // Local OSS runtime uses application/json
             Accept: 'application/json',
           }),

@@ -15,97 +15,163 @@ inputs:
   max-attempts:
     description: 'Maximum number of attempts to wait for deployment'
     required: false
-    default: '30'
+    default: '10'
   wait-interval:
     description: 'Time in seconds to wait between attempts'
     required: false
-    default: '10'
+    default: '30'
+  fallback-to-production:
+    description: 'If true, fall back to production endpoint when preview is not available'
+    required: false
+    default: 'true'
 outputs:
   vercel-endpoint:
     description: 'The Vercel endpoint URL'
-    value: ${{ steps.set-endpoint.outputs.endpoint }}
+    value: ${{ steps.wait-for-deployment.outputs.endpoint }}
   vercel-api-endpoint:
     description: 'The Vercel API endpoint URL (endpoint + /api)'
-    value: ${{ steps.set-endpoint.outputs.api-endpoint }}
+    value: ${{ steps.wait-for-deployment.outputs.api-endpoint }}
+  is-preview:
+    description: 'Whether the endpoint is a preview deployment (true) or production (false)'
+    value: ${{ steps.wait-for-deployment.outputs.is-preview }}
 
 runs:
   using: 'composite'
   steps:
-    - name: Construct Vercel endpoint
-      id: construct
-      shell: bash
-      run: |
-        BRANCH_NAME="${{ inputs.branch-name }}"
-
-        # Check if this is a tag (starts with 'v' followed by a number, or just looks like a version)
-        if [[ "$BRANCH_NAME" =~ ^v[0-9] ]] || [[ "$BRANCH_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-          # For tags/releases, use the production Vercel domain
-          VERCEL_ENDPOINT="https://spice-js.vercel.app"
-          echo "Detected tag/release: ${BRANCH_NAME}, using production endpoint"
-        else
-          # For branches, construct the git branch preview URL
-          # Remove periods, replace first / with -, remove remaining /, convert to lowercase for Vercel format
-          BRANCH_SLUG=$(echo "$BRANCH_NAME" | sed 's/\.//g' | sed 's/\//-/' | sed 's/\///g' | tr '[:upper:]' '[:lower:]')
-          VERCEL_ENDPOINT="https://spice-js-git-${BRANCH_SLUG}-spice.vercel.app"
-          echo "Detected branch: ${BRANCH_NAME}, using preview endpoint"
-        fi
-
-        echo "constructed_endpoint=${VERCEL_ENDPOINT}" >> $GITHUB_OUTPUT
-        echo "Constructed Vercel endpoint: ${VERCEL_ENDPOINT}"
-
-    - name: Set final endpoint
-      id: set-endpoint
-      shell: bash
-      run: |
-        if [ -n "${{ inputs.vercel-endpoint-override }}" ]; then
-          FINAL_ENDPOINT="${{ inputs.vercel-endpoint-override }}"
-          echo "Using override endpoint: ${FINAL_ENDPOINT}"
-        else
-          FINAL_ENDPOINT="${{ steps.construct.outputs.constructed_endpoint }}"
-          echo "Using constructed endpoint: ${FINAL_ENDPOINT}"
-        fi
-
-        echo "endpoint=${FINAL_ENDPOINT}" >> $GITHUB_OUTPUT
-        echo "api-endpoint=${FINAL_ENDPOINT}/api" >> $GITHUB_OUTPUT
-
-    - name: Wait for Vercel deployment to be ready
+    - name: Wait for Vercel deployment
+      id: wait-for-deployment
       shell: bash
       env:
         VERCEL_BYPASS_SECRET: ${{ inputs.vercel-bypass-secret }}
-        VERCEL_ENDPOINT: ${{ steps.set-endpoint.outputs.endpoint }}
+        VERCEL_ENDPOINT_OVERRIDE: ${{ inputs.vercel-endpoint-override }}
+        BRANCH_NAME: ${{ inputs.branch-name }}
         MAX_ATTEMPTS: ${{ inputs.max-attempts }}
         WAIT_INTERVAL: ${{ inputs.wait-interval }}
+        FALLBACK_TO_PRODUCTION: ${{ inputs.fallback-to-production }}
       run: |
-        HEALTH_URL="${VERCEL_ENDPOINT}/api/health"
+        # Production endpoint (always available as fallback)
+        PRODUCTION_ENDPOINT="https://spice-js.vercel.app"
 
-        echo "Waiting for Vercel endpoint to be ready: ${HEALTH_URL}"
-
-        ATTEMPT=0
-
-        # Prepare curl header args if bypass secret is set
+        # Prepare curl headers
         CURL_HEADERS=""
         if [ -n "${VERCEL_BYPASS_SECRET}" ]; then
           CURL_HEADERS="-H 'x-vercel-protection-bypass: ${VERCEL_BYPASS_SECRET}'"
         fi
 
-        while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-          ATTEMPT=$((ATTEMPT + 1))
-          echo "Attempt ${ATTEMPT}/${MAX_ATTEMPTS}: Checking ${HEALTH_URL}"
+        # Function to check if an endpoint is ready
+        check_endpoint() {
+          local endpoint="$1"
+          local health_url="${endpoint}/api/health"
           
-          # Get both status code and response body
-          RESPONSE=$(eval "curl -s -w '\n%{http_code}' ${CURL_HEADERS} '${HEALTH_URL}'" || echo -e "\n000")
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
+          # Use curl with retries, timeouts, and follow redirects
+          local response
+          response=$(eval "curl -sL --retry 2 --retry-delay 1 --connect-timeout 5 --max-time 15 -w '\n%{http_code}' ${CURL_HEADERS} '${health_url}'" 2>/dev/null || echo -e "\n000")
+          local http_code=$(echo "$response" | tail -n 1)
+          local body=$(echo "$response" | sed '$d')
           
-          if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -q "ok"; then
-            echo "✓ Vercel endpoint is ready (HTTP ${HTTP_CODE}, body contains 'ok')"
-            exit 0
+          if [ "$http_code" = "200" ] && echo "$body" | grep -qi "ok"; then
+            echo "ready"
+            return 0
+          else
+            echo "http_${http_code}"
+            return 1
           fi
+        }
+
+        # If override is provided, just use that
+        if [ -n "${VERCEL_ENDPOINT_OVERRIDE}" ]; then
+          echo "Using override endpoint: ${VERCEL_ENDPOINT_OVERRIDE}"
+          echo "endpoint=${VERCEL_ENDPOINT_OVERRIDE}" >> $GITHUB_OUTPUT
+          echo "api-endpoint=${VERCEL_ENDPOINT_OVERRIDE}/api" >> $GITHUB_OUTPUT
+          echo "is-preview=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Check if this is a tag/release (use production directly)
+        if [[ "$BRANCH_NAME" =~ ^v[0-9] ]] || [[ "$BRANCH_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+          echo "Detected tag/release: ${BRANCH_NAME}, using production endpoint"
+          echo "endpoint=${PRODUCTION_ENDPOINT}" >> $GITHUB_OUTPUT
+          echo "api-endpoint=${PRODUCTION_ENDPOINT}/api" >> $GITHUB_OUTPUT
+          echo "is-preview=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Construct preview URL patterns to try
+        # Vercel can use different URL patterns depending on the setup
+        BRANCH_SLUG=$(echo "$BRANCH_NAME" | sed 's/\.//g' | sed 's/\//-/g' | tr '[:upper:]' '[:lower:]')
+
+        # List of potential preview URLs to try (in order of preference)
+        PREVIEW_URLS=(
+          "https://spice-js-git-${BRANCH_SLUG}-spice.vercel.app"
+          "https://spice-js-git-${BRANCH_SLUG}-spiceai.vercel.app"
+          "https://spice-js-${BRANCH_SLUG}.vercel.app"
+        )
+
+        echo "Branch: ${BRANCH_NAME}"
+        echo "Slug: ${BRANCH_SLUG}"
+        echo "Will try ${#PREVIEW_URLS[@]} preview URL patterns, then fall back to production"
+        echo ""
+
+        # Try to find a working preview endpoint
+        FOUND_ENDPOINT=""
+        for ATTEMPT in $(seq 1 $MAX_ATTEMPTS); do
+          echo "=== Attempt ${ATTEMPT}/${MAX_ATTEMPTS} ==="
           
-          echo "  HTTP ${HTTP_CODE}, body: ${BODY} - Not ready yet, waiting ${WAIT_INTERVAL} seconds..."
-          sleep $WAIT_INTERVAL
+          # Try each preview URL pattern
+          for PREVIEW_URL in "${PREVIEW_URLS[@]}"; do
+            echo -n "  Checking ${PREVIEW_URL}... "
+            result=$(check_endpoint "$PREVIEW_URL")
+            if [ "$result" = "ready" ]; then
+              echo "✓ Ready!"
+              FOUND_ENDPOINT="$PREVIEW_URL"
+              break 2
+            else
+              echo "✗ (${result})"
+            fi
+          done
+          
+          if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+            echo "  Waiting ${WAIT_INTERVAL}s before next attempt..."
+            sleep $WAIT_INTERVAL
+          fi
         done
 
-        echo "✗ Vercel endpoint did not become ready after ${MAX_ATTEMPTS} attempts"
-        echo "  This may indicate the deployment is not available or the branch/author format is incorrect"
+        # If we found a preview endpoint, use it
+        if [ -n "$FOUND_ENDPOINT" ]; then
+          echo ""
+          echo "✓ Using preview endpoint: ${FOUND_ENDPOINT}"
+          echo "endpoint=${FOUND_ENDPOINT}" >> $GITHUB_OUTPUT
+          echo "api-endpoint=${FOUND_ENDPOINT}/api" >> $GITHUB_OUTPUT
+          echo "is-preview=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Preview not available, try production fallback
+        echo ""
+        echo "Preview deployment not available after ${MAX_ATTEMPTS} attempts."
+
+        if [ "${FALLBACK_TO_PRODUCTION}" = "true" ]; then
+          echo "Checking production endpoint as fallback..."
+          result=$(check_endpoint "$PRODUCTION_ENDPOINT")
+          if [ "$result" = "ready" ]; then
+            echo "✓ Using production endpoint as fallback: ${PRODUCTION_ENDPOINT}"
+            echo "endpoint=${PRODUCTION_ENDPOINT}" >> $GITHUB_OUTPUT
+            echo "api-endpoint=${PRODUCTION_ENDPOINT}/api" >> $GITHUB_OUTPUT
+            echo "is-preview=false" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "✗ Production endpoint also not ready (${result})"
+          fi
+        fi
+
+        # Nothing worked
+        echo ""
+        echo "✗ No Vercel endpoint available"
+        echo "  - Preview URLs tried: ${PREVIEW_URLS[*]}"
+        echo "  - Production fallback: ${FALLBACK_TO_PRODUCTION}"
+        echo ""
+        echo "This may happen for:"
+        echo "  - Dependabot PRs (no Vercel preview deployment)"
+        echo "  - New branches that haven't been deployed yet"
+        echo "  - Vercel deployment failures"
         exit 1

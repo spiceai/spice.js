@@ -1,10 +1,26 @@
-import { SpiceClient } from '@spiceai/spice';
+import { SpiceClient, QueryParameters } from '@spiceai/spice';
 import { NextRequest } from 'next/server';
+
+interface SqlRequestBody {
+  sql: string;
+  parameters?: QueryParameters;
+}
 
 export async function POST(request: NextRequest) {
   try {
-    // Accept plain text SQL query
-    const sql = await request.text();
+    // Parse JSON body from SDK ({"sql": "...", "parameters": {...}})
+    let sql: string;
+    let parameters: QueryParameters | undefined;
+
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const body: SqlRequestBody = await request.json();
+      sql = body.sql;
+      parameters = body.parameters;
+    } else {
+      // Fallback: Accept plain text SQL query for backwards compatibility
+      sql = await request.text();
+    }
 
     if (!sql || sql.trim().length === 0) {
       return new Response(
@@ -19,7 +35,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use API key from X-API-KEY header or environment variable
+    // Get API key from header or environment variable
     const apiKey = request.headers.get('X-API-KEY');
     const key = apiKey || process.env.SPICEAI_API_KEY;
 
@@ -41,7 +57,37 @@ export async function POST(request: NextRequest) {
     const client = new SpiceClient(key);
 
     try {
-      const result = await client.sqlJson(sql);
+      // Use sql() with parameters, then convert Arrow table to JSON format
+      const table = await client.sql(sql, { parameters });
+      
+      // Convert Arrow table to JSON response format
+      const schema = {
+        fields: table.schema.fields.map((field: { name: string; type: { toString(): string }; nullable: boolean }) => ({
+          name: field.name,
+          data_type: field.type.toString(),
+          nullable: field.nullable,
+          dict_id: 0,
+          dict_is_ordered: false,
+        })),
+      };
+      
+      // Convert rows, handling BigInt serialization
+      const data = table.toArray().map((row: Record<string, unknown>) => {
+        const jsonRow: { [key: string]: unknown } = {};
+        for (const field of table.schema.fields) {
+          const value = row[field.name];
+          // Convert BigInt to string for JSON serialization
+          jsonRow[field.name] = typeof value === 'bigint' ? value.toString() : value;
+        }
+        return jsonRow;
+      });
+      
+      const result = {
+        row_count: table.numRows,
+        schema,
+        data,
+        execution_time_ms: 0, // Not tracked in this simple implementation
+      };
 
       return new Response(JSON.stringify(result), {
         status: 200,

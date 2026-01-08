@@ -11,12 +11,9 @@ describe('cloud', () => {
     throw 'API_KEY environment variable not set';
   }
 
-  const HTTP_DATA_PATH = process.env.HTTP_URL
-    ? process.env.HTTP_URL
-    : 'https://data.spiceai.io';
-  const FLIGHT_PATH = process.env.FLIGHT_URL
-    ? process.env.FLIGHT_URL
-    : 'flight.spiceai.io:443';
+  // URLs can be overridden via env vars (HTTP_URL, FLIGHT_URL)
+  const HTTP_DATA_PATH = process.env.HTTP_URL || undefined;
+  const FLIGHT_PATH = process.env.FLIGHT_URL || undefined;
   const VERCEL_ENDPOINT =
     process.env.VERCEL_ENDPOINT || 'https://spice-js.vercel.app/api';
 
@@ -33,10 +30,12 @@ describe('cloud', () => {
     vercelCustomHeaders['x-vercel-protection-bypass'] = vercelBypassSecret;
   }
 
+  // Vercel endpoint only supports HTTP (no gRPC/Flight)
+  // Use httpOnly mode to skip gRPC initialization entirely
   const vercelClient = new SpiceClient({
     apiKey: api_key,
     httpUrl: VERCEL_ENDPOINT,
-    flightUrl: FLIGHT_PATH,
+    httpOnly: true, // Force HTTP-only mode for Vercel
     customHeaders:
       Object.keys(vercelCustomHeaders).length > 0
         ? vercelCustomHeaders
@@ -70,7 +69,7 @@ describe('cloud', () => {
       const client = new SpiceClient(api_key);
 
       const tableResult = await client.sql(
-        'SELECT * FROM spice.samples.taxi_trips LIMIT 10;',
+        'SELECT * FROM taxi_trips LIMIT 10;',
       );
 
       expect(tableResult.toArray()).toHaveLength(10);
@@ -79,7 +78,7 @@ describe('cloud', () => {
     test('streaming works', async () => {
       let numChunks = 0;
       await cloudClient.sql(
-        'SELECT * FROM spice.samples.taxi_trips LIMIT 10;',
+        'SELECT * FROM taxi_trips LIMIT 10;',
         (table) => {
           expect(table.toArray().length).toBeLessThanOrEqual(10);
 
@@ -94,7 +93,7 @@ describe('cloud', () => {
 
     test('full result works', async () => {
       const tableResult = await cloudClient.sql(
-        'SELECT * FROM spice.samples.taxi_trips LIMIT 10;',
+        'SELECT * FROM taxi_trips LIMIT 10;',
       );
       expect(tableResult.toArray()).toHaveLength(10);
     }, 30000);
@@ -154,7 +153,7 @@ describe('cloud', () => {
 
     test('handles multiple rows correctly', async () => {
       const result = await cloudClient.sqlJson(
-        'SELECT * FROM spice.samples.taxi_trips LIMIT 5',
+        'SELECT * FROM taxi_trips LIMIT 5',
       );
 
       expect(result.row_count).toBe(5);
@@ -164,7 +163,7 @@ describe('cloud', () => {
 
     test('handles empty result set', async () => {
       const result = await cloudClient.sqlJson(
-        'SELECT * FROM spice.samples.taxi_trips WHERE false',
+        'SELECT * FROM taxi_trips WHERE false',
       );
 
       expect(result.row_count).toBe(0);
@@ -380,7 +379,7 @@ describe('cloud', () => {
 
       test('handles large result sets', async () => {
         const tableResult = await testClient.sql(
-          'SELECT * FROM spice.samples.taxi_trips LIMIT 100',
+          'SELECT * FROM taxi_trips LIMIT 100',
         );
         const rows = tableResult.toArray();
 

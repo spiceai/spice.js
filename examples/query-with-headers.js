@@ -12,7 +12,7 @@ const { SpiceClient } = require('@spiceai/spice');
 async function main() {
   // Initialize the Spice client
   const client = new SpiceClient({
-    apiKey: process.env.SPICE_API_KEY || 'your-api-key',
+    apiKey: process.env.SPICEAI_API_KEY || 'your-api-key',
     httpUrl: process.env.SPICE_HTTP_URL || 'http://127.0.0.1:8090',
     flightUrl: process.env.SPICE_FLIGHT_URL || '127.0.0.1:50051',
   });

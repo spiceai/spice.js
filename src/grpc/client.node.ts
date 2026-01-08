@@ -11,6 +11,10 @@ import { EventEmitter } from 'stream';
 import { FlightClient, FlightInfo, DescriptorType, Ticket } from '../flight';
 import { platform } from '../platform/node';
 import { Logger } from '../logger';
+import { Param } from '../param';
+// Note: Flight SQL prepared statements are not currently supported by the Spice server.
+// The server uses a custom protocol. For parameterized queries, we use client-side substitution.
+// This is secure for the supported use cases and matches the HTTP API behavior.
 
 const PROTO_PATH = './proto/Flight.proto';
 const PROTO_DOWNLOAD_URL =
@@ -232,8 +236,100 @@ export class GrpcFlightClient {
     );
   }
 
+  /**
+   * Substitutes parameters into a SQL query using positional placeholders ($1, $2, etc.)
+   * This is a client-side substitution - the server will receive the final SQL.
+   * Parameters are processed in reverse order to avoid $1 matching the '1' in $10.
+   */
+  private substitutePositionalParameters(
+    queryText: string,
+    parameters: any[],
+  ): string {
+    let result = queryText;
+    // Process parameters in reverse order (highest to lowest) to avoid
+    // $1 replacing the '1' in $10, $11, etc.
+    for (let i = parameters.length - 1; i >= 0; i--) {
+      const value = this.formatParameterValue(parameters[i]);
+      // Use regex to match $N not followed by another digit
+      const regex = new RegExp(`\\$${i + 1}(?![0-9])`, 'g');
+      result = result.replace(regex, value);
+    }
+    return result;
+  }
+
+  /**
+   * Substitutes named parameters into a SQL query ($name style)
+   * This is a client-side substitution - the server will receive the final SQL.
+   * Uses PostgreSQL-style $param_name syntax for consistency with positional $1, $2 placeholders.
+   */
+  private substituteNamedParameters(
+    queryText: string,
+    parameters: Record<string, any>,
+  ): string {
+    let result = queryText;
+    // Sort parameter names by length (descending) to avoid partial matches
+    // e.g., $name should be replaced before $n
+    const sortedNames = Object.keys(parameters).sort(
+      (a, b) => b.length - a.length,
+    );
+    for (const name of sortedNames) {
+      const value = parameters[name];
+      // Match $name followed by non-alphanumeric or end of string
+      // This ensures $name_extra won't match when looking for $name
+      const regex = new RegExp(`\\$${name}(?![a-zA-Z0-9_])`, 'g');
+      result = result.replace(regex, this.formatParameterValue(value));
+    }
+    return result;
+  }
+
+  /**
+   * Formats a parameter value for SQL substitution
+   */
+  private formatParameterValue(value: any): string {
+    if (value === null || value === undefined) {
+      return 'NULL';
+    }
+
+    // Handle Param objects - extract value and potentially use type information
+    if (value instanceof Param) {
+      // For now, we format using the underlying value
+      // Type information could be used for more sophisticated formatting in the future
+      return this.formatParameterValue(value.value);
+    }
+
+    // Handle legacy Param-like objects (for backward compatibility)
+    if (
+      value &&
+      typeof value === 'object' &&
+      'value' in value &&
+      'type' in value
+    ) {
+      return this.formatParameterValue(value.value);
+    }
+
+    if (typeof value === 'string') {
+      // Escape single quotes and wrap in quotes
+      return `'${value.replace(/'/g, "''")}'`;
+    }
+    if (typeof value === 'boolean') {
+      return value ? 'TRUE' : 'FALSE';
+    }
+    if (typeof value === 'number' || typeof value === 'bigint') {
+      return String(value);
+    }
+    if (value instanceof Date) {
+      return `'${value.toISOString()}'`;
+    }
+    if (Buffer.isBuffer(value) || value instanceof Uint8Array) {
+      return `X'${Buffer.from(value).toString('hex')}'`;
+    }
+    // Default: convert to string
+    return `'${String(value).replace(/'/g, "''")}'`;
+  }
+
   async executeQuery(
     queryText: string,
+    parameters?: any,
     headers?: { [key: string]: string },
   ): Promise<EventEmitter> {
     const meta = new grpc.Metadata();
@@ -250,12 +346,33 @@ export class GrpcFlightClient {
     }
 
     const client: FlightClient = this.createClient(meta);
-    const queryBuff = Buffer.from(queryText, 'utf8');
+
+    // Check if we have parameters to bind
+    const hasParameters =
+      parameters &&
+      ((Array.isArray(parameters) && parameters.length > 0) ||
+        (!Array.isArray(parameters) && Object.keys(parameters).length > 0));
+
+    // For parameterized queries, use client-side substitution
+    // Note: Server-side parameter binding via Flight SQL prepared statements
+    // is not supported by the Spice server's current implementation.
+    let finalQuery = queryText;
+    if (hasParameters) {
+      if (Array.isArray(parameters)) {
+        // Positional parameters: $1, $2, etc.
+        finalQuery = this.substitutePositionalParameters(queryText, parameters);
+      } else {
+        // Named parameters: $name, $param, etc.
+        finalQuery = this.substituteNamedParameters(queryText, parameters);
+      }
+    }
+
+    // Use simple GetFlightInfo/DoGet
+    const commandBuff = Buffer.from(finalQuery, 'utf8');
 
     const flightTicket = await new Promise<Ticket>((resolve, reject) => {
-      // GetFlightInfo returns FlightInfo that have endpoints with ticket to call DoGet with
       client.GetFlightInfo(
-        { type: DescriptorType.CMD, cmd: queryBuff },
+        { type: DescriptorType.CMD, cmd: commandBuff },
         (err: any, result: FlightInfo) => {
           if (err) {
             reject(err);

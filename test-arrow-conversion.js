@@ -25,7 +25,9 @@ async function test() {
     }
 
     console.log(
-      `\nreview_comments type: ${typeof row.review_comments}, isArray: ${Array.isArray(row.review_comments)}`,
+      `\nreview_comments type: ${typeof row.review_comments}, isArray: ${Array.isArray(
+        row.review_comments,
+      )}`,
     );
     console.log(
       `review_comments value: ${JSON.stringify(row.review_comments)}`,
@@ -38,7 +40,9 @@ async function test() {
       typeof row.review_comments.toArray === 'function'
     ) {
       console.log(
-        `review_comments.toArray(): ${JSON.stringify(row.review_comments.toArray()).substring(0, 200)}`,
+        `review_comments.toArray(): ${JSON.stringify(
+          row.review_comments.toArray(),
+        ).substring(0, 200)}`,
       );
     }
 
@@ -53,7 +57,9 @@ async function test() {
     const jsonRow = jsonResult.data[0];
     console.log(`\nJSON hashes: ${JSON.stringify(jsonRow.hashes)}`);
     console.log(
-      `JSON review_comments: ${JSON.stringify(jsonRow.review_comments).substring(0, 200)}`,
+      `JSON review_comments: ${JSON.stringify(
+        jsonRow.review_comments,
+      ).substring(0, 200)}`,
     );
     console.log(`JSON changed_files: ${JSON.stringify(jsonRow.changed_files)}`);
     console.log(`JSON closed_at: ${JSON.stringify(jsonRow.closed_at)}`);

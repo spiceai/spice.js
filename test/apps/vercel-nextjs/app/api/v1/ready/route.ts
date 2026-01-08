@@ -7,7 +7,17 @@ export async function GET(request: NextRequest) {
     const apiKey = request.headers.get('X-API-KEY');
     const key = apiKey || process.env.SPICEAI_API_KEY;
 
-    // Initialize SpiceClient
+    if (!key) {
+      return new Response(
+        'Missing API key. Provide X-API-KEY header or set SPICEAI_API_KEY environment variable.',
+        {
+          status: 401,
+          headers: { 'Content-Type': 'text/plain' },
+        },
+      );
+    }
+
+    // Initialize SpiceClient with API key (will use Spice Cloud defaults)
     const client = new SpiceClient(key);
 
     const isReady = await client.isSpiceReady();
