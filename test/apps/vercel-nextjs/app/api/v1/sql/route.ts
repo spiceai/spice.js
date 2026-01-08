@@ -57,7 +57,37 @@ export async function POST(request: NextRequest) {
     const client = new SpiceClient(key);
 
     try {
-      const result = await client.sqlJson(sql, parameters);
+      // Use sql() with parameters, then convert Arrow table to JSON format
+      const table = await client.sql(sql, { parameters });
+      
+      // Convert Arrow table to JSON response format
+      const schema = {
+        fields: table.schema.fields.map((field: { name: string; type: { toString(): string }; nullable: boolean }) => ({
+          name: field.name,
+          data_type: field.type.toString(),
+          nullable: field.nullable,
+          dict_id: 0,
+          dict_is_ordered: false,
+        })),
+      };
+      
+      // Convert rows, handling BigInt serialization
+      const data = table.toArray().map((row: Record<string, unknown>) => {
+        const jsonRow: { [key: string]: unknown } = {};
+        for (const field of table.schema.fields) {
+          const value = row[field.name];
+          // Convert BigInt to string for JSON serialization
+          jsonRow[field.name] = typeof value === 'bigint' ? value.toString() : value;
+        }
+        return jsonRow;
+      });
+      
+      const result = {
+        row_count: table.numRows,
+        schema,
+        data,
+        execution_time_ms: 0, // Not tracked in this simple implementation
+      };
 
       return new Response(JSON.stringify(result), {
         status: 200,
