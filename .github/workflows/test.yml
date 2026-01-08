@@ -204,8 +204,6 @@ jobs:
   tpch-tests:
     name: TPCH Integration Tests
     runs-on: ubuntu-latest
-    # Only run on trunk/release branches to avoid consuming API quota on every PR
-    if: github.ref == 'refs/heads/trunk' || startsWith(github.ref, 'refs/heads/release-') || startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v5
 
