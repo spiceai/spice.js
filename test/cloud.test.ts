@@ -69,7 +69,7 @@ describe('cloud', () => {
       const client = new SpiceClient(api_key);
 
       const tableResult = await client.sql(
-        'SELECT * FROM spice.samples.taxi_trips LIMIT 10;',
+        'SELECT * FROM taxi_trips LIMIT 10;',
       );
 
       expect(tableResult.toArray()).toHaveLength(10);
@@ -78,7 +78,7 @@ describe('cloud', () => {
     test('streaming works', async () => {
       let numChunks = 0;
       await cloudClient.sql(
-        'SELECT * FROM spice.samples.taxi_trips LIMIT 10;',
+        'SELECT * FROM taxi_trips LIMIT 10;',
         (table) => {
           expect(table.toArray().length).toBeLessThanOrEqual(10);
 
@@ -93,7 +93,7 @@ describe('cloud', () => {
 
     test('full result works', async () => {
       const tableResult = await cloudClient.sql(
-        'SELECT * FROM spice.samples.taxi_trips LIMIT 10;',
+        'SELECT * FROM taxi_trips LIMIT 10;',
       );
       expect(tableResult.toArray()).toHaveLength(10);
     }, 30000);
@@ -153,7 +153,7 @@ describe('cloud', () => {
 
     test('handles multiple rows correctly', async () => {
       const result = await cloudClient.sqlJson(
-        'SELECT * FROM spice.samples.taxi_trips LIMIT 5',
+        'SELECT * FROM taxi_trips LIMIT 5',
       );
 
       expect(result.row_count).toBe(5);
@@ -163,7 +163,7 @@ describe('cloud', () => {
 
     test('handles empty result set', async () => {
       const result = await cloudClient.sqlJson(
-        'SELECT * FROM spice.samples.taxi_trips WHERE false',
+        'SELECT * FROM taxi_trips WHERE false',
       );
 
       expect(result.row_count).toBe(0);
@@ -379,7 +379,7 @@ describe('cloud', () => {
 
       test('handles large result sets', async () => {
         const tableResult = await testClient.sql(
-          'SELECT * FROM spice.samples.taxi_trips LIMIT 100',
+          'SELECT * FROM taxi_trips LIMIT 100',
         );
         const rows = tableResult.toArray();
 

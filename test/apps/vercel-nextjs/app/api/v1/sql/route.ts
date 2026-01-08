@@ -1,10 +1,26 @@
-import { SpiceClient } from '@spiceai/spice';
+import { SpiceClient, QueryParameters } from '@spiceai/spice';
 import { NextRequest } from 'next/server';
+
+interface SqlRequestBody {
+  sql: string;
+  parameters?: QueryParameters;
+}
 
 export async function POST(request: NextRequest) {
   try {
-    // Accept plain text SQL query
-    const sql = await request.text();
+    // Parse JSON body from SDK ({"sql": "...", "parameters": {...}})
+    let sql: string;
+    let parameters: QueryParameters | undefined;
+
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const body: SqlRequestBody = await request.json();
+      sql = body.sql;
+      parameters = body.parameters;
+    } else {
+      // Fallback: Accept plain text SQL query for backwards compatibility
+      sql = await request.text();
+    }
 
     if (!sql || sql.trim().length === 0) {
       return new Response(
@@ -41,7 +57,7 @@ export async function POST(request: NextRequest) {
     const client = new SpiceClient(key);
 
     try {
-      const result = await client.sqlJson(sql);
+      const result = await client.sqlJson(sql, parameters);
 
       return new Response(JSON.stringify(result), {
         status: 200,
