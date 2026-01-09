@@ -65,4 +65,6 @@ jobs:
       - run: npm ci
       - run: node scripts/update-version.js # ensure the version in version.ts is updated
       - run: npm run build
-      - run: npm publish # no token needed, using OIDC instead
+      - run: npm install -g npm@latest  # Upgrade to npm >= 11.5.1 for OIDC trusted publishing
+      - run: npm --version  # Verify npm version
+      - run: npm publish --access public  # OIDC authentication happens automatically
