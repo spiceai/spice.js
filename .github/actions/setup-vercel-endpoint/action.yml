@@ -119,8 +119,8 @@ runs:
           
           # Try each preview URL pattern
           for PREVIEW_URL in "${PREVIEW_URLS[@]}"; do
-            echo -n "  Checking ${PREVIEW_URL}... "
-            result=$(check_endpoint "$PREVIEW_URL")
+              echo -n "  Checking ${PREVIEW_URL}... "
+              result=$(check_endpoint "$PREVIEW_URL") || true
             if [ "$result" = "ready" ]; then
               echo "✓ Ready!"
               FOUND_ENDPOINT="$PREVIEW_URL"
@@ -152,7 +152,7 @@ runs:
 
         if [ "${FALLBACK_TO_PRODUCTION}" = "true" ]; then
           echo "Checking production endpoint as fallback..."
-          result=$(check_endpoint "$PRODUCTION_ENDPOINT")
+          result=$(check_endpoint "$PRODUCTION_ENDPOINT") || true
           if [ "$result" = "ready" ]; then
             echo "✓ Using production endpoint as fallback: ${PRODUCTION_ENDPOINT}"
             echo "endpoint=${PRODUCTION_ENDPOINT}" >> $GITHUB_OUTPUT
