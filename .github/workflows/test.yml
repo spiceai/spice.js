@@ -196,6 +196,7 @@ jobs:
         timeout-minutes: 10
         env:
           SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }} # spice.ai/spiceai/spice-js
+          SCP_SPICEAI_TPCH_API_KEY: ${{ secrets.SCP_SPICEAI_TPCH_API_KEY }} # spice.ai/spiceai/tpch
           HTTP_URL: ${{ secrets.HTTP_URL || 'https://data.spiceai.io' }}
           FLIGHT_URL: ${{ secrets.FLIGHT_URL || 'flight.spiceai.io:443' }}
           VERCEL_ENDPOINT: ${{ needs.vercel-setup.outputs.vercel-api-endpoint }}
