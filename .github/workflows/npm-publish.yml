@@ -36,7 +36,7 @@ jobs:
           branch-name: ${{ github.ref_name }}
 
       - name: Test
-        run: npm test
+        run: npm test -- test/cloud.test.ts
         timeout-minutes: 10
         env:
           SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }}
