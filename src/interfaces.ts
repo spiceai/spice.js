@@ -133,9 +133,13 @@ export interface SearchMatch {
    */
   dataset: string;
   /**
-   * The similarity of the match to the query
+   * The similarity of the match to the query (Spice v1)
    */
-  score: number;
+  score?: number;
+  /**
+   * The similarity of the match to the query (Spice v2)
+   */
+  _score?: number;
   /**
    * The matches for this result
    */
