@@ -1386,6 +1386,15 @@ export class SpiceClient {
     }
 
     const result = await response.json();
+    if (result.results) {
+      for (const match of result.results) {
+        if (match._score === undefined && match.score !== undefined) {
+          match._score = match.score;
+        } else if (match.score === undefined && match._score !== undefined) {
+          match.score = match._score;
+        }
+      }
+    }
     return result as SearchResponse;
   }
 

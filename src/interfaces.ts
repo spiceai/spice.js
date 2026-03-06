@@ -133,13 +133,20 @@ export interface SearchMatch {
    */
   dataset: string;
   /**
-   * The similarity of the match to the query (Spice v1)
+   * The similarity of the match to the query.
+   *
+   * @deprecated Use `_score` instead. This field is from Spice v1 and is kept for
+   * backward compatibility. When the server returns only `_score` (v2), this field
+   * is automatically filled from `_score`.
    */
-  score?: number;
+  score: number;
   /**
-   * The similarity of the match to the query (Spice v2)
+   * The similarity of the match to the query.
+   *
+   * This is the canonical score field used by Spice v2. When the server returns
+   * only `score` (v1), this field is automatically filled from `score`.
    */
-  _score?: number;
+  _score: number;
   /**
    * The matches for this result
    */
