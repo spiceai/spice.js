@@ -168,6 +168,7 @@ class SpiceClient {
   private _useGrpc: boolean = grpcAvailable;
   private _initPromise: Promise<void>;
   private _customHeaders?: { [key: string]: string };
+  private _httpsAgent: https.Agent;
 
   public constructor(params: string | SpiceClientConfig = {}) {
     // support legacy constructor with api_key as first agument
@@ -176,6 +177,7 @@ class SpiceClient {
       this._httpUrl = 'https://data.spiceai.io';
       this._flightUrl = 'flight.spiceai.io:443';
       this._userAgent = getUserAgent();
+      this._httpsAgent = new https.Agent({ keepAlive: true });
     } else {
       const {
         apiKey,
@@ -184,6 +186,9 @@ class SpiceClient {
         flightTlsEnabled,
         userAgent,
         customHeaders,
+        tlsClientCertFile,
+        tlsClientKeyFile,
+        tlsRootCertFile,
       } = params;
 
       this._apiKey = apiKey;
@@ -204,6 +209,30 @@ class SpiceClient {
         ? `${userAgent} ${getUserAgent()}`
         : getUserAgent();
       this._customHeaders = customHeaders;
+
+      // Validate that client cert and key are either both set or both unset
+      if (
+        (tlsClientCertFile && !tlsClientKeyFile) ||
+        (!tlsClientCertFile && tlsClientKeyFile)
+      ) {
+        const missing = tlsClientCertFile
+          ? 'tlsClientKeyFile'
+          : 'tlsClientCertFile';
+        throw new Error(
+          `Both tlsClientCertFile and tlsClientKeyFile must be provided together for mTLS. ${missing} is missing.`,
+        );
+      }
+
+      // Build per-instance HTTPS agent with optional mTLS certs
+      const agentOpts: https.AgentOptions = { keepAlive: true };
+      if (tlsRootCertFile) {
+        agentOpts.ca = fs.readFileSync(tlsRootCertFile);
+      }
+      if (tlsClientCertFile && tlsClientKeyFile) {
+        agentOpts.cert = fs.readFileSync(tlsClientCertFile);
+        agentOpts.key = fs.readFileSync(tlsClientKeyFile);
+      }
+      this._httpsAgent = new https.Agent(agentOpts);
     }
 
     // Initialize gRPC during construction
@@ -822,7 +851,7 @@ class SpiceClient {
     };
 
     if (this._httpUrl.startsWith('https://')) {
-      fetchOptions.agent = httpsAgent;
+      fetchOptions.agent = this._httpsAgent;
     }
 
     return fetch(url, fetchOptions);
