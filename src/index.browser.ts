@@ -39,6 +39,8 @@ export type {
   SearchOptions,
   SearchResponse,
   SearchMatch,
+  WireSearchResponse,
+  WireSearchMatch,
   QueryHeaders,
   RefreshOverrides, // deprecated, kept for backward compatibility
 } from './interfaces';

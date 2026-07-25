@@ -177,6 +177,35 @@ export interface SearchMatch {
   };
 }
 
+/**
+ * A single match exactly as the runtime serializes it on the wire.
+ *
+ * Differs from {@link SearchMatch} in two ways, both of which
+ * {@link normalizeSearchResponse} reconciles:
+ * - the similarity score is named `_score`
+ * - `data`, `primary_key`, `matches` and `metadata` are omitted entirely when empty
+ *
+ * @internal
+ */
+export interface WireSearchMatch {
+  dataset: string;
+  _score: number;
+  matches?: Record<string, unknown>;
+  primary_key?: Record<string, unknown>;
+  data?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * A search response exactly as the runtime serializes it on the wire.
+ *
+ * @internal
+ */
+export interface WireSearchResponse {
+  duration_ms: number;
+  results: WireSearchMatch[];
+}
+
 export interface SearchResponse {
   /**
    * Total time taken to execute the search, in milliseconds

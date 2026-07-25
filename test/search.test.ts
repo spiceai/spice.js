@@ -3,7 +3,7 @@
  */
 
 import { SpiceClient } from '../src';
-import type { SearchResponse } from '../src';
+import type { SearchResponse, WireSearchResponse } from '../src';
 
 // Mock fetch for testing
 const mockFetch = jest.fn();
@@ -31,6 +31,21 @@ describe('SpiceClient.search()', () => {
   });
 
   it('should make a POST request to /v1/search', async () => {
+    // The runtime serializes the score as `_score`, not `score`.
+    const wireResponse: WireSearchResponse = {
+      duration_ms: 150,
+      results: [
+        {
+          dataset: 'documents',
+          _score: 0.95,
+          matches: { text: 'machine learning' },
+          primary_key: { id: 1 },
+          data: { title: 'ML Guide' },
+          metadata: {},
+        },
+      ],
+    };
+
     const mockResponse: SearchResponse = {
       duration_ms: 150,
       results: [
@@ -47,8 +62,8 @@ describe('SpiceClient.search()', () => {
 
     mockFetch.mockResolvedValue({
       ok: true,
-      json: async () => mockResponse,
-      text: async () => JSON.stringify(mockResponse),
+      json: async () => wireResponse,
+      text: async () => JSON.stringify(wireResponse),
     });
 
     const result = await client.search('machine learning', {
@@ -183,17 +198,18 @@ describe('SpiceClient.search()', () => {
   });
 
   it('should return results with proper structure', async () => {
-    const mockResponse: SearchResponse = {
+    // Mirrors the runtime wire format: `_score`, and empty maps omitted entirely.
+    const wireResponse: WireSearchResponse = {
       duration_ms: 125,
       results: [
         {
           dataset: 'docs',
-          score: 0.98,
+          _score: 0.98,
           matches: { content: 'AI research' },
           primary_key: { doc_id: '123' },
           data: {
             title: 'AI Research Paper',
-            author: 'John Doe',
+            author: 'A. Author',
           },
           metadata: {
             source: 'arxiv',
@@ -201,19 +217,17 @@ describe('SpiceClient.search()', () => {
         },
         {
           dataset: 'articles',
-          score: 0.85,
+          _score: 0.85,
           matches: { text: 'machine learning' },
           primary_key: { article_id: 456 },
-          data: {},
-          metadata: {},
         },
       ],
     };
 
     mockFetch.mockResolvedValue({
       ok: true,
-      json: async () => mockResponse,
-      text: async () => JSON.stringify(mockResponse),
+      json: async () => wireResponse,
+      text: async () => JSON.stringify(wireResponse),
     });
 
     const result = await client.search('AI and ML', {
@@ -225,7 +239,63 @@ describe('SpiceClient.search()', () => {
     expect(result.results[0].dataset).toBe('docs');
     expect(result.results[0].score).toBe(0.98);
     expect(result.results[0].data.title).toBe('AI Research Paper');
+    expect(result.results[0].metadata.source).toBe('arxiv');
     expect(result.results[1].dataset).toBe('articles');
     expect(result.results[1].score).toBe(0.85);
+  });
+
+  it('should map the wire `_score` field onto `score`', async () => {
+    const wireResponse: WireSearchResponse = {
+      duration_ms: 10,
+      results: [
+        {
+          dataset: 'docs',
+          _score: 0.42,
+          matches: { content: 'hit' },
+          primary_key: { id: 1 },
+        },
+      ],
+    };
+
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => wireResponse,
+      text: async () => JSON.stringify(wireResponse),
+    });
+
+    const result = await client.search('query');
+
+    expect(result.results[0].score).toBe(0.42);
+    expect(result.results[0]).not.toHaveProperty('_score');
+  });
+
+  it('should default omitted maps to empty objects', async () => {
+    // The runtime omits data / primary_key / matches / metadata when empty, so
+    // consumers must still be able to read them without a guard.
+    const wireResponse: WireSearchResponse = {
+      duration_ms: 5,
+      results: [
+        {
+          dataset: 'docs',
+          _score: 0.5,
+        },
+      ],
+    };
+
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => wireResponse,
+      text: async () => JSON.stringify(wireResponse),
+    });
+
+    const result = await client.search('query');
+    const [match] = result.results;
+
+    expect(match.data).toEqual({});
+    expect(match.primary_key).toEqual({});
+    expect(match.matches).toEqual({});
+    expect(match.metadata).toEqual({});
+    // Reading a nested key must not throw.
+    expect(match.data.anything).toBeUndefined();
   });
 });

@@ -16,6 +16,7 @@ import {
   type QueryParameters,
   type SearchOptions,
   type SearchResponse,
+  type WireSearchResponse,
 } from './interfaces';
 import type { GrpcFlightClient } from './grpc/client.node';
 import {
@@ -24,6 +25,7 @@ import {
   normalizeSchema,
   serializeArrowField,
 } from './arrow-utils';
+import { normalizeSearchResponse } from './search-utils';
 import { Logger } from './logger';
 import { Param } from './param';
 
@@ -1397,8 +1399,8 @@ export class SpiceClient {
       );
     }
 
-    const result = await response.json();
-    return result as SearchResponse;
+    const result = (await response.json()) as WireSearchResponse;
+    return normalizeSearchResponse(result);
   }
 
   /**
