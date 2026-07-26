@@ -423,6 +423,9 @@ export class SpiceClient {
   private _httpUrl: string;
   private _userAgent: string;
   private _flightTlsEnabled: boolean = true;
+  private _tlsClientCertFile?: string;
+  private _tlsClientKeyFile?: string;
+  private _tlsRootCertFile?: string;
   private _maxRetries: number;
   private _customHeaders?: { [key: string]: string };
   private _platform: PlatformAdapter;
@@ -466,6 +469,9 @@ export class SpiceClient {
         flightOnly,
         httpOnly,
         logging,
+        tlsClientCertFile,
+        tlsClientKeyFile,
+        tlsRootCertFile,
       } = params;
 
       // Initialize logger (default: enabled)
@@ -507,6 +513,9 @@ export class SpiceClient {
         ? `${userAgent} ${platform.getUserAgent()}`
         : platform.getUserAgent();
       this._customHeaders = customHeaders;
+      this._tlsClientCertFile = tlsClientCertFile;
+      this._tlsClientKeyFile = tlsClientKeyFile;
+      this._tlsRootCertFile = tlsRootCertFile;
     }
 
     // Determine if this is Spice Cloud endpoint (compute once)
@@ -526,6 +535,9 @@ export class SpiceClient {
         this._userAgent,
         this._flightTlsEnabled,
         this._logger,
+        this._tlsClientCertFile,
+        this._tlsClientKeyFile,
+        this._tlsRootCertFile,
       );
     }
 
