@@ -140,6 +140,10 @@ export class GrpcFlightClient {
   private initPromise: Promise<void>;
   private useGrpc: boolean = grpcAvailable;
   private logger: Logger;
+  private tlsClientCertFile?: string;
+  private tlsClientKeyFile?: string;
+
+  private tlsRootCertFile?: string;
 
   constructor(
     apiKey: string | undefined,
@@ -147,12 +151,18 @@ export class GrpcFlightClient {
     userAgent: string,
     flightTlsEnabled: boolean,
     logger?: Logger,
+    tlsClientCertFile?: string,
+    tlsClientKeyFile?: string,
+    tlsRootCertFile?: string,
   ) {
     this.apiKey = apiKey;
     this.flightUrl = flightUrl;
     this.userAgent = userAgent;
     this.flightTlsEnabled = flightTlsEnabled;
     this.logger = logger || new Logger(true);
+    this.tlsClientCertFile = tlsClientCertFile;
+    this.tlsClientKeyFile = tlsClientKeyFile;
+    this.tlsRootCertFile = tlsRootCertFile;
     this.initPromise = this.initialize();
   }
 
@@ -219,7 +229,10 @@ export class GrpcFlightClient {
       );
     }
 
-    const creds = grpc.credentials.createSsl();
+    const rootCerts = this.tlsRootCertFile ? fs.readFileSync(this.tlsRootCertFile) : null;
+    const clientCert = this.tlsClientCertFile ? fs.readFileSync(this.tlsClientCertFile) : null;
+    const clientKey = this.tlsClientKeyFile ? fs.readFileSync(this.tlsClientKeyFile) : null;
+    const creds = grpc.credentials.createSsl(rootCerts, clientKey, clientCert);
     const metaCallback = (_params: any, callback: any) => {
       callback(null, meta);
     };
