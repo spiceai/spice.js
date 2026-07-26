@@ -23,6 +23,21 @@ export interface SpiceClientConfig {
    * @default true
    */
   logging?: boolean;
+  /**
+   * Path to a PEM-encoded CA certificate file for server verification.
+   * When set, this CA is used instead of the system certificate store.
+   */
+  tlsRootCertFile?: string;
+  /**
+   * Path to a PEM-encoded client certificate file for mTLS.
+   * Must be used together with `tlsClientKeyFile`.
+   */
+  tlsClientCertFile?: string;
+  /**
+   * Path to a PEM-encoded client private key file for mTLS.
+   * Must be used together with `tlsClientCertFile`.
+   */
+  tlsClientKeyFile?: string;
 }
 
 export interface SchemaField {
