@@ -235,6 +235,60 @@ export function serializeParametersToIPC(params: any[]): Uint8Array {
 }
 
 /**
+ * Builds column data for named parameters ($name style).
+ *
+ * The bound batch names each column with the bare placeholder name — `name`, not
+ * `$name` — even though the parameter schema the server reports back from
+ * CreatePreparedStatement spells the field with the leading `$`. Binding a column
+ * named `$name` fails with "No value found for placeholder with name $name".
+ *
+ * Positional parameters are the other way round: those columns are named `$1`, `$2`
+ * (see {@link buildParameterColumns}).
+ */
+export function buildNamedParameterColumns(params: Record<string, any>): {
+  columns: { [key: string]: any[] };
+  types: { [key: string]: string };
+} {
+  const columns: { [key: string]: any[] } = {};
+  const types: { [key: string]: string } = {};
+
+  for (const [name, param] of Object.entries(params)) {
+    const fieldName = name.startsWith('$') ? name.slice(1) : name;
+
+    let value: any;
+    let dataType: string;
+
+    if (param && typeof param === 'object' && 'value' in param) {
+      value = param.value;
+      dataType = param.dataType || inferArrowType(param.value);
+    } else {
+      value = param;
+      dataType = inferArrowType(param);
+    }
+
+    columns[fieldName] = [convertValue(value, dataType)];
+    types[fieldName] = dataType;
+  }
+
+  return { columns, types };
+}
+
+/**
+ * Serializes named parameters to Arrow IPC format for DoPut
+ */
+export function serializeNamedParametersToIPC(
+  params: Record<string, any>,
+): Uint8Array {
+  if (Object.keys(params).length === 0) {
+    return new Uint8Array(0);
+  }
+
+  const { columns } = buildNamedParameterColumns(params);
+  const table = tableFromArrays(columns);
+  return tableToIPC(table);
+}
+
+/**
  * Flight SQL action types (string identifiers for DoAction)
  */
 export const FlightSqlActions = {
