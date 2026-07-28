@@ -3,7 +3,10 @@
  */
 
 import { SpiceClient } from '../src';
-import type { SearchResponse, WireSearchResponse } from '../src';
+import type { SearchResponse } from '../src';
+// `WireSearchResponse` is @internal, so it is imported from the module that declares
+// it rather than re-exported from the public entry point.
+import type { WireSearchResponse } from '../src/interfaces';
 
 // Mock fetch for testing
 const mockFetch = jest.fn();

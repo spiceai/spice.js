@@ -183,7 +183,10 @@ export interface SearchMatch {
  * Differs from {@link SearchMatch} in two ways, both of which
  * {@link normalizeSearchResponse} reconciles:
  * - the similarity score is named `_score`
- * - `data`, `primary_key`, `matches` and `metadata` are omitted entirely when empty
+ * - `data`, `primary_key` and `metadata` are omitted entirely when empty
+ *
+ * The four object-valued fields are optional so that a match survives a runtime
+ * that omits any of them; `normalizeSearchResponse` fills each in as `{}`.
  *
  * @internal
  */
