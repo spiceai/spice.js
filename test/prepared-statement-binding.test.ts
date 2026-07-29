@@ -15,6 +15,8 @@ import {
   serializeParametersToIPC,
 } from '../src/adbc/client';
 import { splitArrowIpcStream } from '../src/grpc/client.node';
+import { arrowTypeFor, normalizeParam } from '../src/adbc/client';
+import { Param } from '../src/param';
 
 const IPC_CONTINUATION_MARKER = 0xffffffff;
 
@@ -157,5 +159,76 @@ describe('Parameter binding', () => {
       );
       expect(table.getChildAt(0)?.get(0)).toBe("O'Brien");
     });
+  });
+});
+
+
+describe('explicit Param types', () => {
+  const schemaOf = (bytes: Uint8Array) =>
+    arrow
+      .tableFromIPC(bytes)
+      .schema.fields.map((f) => `${f.name}:${f.type}`)
+      .join(', ');
+
+  // The public Param class uses { value, type, options }; the column builder
+  // speaks { value, dataType }. Without normalization an explicit type is
+  // silently inferred away.
+  test('normalizes a public Param into the internal shape', () => {
+    expect(normalizeParam(Param.int32(5))).toEqual({
+      value: 5,
+      dataType: 'int32',
+      options: undefined,
+    });
+  });
+
+  test('passes a raw value through untouched', () => {
+    expect(normalizeParam(42)).toEqual({ value: 42 });
+    expect(normalizeParam('text')).toEqual({ value: 'text' });
+    expect(normalizeParam(null)).toEqual({ value: null });
+  });
+
+  test('accepts the internal shape as-is', () => {
+    expect(normalizeParam({ value: 1, dataType: 'int16' })).toEqual({
+      value: 1,
+      dataType: 'int16',
+      options: undefined,
+    });
+  });
+
+  test('an explicit type reaches the Arrow schema', () => {
+    // A plain number infers Int64; Param.int32 must not.
+    expect(schemaOf(serializeParametersToIPC([42]))).toBe('$1:Int64');
+    expect(schemaOf(serializeParametersToIPC([Param.int32(42)]))).toBe('$1:Int32');
+    expect(schemaOf(serializeParametersToIPC([Param.int16(7)]))).toBe('$1:Int16');
+    expect(schemaOf(serializeParametersToIPC([Param.float32(1.5)]))).toBe(
+      '$1:Float32',
+    );
+  });
+
+  test('mixed typed and untyped parameters keep their positions', () => {
+    expect(
+      schemaOf(serializeParametersToIPC([Param.int32(1), 'plain', Param.float32(2.5)])),
+    ).toBe('$1:Int32, $2:Utf8, $3:Float32');
+  });
+
+  test('named parameters honour explicit types too', () => {
+    expect(schemaOf(serializeNamedParametersToIPC({ nm: Param.int32(9) }))).toBe(
+      'nm:Int32',
+    );
+  });
+
+  test('a type needing absent options falls back to inference', () => {
+    // Without a unit there is nothing to resolve, so inference handles it
+    // rather than the code guessing a unit.
+    expect(arrowTypeFor('time32', undefined)).toBeUndefined();
+    expect(arrowTypeFor('decimal128', undefined)).toBeUndefined();
+    expect(arrowTypeFor('fixed_size_binary', undefined)).toBeUndefined();
+    expect(arrowTypeFor('unknown-type', undefined)).toBeUndefined();
+  });
+
+  test('resolves types that need no options', () => {
+    expect(arrowTypeFor('int32')?.toString()).toBe('Int32');
+    expect(arrowTypeFor('bool')?.toString()).toBe('Bool');
+    expect(arrowTypeFor('utf8')?.toString()).toBe('Utf8');
   });
 });
