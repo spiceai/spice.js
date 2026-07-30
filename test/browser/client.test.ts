@@ -38,9 +38,11 @@ describe('Browser SpiceClient', () => {
       expect(customClient).toBeInstanceOf(SpiceClient);
     });
 
-    test('should log configuration on initialization', () => {
+    test('should log configuration on initialization when SPICE_DEBUG is set', () => {
       consoleLogSpy.mockRestore();
       const debugSpy = jest.spyOn(console, 'debug').mockImplementation();
+      const originalEnv = process.env.SPICE_DEBUG;
+      process.env.SPICE_DEBUG = 'true';
 
       new SpiceClient({
         httpUrl: 'http://localhost:8090',
@@ -49,6 +51,7 @@ describe('Browser SpiceClient', () => {
 
       expect(debugSpy).toHaveBeenCalled();
       debugSpy.mockRestore();
+      process.env.SPICE_DEBUG = originalEnv;
     });
 
     test('should not log when logging is disabled', () => {
@@ -173,7 +176,7 @@ describe('Browser SpiceClient', () => {
   });
 
   describe('SQL Queries', () => {
-    test('should execute SQL query via HTTP', async () => {
+    test('should execute SQL query via HTTP with JSON body (supports parameterized queries)', async () => {
       const mockResponse = {
         schema: [{ name: 'id', data_type: 'Int32' }],
         rows: [[1], [2], [3]],
@@ -202,6 +205,10 @@ describe('Browser SpiceClient', () => {
             // Local OSS runtime uses application/json
             Accept: 'application/json',
           }),
+          body: JSON.stringify({
+            sql: 'SELECT * FROM test_table',
+            parameters: [],
+          }),
         }),
       );
     });
@@ -219,7 +226,7 @@ describe('Browser SpiceClient', () => {
       await expect(client.sql('INVALID SQL')).rejects.toThrow();
     });
 
-    test('should execute sqlJson query', async () => {
+    test('should execute sqlJson query with text/plain body', async () => {
       const mockResponse = {
         schema: [{ name: 'id', data_type: 'Int32' }],
         rows: [[1], [2]],
@@ -241,6 +248,19 @@ describe('Browser SpiceClient', () => {
       expect(result).toHaveProperty('schema');
       expect(result).toHaveProperty('data');
       expect(result).toHaveProperty('execution_time_ms');
+
+      // sqlJson uses text/plain Content-Type (no parameterized query support)
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:8090/v1/sql',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'text/plain',
+            Accept: 'application/vnd.spiceai.sql.v1+json',
+          }),
+          body: 'SELECT * FROM test_table',
+        }),
+      );
     });
 
     test('should preserve numeric types in HTTP mode (sqlJson)', async () => {
