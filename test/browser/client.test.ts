@@ -176,7 +176,7 @@ describe('Browser SpiceClient', () => {
   });
 
   describe('SQL Queries', () => {
-    test('should execute SQL query via HTTP with JSON body (supports parameterized queries)', async () => {
+    test('should execute SQL query via HTTP with text/plain body when no parameters', async () => {
       const mockResponse = {
         schema: [{ name: 'id', data_type: 'Int32' }],
         rows: [[1], [2], [3]],
@@ -200,14 +200,54 @@ describe('Browser SpiceClient', () => {
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            // Parameterized queries use JSON format
-            'Content-Type': 'application/json',
+            // Plain queries use raw SQL text — the format every endpoint
+            // accepts, including Spice Cloud
+            'Content-Type': 'text/plain',
             // Local OSS runtime uses application/json
             Accept: 'application/json',
           }),
+          body: 'SELECT * FROM test_table',
+        }),
+      );
+    });
+
+    test('should execute parameterized SQL query via HTTP with JSON body', async () => {
+      const mockResponse = {
+        schema: [{ name: 'id', data_type: 'Int32' }],
+        rows: [[1]],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {
+          get: jest.fn().mockReturnValue('application/json'),
+        },
+        text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+        json: jest.fn().mockResolvedValue(mockResponse),
+      });
+
+      const result = await client.sql(
+        'SELECT * FROM test_table WHERE id = $1',
+        {
+          parameters: [1],
+        },
+      );
+
+      expect(result).toBeDefined();
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:8090/v1/sql',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            // Parameterized queries use the JSON envelope understood by the
+            // OSS runtime
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          }),
           body: JSON.stringify({
-            sql: 'SELECT * FROM test_table',
-            parameters: [],
+            sql: 'SELECT * FROM test_table WHERE id = $1',
+            parameters: [1],
           }),
         }),
       );

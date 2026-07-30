@@ -63,10 +63,35 @@ describe('gRPC to HTTP fallback', () => {
     const [url, options] = fetchMock.mock.calls[0];
     expect(url).toBe(`${HTTP_URL}/v1/sql`);
     expect(options.method).toBe('POST');
+    // Plain queries are sent as raw SQL text — the format every endpoint
+    // accepts, including Spice Cloud
+    expect(options.body).toBe('SELECT 42 as answer');
+    expect(options.headers['Content-Type']).toBe('text/plain');
+  });
+
+  test('falls back to HTTP with the JSON envelope when parameters are present', async () => {
+    const client = makeClient();
+
+    await client.sql('SELECT $1 as answer', { parameters: [42] });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, options] = fetchMock.mock.calls[0];
+    expect(options.headers['Content-Type']).toBe('application/json');
     expect(JSON.parse(options.body)).toEqual({
-      sql: 'SELECT 42 as answer',
-      parameters: [],
+      sql: 'SELECT $1 as answer',
+      parameters: [42],
     });
+  });
+
+  test('rejects parameterized HTTP fallback against Spice Cloud', async () => {
+    const client = makeClient({ httpUrl: 'https://data.spiceai.io' });
+
+    await expect(
+      client.sql('SELECT $1 as answer', { parameters: [42] }),
+    ).rejects.toThrow(
+      'Parameterized queries over HTTP are not supported by Spice Cloud',
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   test('rejects without falling back when flightOnly is enabled', async () => {

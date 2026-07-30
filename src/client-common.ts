@@ -805,15 +805,31 @@ export class SpiceClient {
       ? 'application/vnd.spiceai.sql.v1+json' // data.spiceai.io returns schema with 'data' field
       : 'application/json'; // OSS returns plain JSON array
 
-    // Prepare request body with parameters
     const httpParameters = this.convertParametersForHttp(parameters);
-    const requestBody = JSON.stringify({
-      sql: queryText,
-      parameters: httpParameters,
-    });
+
+    // The JSON envelope ({sql, parameters}) is only understood by the OSS
+    // runtime, and only when Content-Type is exactly application/json.
+    // Spice Cloud parses every request body as raw SQL, so queries without
+    // parameters are sent as plain text — the format every endpoint accepts.
+    let requestBody: string;
+    let contentType: string;
+    if (httpParameters.length === 0) {
+      requestBody = queryText;
+      contentType = 'text/plain';
+    } else if (this._isSpiceCloud) {
+      throw new Error(
+        'Parameterized queries over HTTP are not supported by Spice Cloud. Use Arrow Flight (gRPC) for parameterized queries.',
+      );
+    } else {
+      requestBody = JSON.stringify({
+        sql: queryText,
+        parameters: httpParameters,
+      });
+      contentType = 'application/json';
+    }
 
     const requestHeaders: { [key: string]: string } = {
-      'Content-Type': 'application/json',
+      'Content-Type': contentType,
       Accept: acceptHeader,
     };
 
