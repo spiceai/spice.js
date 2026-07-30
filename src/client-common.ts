@@ -685,7 +685,39 @@ export class SpiceClient {
     if (this._grpcClient) {
       const useGrpc = await this._grpcClient.ensureInitialized();
       if (useGrpc) {
-        return this.doGrpcQueryRequest(queryText, parameters, onData, headers);
+        // Track whether any chunk has reached the caller's callback — once it
+        // has, falling back to HTTP would deliver duplicate data
+        let dataSent = false;
+        const trackingOnData = onData
+          ? (table: Table) => {
+              dataSent = true;
+              onData(table);
+            }
+          : undefined;
+
+        try {
+          return await this.doGrpcQueryRequest(
+            queryText,
+            parameters,
+            trackingOnData,
+            headers,
+          );
+        } catch (error) {
+          if (this._flightOnly || dataSent) {
+            throw error;
+          }
+          this._logger.warn(
+            `[spice.js] Arrow Flight query failed, falling back to HTTP: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+          return this.doHttpQueryRequest(
+            queryText,
+            parameters,
+            onData,
+            headers,
+          );
+        }
       }
 
       // If flightOnly mode is enabled and gRPC failed, throw error
