@@ -44,14 +44,20 @@ describe('Browser SpiceClient', () => {
       const originalEnv = process.env.SPICE_DEBUG;
       process.env.SPICE_DEBUG = 'true';
 
-      new SpiceClient({
-        httpUrl: 'http://localhost:8090',
-        apiKey: 'test-key',
-      });
+      try {
+        new SpiceClient({
+          httpUrl: 'http://localhost:8090',
+          apiKey: 'test-key',
+        });
 
-      expect(debugSpy).toHaveBeenCalled();
-      debugSpy.mockRestore();
-      process.env.SPICE_DEBUG = originalEnv;
+        expect(debugSpy).toHaveBeenCalled();
+      } finally {
+        debugSpy.mockRestore();
+        // Assigning undefined to process.env stores the string "undefined" —
+        // delete instead when the variable was originally unset
+        if (originalEnv === undefined) delete process.env.SPICE_DEBUG;
+        else process.env.SPICE_DEBUG = originalEnv;
+      }
     });
 
     test('should not log when logging is disabled', () => {

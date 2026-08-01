@@ -83,6 +83,22 @@ describe('gRPC to HTTP fallback', () => {
     });
   });
 
+  test('custom headers pass through but cannot override the computed Content-Type', async () => {
+    const client = makeClient();
+
+    await client.sql('SELECT 1', undefined, undefined, {
+      'Content-Type': 'application/json',
+      'X-Request-Id': 'abc-123',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, options] = fetchMock.mock.calls[0];
+    // The SDK picks the body format, so its Content-Type wins over the
+    // caller-supplied one; unrelated custom headers still pass through
+    expect(options.headers['Content-Type']).toBe('text/plain');
+    expect(options.headers['X-Request-Id']).toBe('abc-123');
+  });
+
   test('rejects parameterized HTTP fallback against Spice Cloud', async () => {
     const client = makeClient({ httpUrl: 'https://data.spiceai.io' });
 

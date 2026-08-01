@@ -828,15 +828,15 @@ export class SpiceClient {
       contentType = 'application/json';
     }
 
+    // Custom headers merge first — the computed Content-Type/Accept always
+    // win, because the SDK picks the body format (raw SQL vs JSON envelope)
+    // and parses the response according to these values; a caller override
+    // would desync the headers from the body.
     const requestHeaders: { [key: string]: string } = {
+      ...headers,
       'Content-Type': contentType,
       Accept: acceptHeader,
     };
-
-    // Merge custom headers if provided
-    if (headers) {
-      Object.assign(requestHeaders, headers);
-    }
 
     const response = await this.fetchInternal(
       'POST',
