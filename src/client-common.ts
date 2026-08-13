@@ -17,6 +17,9 @@ import {
   type SearchOptions,
   type SearchResponse,
   type WireSearchResponse,
+  type ActiveQuery,
+  type ActiveQueriesResponse,
+  type CancelActiveQueryResponse,
 } from './interfaces';
 import type { GrpcFlightClient } from './grpc/client.node';
 import {
@@ -1494,6 +1497,99 @@ export class SpiceClient {
     }
 
     return await response.json();
+  }
+
+  /**
+   * Lists the synchronous queries this client currently has running.
+   *
+   * Synchronous queries are the ones started by `sql()`, `query()`, `sqlJson()`,
+   * FlightSQL, `nsql()` and `search()` — not async query jobs, which the runtime
+   * only serves in cluster mode.
+   *
+   * The runtime does not return a query's id to the client that submitted it, so
+   * this is how to find the id that {@link cancelActiveQuery} needs. Results are
+   * scoped to this client, so another caller's in-flight queries are never listed.
+   *
+   * @returns Promise resolving to the active queries
+   */
+  async listActiveQueries(): Promise<ActiveQuery[]> {
+    if (!this._httpUrl) {
+      throw new Error('HTTP URL is required for listing active queries');
+    }
+
+    const response = await this.fetchInternal('GET', '/v1/sql/active');
+
+    if (response.status === 403) {
+      throw new Error(
+        'The configured API key does not allow listing queries. Use a key with write access.',
+      );
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to list active queries: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    const payload = (await response.json()) as ActiveQueriesResponse | null;
+    return payload?.queries ?? [];
+  }
+
+  /**
+   * Cancels a running synchronous query by id.
+   *
+   * `queryId` comes from {@link listActiveQueries}. Cancellation is scoped to this
+   * client: an id belonging to another caller is reported as not found rather than
+   * cancelled.
+   *
+   * @param queryId - The id of the query to cancel
+   * @returns Promise resolving to the cancellation response
+   */
+  async cancelActiveQuery(
+    queryId: string,
+  ): Promise<CancelActiveQueryResponse> {
+    if (!this._httpUrl) {
+      throw new Error('HTTP URL is required for cancelling a query');
+    }
+
+    if (!queryId) {
+      throw new Error(
+        'queryId is required. Use listActiveQueries() to find one.',
+      );
+    }
+
+    const response = await this.fetchInternal(
+      'POST',
+      `/v1/sql/${encodeURIComponent(queryId)}/cancel`,
+    );
+
+    if (response.status === 400) {
+      throw new Error(
+        `Query id '${queryId}' is not a valid UUID. Use the query_id from listActiveQueries().`,
+      );
+    }
+
+    if (response.status === 403) {
+      throw new Error(
+        'The configured API key does not allow cancelling queries. Use a key with write access.',
+      );
+    }
+
+    if (response.status === 404) {
+      throw new Error(
+        `No active query '${queryId}' found. It may have already finished, or it was submitted by a different client.`,
+      );
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to cancel query '${queryId}': ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    return (await response.json()) as CancelActiveQueryResponse;
   }
 
   /**

@@ -224,6 +224,56 @@ export interface QueryHeaders {
   [key: string]: string;
 }
 
+/**
+ * A synchronous query currently running on the runtime.
+ */
+export interface ActiveQuery {
+  /**
+   * Server-assigned id, and what cancelActiveQuery() takes
+   */
+  query_id: string;
+  /**
+   * The protocol the query arrived on: 'http', 'flight', 'flightsql' or 'internal'
+   */
+  protocol: string;
+  /**
+   * The query's SQL, truncated by the runtime for display
+   */
+  sql_preview: string;
+  /**
+   * When the query started, in milliseconds since the Unix epoch
+   */
+  started_at_ms: number;
+}
+
+/**
+ * Response from listing the active synchronous queries.
+ */
+export interface ActiveQueriesResponse {
+  /**
+   * The active queries the caller currently has running
+   */
+  queries: ActiveQuery[];
+  /**
+   * Number of active queries reported by the runtime
+   */
+  total_count: number;
+}
+
+/**
+ * Response from cancelling a running synchronous query.
+ */
+export interface CancelActiveQueryResponse {
+  /**
+   * The id of the query that was cancelled
+   */
+  query_id: string;
+  /**
+   * The query's state after cancellation, such as 'cancelled'
+   */
+  status: string;
+}
+
 // Legacy interface for backward compatibility
 /** @deprecated Use RefreshAccelerationOptions instead */
 export interface RefreshOverrides extends RefreshAccelerationOptions {}
