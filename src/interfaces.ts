@@ -201,7 +201,7 @@ export interface ActiveQuery {
    */
   query_id: string;
   /**
-   * The protocol the query arrived on, such as 'flight' or 'http'
+   * The protocol the query arrived on: 'http', 'flight', 'flightsql' or 'internal'
    */
   protocol: string;
   /**

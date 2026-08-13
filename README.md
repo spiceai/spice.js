@@ -581,9 +581,11 @@ if (queries.length > 0) {
 }
 ```
 
-Each `ActiveQuery` carries `query_id`, `protocol` (`flight` or `http`), a truncated `sql_preview`, and `started_at_ms` as milliseconds since the Unix epoch.
+Each `ActiveQuery` carries `query_id`, `protocol` (`http`, `flight`, `flightsql`, or `internal`), a truncated `sql_preview`, and `started_at_ms` as milliseconds since the Unix epoch.
 
-`cancelActiveQuery()` throws when the id is not a UUID, when the API key lacks write access, or when no such query is running — including the case where the id belongs to a different client, which the runtime reports as not found rather than cancelling.
+`cancelActiveQuery()` throws when the id is not a UUID, when the API key lacks write access, or when no such query is running — including the case where the id belongs to a different caller, which the runtime reports as not found rather than cancelling.
+
+The boundary is the **caller's identity, not the client instance**: the runtime scopes both `listActiveQueries()` and `cancelActiveQuery()` to the authenticated principal. Two clients using the same API key therefore share one set and can cancel each other's queries, and unauthenticated requests all share the runtime's public scope. Do not rely on one `SpiceClient` seeing only its own queries.
 
 Both work on Node and in the browser, since they use the HTTP control plane rather than Flight.
 
