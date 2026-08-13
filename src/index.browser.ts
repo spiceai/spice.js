@@ -40,5 +40,8 @@ export type {
   SearchResponse,
   SearchMatch,
   QueryHeaders,
+  ActiveQuery,
+  ActiveQueriesResponse,
+  CancelActiveQueryResponse,
   RefreshOverrides, // deprecated, kept for backward compatibility
 } from './interfaces';
