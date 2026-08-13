@@ -560,6 +560,35 @@ Options:
 - `refresh_sql`: Custom SQL query to use for the refresh
 - `refresh_jitter_max`: Maximum jitter time for refresh scheduling
 
+#### `listActiveQueries()` / `cancelActiveQuery(queryId)` - List and cancel running queries
+
+`listActiveQueries()` reports the synchronous queries this client currently has running — those started by `sql()`, `query()`, `sqlJson()`, FlightSQL, `nsql()` and `search()` — and `cancelActiveQuery()` stops one by id.
+
+The runtime does not hand a query's id back to the client that submitted it, so the two are used together: list to find the query, then cancel it. Both are scoped to the caller, so a client only ever sees and cancels its own queries.
+
+```js
+const queries = await spiceClient.listActiveQueries();
+
+for (const query of queries) {
+  console.log(`${query.query_id} [${query.protocol}] ${query.sql_preview}`);
+  console.log(`  started at ${new Date(query.started_at_ms).toISOString()}`);
+}
+
+// Cancel a long-running query by id.
+if (queries.length > 0) {
+  const result = await spiceClient.cancelActiveQuery(queries[0].query_id);
+  console.log(`${result.query_id} is now ${result.status}`);
+}
+```
+
+Each `ActiveQuery` carries `query_id`, `protocol` (`http`, `flight`, `flightsql`, or `internal`), a truncated `sql_preview`, and `started_at_ms` as milliseconds since the Unix epoch.
+
+`cancelActiveQuery()` throws when the id is not a UUID, when the API key lacks write access, or when no such query is running — including the case where the id belongs to a different caller, which the runtime reports as not found rather than cancelling.
+
+The boundary is the **caller's identity, not the client instance**: the runtime scopes both `listActiveQueries()` and `cancelActiveQuery()` to the authenticated principal. Two clients using the same API key therefore share one set and can cancel each other's queries, and unauthenticated requests all share the runtime's public scope. Do not rely on one `SpiceClient` seeing only its own queries.
+
+Both work on Node and in the browser, since they use the HTTP control plane rather than Flight.
+
 #### `nsql(request)` - Natural language to SQL (NSQL)
 
 The `nsql()` method converts natural language queries into SQL and executes them, returning both the results and the generated SQL.
