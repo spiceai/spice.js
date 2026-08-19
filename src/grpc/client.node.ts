@@ -8,13 +8,69 @@ import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import * as protobuf from 'protobufjs';
 import { EventEmitter } from 'stream';
+import { Message } from 'apache-arrow';
 import { FlightClient, FlightInfo, DescriptorType, Ticket } from '../flight';
 import { platform } from '../platform/node';
 import { Logger } from '../logger';
-import { Param } from '../param';
-// Note: Flight SQL prepared statements are not currently supported by the Spice server.
-// The server uses a custom protocol. For parameterized queries, we use client-side substitution.
-// This is secure for the supported use cases and matches the HTTP API behavior.
+import {
+  FlightSqlActions,
+  decodeCreatePreparedStatementResult,
+  encodeClosePreparedStatementRequest,
+  encodeCommandPreparedStatementQuery,
+  encodeCreatePreparedStatementRequest,
+  serializeNamedParametersToIPC,
+  serializeParametersToIPC,
+} from '../adbc/client';
+
+/** Marks the start of each message in an Arrow IPC stream. */
+const IPC_CONTINUATION_MARKER = 0xffffffff;
+
+/**
+ * Splits an Arrow IPC stream into the header/body pairs Flight expects.
+ *
+ * An IPC stream frames each message as
+ * `[continuation][metadata length][metadata][body]`, while Flight carries the
+ * metadata and the body as separate fields. Sending the undivided stream as one body
+ * makes the server fail to decode the root message.
+ */
+export function splitArrowIpcStream(
+  bytes: Uint8Array,
+): { header: Buffer; body: Buffer }[] {
+  const buffer = Buffer.from(bytes);
+  const messages: { header: Buffer; body: Buffer }[] = [];
+  let offset = 0;
+
+  while (offset + 8 <= buffer.length) {
+    if (buffer.readUInt32LE(offset) !== IPC_CONTINUATION_MARKER) {
+      break;
+    }
+    offset += 4;
+
+    const metadataLength = buffer.readUInt32LE(offset);
+    offset += 4;
+    if (metadataLength === 0) {
+      break; // end-of-stream marker
+    }
+
+    const header = buffer.subarray(offset, offset + metadataLength);
+    offset += metadataLength;
+
+    const bodyLength = Number(arrowMessageBodyLength(header));
+    const body = buffer.subarray(offset, offset + bodyLength);
+    offset += bodyLength;
+
+    messages.push({ header, body });
+  }
+
+  return messages;
+}
+
+/**
+ * Reads the body length declared by an Arrow IPC message header.
+ */
+function arrowMessageBodyLength(header: Buffer): bigint | number {
+  return Message.decode(header).bodyLength;
+}
 
 const PROTO_PATH = './proto/Flight.proto';
 const PROTO_DOWNLOAD_URL =
@@ -250,94 +306,161 @@ export class GrpcFlightClient {
   }
 
   /**
-   * Substitutes parameters into a SQL query using positional placeholders ($1, $2, etc.)
-   * This is a client-side substitution - the server will receive the final SQL.
-   * Parameters are processed in reverse order to avoid $1 matching the '1' in $10.
+   * Runs a parameterized query as a Flight SQL prepared statement.
+   *
+   * CreatePreparedStatement -> DoPut (bind) -> GetFlightInfo -> DoGet, then
+   * ClosePreparedStatement once the result stream finishes. Values travel as a typed
+   * Arrow record batch, so they are never spliced into the SQL text and their types
+   * survive the round trip.
    */
-  private substitutePositionalParameters(
+  private async executePreparedStatement(
+    client: FlightClient,
     queryText: string,
-    parameters: any[],
-  ): string {
-    let result = queryText;
-    // Process parameters in reverse order (highest to lowest) to avoid
-    // $1 replacing the '1' in $10, $11, etc.
-    for (let i = parameters.length - 1; i >= 0; i--) {
-      const value = this.formatParameterValue(parameters[i]);
-      // Use regex to match $N not followed by another digit
-      const regex = new RegExp(`\\$${i + 1}(?![0-9])`, 'g');
-      result = result.replace(regex, value);
-    }
-    return result;
-  }
-
-  /**
-   * Substitutes named parameters into a SQL query ($name style)
-   * This is a client-side substitution - the server will receive the final SQL.
-   * Uses PostgreSQL-style $param_name syntax for consistency with positional $1, $2 placeholders.
-   */
-  private substituteNamedParameters(
-    queryText: string,
-    parameters: Record<string, any>,
-  ): string {
-    let result = queryText;
-    // Sort parameter names by length (descending) to avoid partial matches
-    // e.g., $name should be replaced before $n
-    const sortedNames = Object.keys(parameters).sort(
-      (a, b) => b.length - a.length,
+    parameters: any[] | Record<string, any>,
+  ): Promise<EventEmitter> {
+    const created = await this.doAction(
+      client,
+      FlightSqlActions.CreatePreparedStatement,
+      encodeCreatePreparedStatementRequest(queryText),
     );
-    for (const name of sortedNames) {
-      const value = parameters[name];
-      // Match $name followed by non-alphanumeric or end of string
-      // This ensures $name_extra won't match when looking for $name
-      const regex = new RegExp(`\\$${name}(?![a-zA-Z0-9_])`, 'g');
-      result = result.replace(regex, this.formatParameterValue(value));
+
+    if (created.length === 0) {
+      throw new Error(
+        'Failed to prepare the query: the runtime returned no prepared statement',
+      );
     }
-    return result;
+
+    const { preparedStatementHandle } = decodeCreatePreparedStatementResult(
+      Buffer.from(created[0].body),
+    );
+
+    // The server may return a new handle once parameters are bound; that handle is
+    // the one the query and the close must use.
+    let handle = preparedStatementHandle;
+
+    try {
+      const ipc = Array.isArray(parameters)
+        ? serializeParametersToIPC(parameters)
+        : serializeNamedParametersToIPC(parameters);
+
+      handle = await this.bindParameters(client, handle, ipc);
+
+      const ticket = await new Promise<Ticket>((resolve, reject) => {
+        client.GetFlightInfo(
+          {
+            type: DescriptorType.CMD,
+            cmd: encodeCommandPreparedStatementQuery(handle),
+          },
+          (err: any, result: FlightInfo) => {
+            if (err) {
+              reject(err);
+              return;
+            }
+            if (!result?.endpoint?.[0]?.ticket) {
+              reject(new Error('Invalid FlightInfo response: missing ticket'));
+              return;
+            }
+            resolve(result.endpoint[0].ticket);
+          },
+        );
+      });
+
+      const stream = client.DoGet(ticket);
+
+      // Release the statement once the results are done with, either way.
+      const close = () => {
+        this.doAction(
+          client,
+          FlightSqlActions.ClosePreparedStatement,
+          encodeClosePreparedStatementRequest(handle),
+        ).catch(() => {
+          // A statement the server already dropped is not a caller-visible problem.
+        });
+      };
+      stream.once('end', close);
+      stream.once('error', close);
+
+      return stream;
+    } catch (err) {
+      await this.doAction(
+        client,
+        FlightSqlActions.ClosePreparedStatement,
+        encodeClosePreparedStatementRequest(handle),
+      ).catch(() => {
+        // Preserve the original failure.
+      });
+      throw err;
+    }
   }
 
   /**
-   * Formats a parameter value for SQL substitution
+   * Sends a DoAction and collects its results.
    */
-  private formatParameterValue(value: any): string {
-    if (value === null || value === undefined) {
-      return 'NULL';
-    }
+  private doAction(
+    client: FlightClient,
+    type: string,
+    body: Buffer,
+  ): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      const results: any[] = [];
+      const call = client.DoAction({ type, body });
+      call.on('data', (data: any) => results.push(data));
+      call.on('error', reject);
+      call.on('end', () => resolve(results));
+    });
+  }
 
-    // Handle Param objects - extract value and potentially use type information
-    if (value instanceof Param) {
-      // For now, we format using the underlying value
-      // Type information could be used for more sophisticated formatting in the future
-      return this.formatParameterValue(value.value);
-    }
+  /**
+   * Binds a parameter batch to a prepared statement via DoPut.
+   *
+   * Returns the handle to use for the query — the server may hand back an updated one.
+   */
+  private bindParameters(
+    client: FlightClient,
+    handle: Buffer,
+    ipcBytes: Uint8Array,
+  ): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const results: any[] = [];
+      const call = client.DoPut();
 
-    // Handle legacy Param-like objects (for backward compatibility)
-    if (
-      value &&
-      typeof value === 'object' &&
-      'value' in value &&
-      'type' in value
-    ) {
-      return this.formatParameterValue(value.value);
-    }
+      call.on('data', (data: any) => results.push(data));
+      call.on('error', reject);
+      call.on('end', () => {
+        const metadata = results[0]?.appMetadata ?? results[0]?.app_metadata;
+        if (metadata && metadata.length > 0) {
+          try {
+            const updated = decodeCreatePreparedStatementResult(
+              Buffer.from(metadata),
+            );
+            if (updated.preparedStatementHandle) {
+              resolve(updated.preparedStatementHandle);
+              return;
+            }
+          } catch {
+            // No updated handle in the response; the original stays valid.
+          }
+        }
+        resolve(handle);
+      });
 
-    if (typeof value === 'string') {
-      // Escape single quotes and wrap in quotes
-      return `'${value.replace(/'/g, "''")}'`;
-    }
-    if (typeof value === 'boolean') {
-      return value ? 'TRUE' : 'FALSE';
-    }
-    if (typeof value === 'number' || typeof value === 'bigint') {
-      return String(value);
-    }
-    if (value instanceof Date) {
-      return `'${value.toISOString()}'`;
-    }
-    if (Buffer.isBuffer(value) || value instanceof Uint8Array) {
-      return `X'${Buffer.from(value).toString('hex')}'`;
-    }
-    // Default: convert to string
-    return `'${String(value).replace(/'/g, "''")}'`;
+      const cmd = encodeCommandPreparedStatementQuery(handle);
+      const messages = splitArrowIpcStream(ipcBytes);
+
+      messages.forEach((message, index) => {
+        call.write({
+          // The descriptor identifies which statement the batch binds to, and belongs
+          // on the first message of the stream.
+          ...(index === 0
+            ? { flightDescriptor: { type: DescriptorType.CMD, cmd } }
+            : {}),
+          dataHeader: message.header,
+          dataBody: message.body,
+          appMetadata: Buffer.alloc(0),
+        });
+      });
+      call.end();
+    });
   }
 
   async executeQuery(
@@ -366,22 +489,14 @@ export class GrpcFlightClient {
       ((Array.isArray(parameters) && parameters.length > 0) ||
         (!Array.isArray(parameters) && Object.keys(parameters).length > 0));
 
-    // For parameterized queries, use client-side substitution
-    // Note: Server-side parameter binding via Flight SQL prepared statements
-    // is not supported by the Spice server's current implementation.
-    let finalQuery = queryText;
+    // Parameterized queries bind server-side via Flight SQL prepared statements,
+    // so values keep their types and never enter the SQL text.
     if (hasParameters) {
-      if (Array.isArray(parameters)) {
-        // Positional parameters: $1, $2, etc.
-        finalQuery = this.substitutePositionalParameters(queryText, parameters);
-      } else {
-        // Named parameters: $name, $param, etc.
-        finalQuery = this.substituteNamedParameters(queryText, parameters);
-      }
+      return this.executePreparedStatement(client, queryText, parameters);
     }
 
     // Use simple GetFlightInfo/DoGet
-    const commandBuff = Buffer.from(finalQuery, 'utf8');
+    const commandBuff = Buffer.from(queryText, 'utf8');
 
     const flightTicket = await new Promise<Ticket>((resolve, reject) => {
       client.GetFlightInfo(
