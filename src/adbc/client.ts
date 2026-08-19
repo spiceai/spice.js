@@ -3,7 +3,257 @@
  * Implements Flight SQL prepared statement protocol for server-side parameter binding
  */
 
-import { tableFromArrays, tableToIPC } from 'apache-arrow';
+import {
+  DataType,
+  Table,
+  tableFromArrays,
+  tableToIPC,
+  vectorFromArray,
+  Binary,
+  Bool,
+  DateDay,
+  DateMillisecond,
+  Decimal,
+  DurationMicrosecond,
+  DurationMillisecond,
+  DurationNanosecond,
+  DurationSecond,
+  FixedSizeBinary,
+  Float16,
+  Float32,
+  Float64,
+  Int16,
+  Int32,
+  Int64,
+  Int8,
+  LargeBinary,
+  LargeUtf8,
+  TimeMicrosecond,
+  TimeMillisecond,
+  TimeNanosecond,
+  TimeSecond,
+  TimestampMicrosecond,
+  TimestampMillisecond,
+  TimestampNanosecond,
+  TimestampSecond,
+  Uint16,
+  Uint32,
+  Uint64,
+  Uint8,
+  Utf8,
+} from 'apache-arrow';
+
+/**
+ * Maps the public {@link Param} type identifiers (`src/param.ts`, PascalCase)
+ * onto the lowercase names used internally by {@link buildParameterColumns}.
+ *
+ * Without this, a `Param.int32(5)` reaches the serializer looking like an
+ * untyped `{ value }` wrapper and its explicit type is silently inferred away.
+ */
+const PARAM_TYPE_IDS: { [key: string]: string } = {
+  Int8: 'int8',
+  Int16: 'int16',
+  Int32: 'int32',
+  Int64: 'int64',
+  UInt8: 'uint8',
+  UInt16: 'uint16',
+  UInt32: 'uint32',
+  UInt64: 'uint64',
+  Float16: 'float16',
+  Float32: 'float32',
+  Float64: 'float64',
+  String: 'utf8',
+  LargeString: 'large_utf8',
+  Binary: 'binary',
+  LargeBinary: 'large_binary',
+  FixedSizeBinary: 'fixed_size_binary',
+  Boolean: 'bool',
+  Date32: 'date32',
+  Date64: 'date64',
+  Time32: 'time32',
+  Time64: 'time64',
+  Timestamp: 'timestamp',
+  Duration: 'duration',
+  Decimal128: 'decimal128',
+  Decimal256: 'decimal256',
+  Null: 'null',
+};
+
+/**
+ * Normalizes a parameter into the `{ value, dataType }` shape the column
+ * builder expects, whatever form the caller supplied.
+ *
+ * Accepts a raw value, a {@link Param} (`{ value, type, options }`), or an
+ * already-internal `{ value, dataType }` object.
+ */
+export function normalizeParam(param: any): {
+  value: any;
+  dataType?: string;
+  options?: any;
+} {
+  if (param === null || param === undefined || typeof param !== 'object') {
+    return { value: param };
+  }
+
+  if (!('value' in param)) {
+    return { value: param };
+  }
+
+  // Internal shape already.
+  if (typeof param.dataType === 'string') {
+    return { value: param.value, dataType: param.dataType, options: param.options };
+  }
+
+  // Public Param: { value, type: ArrowTypeId, options }.
+  if (typeof param.type === 'string') {
+    const mapped = PARAM_TYPE_IDS[param.type];
+    if (mapped) {
+      return { value: param.value, dataType: mapped, options: param.options };
+    }
+  }
+
+  return { value: param.value, options: param.options };
+}
+
+/**
+ * Resolves an internal type name to an Arrow type, so an explicitly typed
+ * parameter is bound as that type instead of whatever Arrow infers from the
+ * JavaScript value.
+ *
+ * Returns undefined when the type needs options that were not supplied, in
+ * which case the caller falls back to inference rather than guessing.
+ */
+export function arrowTypeFor(
+  dataType: string | undefined,
+  options?: any,
+): DataType | undefined {
+  switch (dataType) {
+    case 'int8':
+      return new Int8();
+    case 'int16':
+      return new Int16();
+    case 'int32':
+      return new Int32();
+    case 'int64':
+      return new Int64();
+    case 'uint8':
+      return new Uint8();
+    case 'uint16':
+      return new Uint16();
+    case 'uint32':
+      return new Uint32();
+    case 'uint64':
+      return new Uint64();
+    case 'float16':
+      return new Float16();
+    case 'float32':
+      return new Float32();
+    case 'float64':
+      return new Float64();
+    case 'utf8':
+      return new Utf8();
+    case 'large_utf8':
+      return new LargeUtf8();
+    case 'binary':
+      return new Binary();
+    case 'large_binary':
+      return new LargeBinary();
+    case 'bool':
+      return new Bool();
+    case 'date32':
+      return new DateDay();
+    case 'date64':
+      return new DateMillisecond();
+    case 'fixed_size_binary': {
+      const width = options?.byteWidth;
+      return typeof width === 'number' ? new FixedSizeBinary(width) : undefined;
+    }
+    case 'decimal128':
+    case 'decimal256': {
+      const { precision, scale } = options ?? {};
+      return typeof precision === 'number' && typeof scale === 'number'
+        ? new Decimal(scale, precision)
+        : undefined;
+    }
+    case 'timestamp':
+      switch (options?.unit) {
+        case 'Second':
+          return new TimestampSecond();
+        case 'Millisecond':
+          return new TimestampMillisecond();
+        case 'Nanosecond':
+          return new TimestampNanosecond();
+        default:
+          // The value converter emits microseconds.
+          return new TimestampMicrosecond();
+      }
+    case 'time32':
+    case 'time64':
+      switch (options?.unit) {
+        case 'Second':
+          return new TimeSecond();
+        case 'Millisecond':
+          return new TimeMillisecond();
+        case 'Nanosecond':
+          return new TimeNanosecond();
+        case 'Microsecond':
+          return new TimeMicrosecond();
+        default:
+          return undefined;
+      }
+    case 'duration':
+      switch (options?.unit) {
+        case 'Second':
+          return new DurationSecond();
+        case 'Millisecond':
+          return new DurationMillisecond();
+        case 'Nanosecond':
+          return new DurationNanosecond();
+        case 'Microsecond':
+          return new DurationMicrosecond();
+        default:
+          return undefined;
+      }
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Builds a single-row Arrow table, honouring explicit types where they resolve
+ * and leaving the rest to Arrow's inference.
+ */
+function buildParameterTable(
+  columns: { [key: string]: any[] },
+  types: { [key: string]: string },
+  optionsByField: { [key: string]: any },
+): Table {
+  const explicit: { [key: string]: any } = {};
+  const inferred: { [key: string]: any[] } = {};
+
+  for (const [name, values] of Object.entries(columns)) {
+    const arrowType = arrowTypeFor(types[name], optionsByField[name]);
+    if (arrowType) {
+      explicit[name] = vectorFromArray(values, arrowType);
+    } else {
+      inferred[name] = values;
+    }
+  }
+
+  if (Object.keys(explicit).length === 0) {
+    return tableFromArrays(inferred);
+  }
+
+  // tableFromArrays infers from raw arrays; explicitly typed vectors go
+  // through the Table constructor. Merge so field order follows `columns`.
+  const merged: { [key: string]: any } = {};
+  const inferredTable =
+    Object.keys(inferred).length > 0 ? tableFromArrays(inferred) : null;
+  for (const name of Object.keys(columns)) {
+    merged[name] = explicit[name] ?? inferredTable?.getChild(name);
+  }
+  return new Table(merged);
+}
 
 /**
  * Param represents a query parameter with an optional explicit Arrow type.
@@ -179,46 +429,27 @@ function convertValue(value: any, dataType: string): any {
 export function buildParameterColumns(params: any[]): {
   columns: { [key: string]: any[] };
   types: { [key: string]: string };
+  options: { [key: string]: any };
 } {
   if (params.length === 0) {
-    return { columns: {}, types: {} };
+    return { columns: {}, types: {}, options: {} };
   }
 
   const columns: { [key: string]: any[] } = {};
   const types: { [key: string]: string } = {};
+  const options: { [key: string]: any } = {};
 
   for (let i = 0; i < params.length; i++) {
-    const param = params[i];
     const fieldName = `$${i + 1}`;
+    const { value, dataType, options: opts } = normalizeParam(params[i]);
+    const resolved = dataType || inferArrowType(value);
 
-    let value: any;
-    let dataType: string;
-
-    if (
-      param &&
-      typeof param === 'object' &&
-      'value' in param &&
-      'dataType' in param
-    ) {
-      // It's a Param object with explicit type
-      value = param.value;
-      dataType = param.dataType || inferArrowType(param.value);
-    } else if (param && typeof param === 'object' && 'value' in param) {
-      // It's a Param object without explicit type
-      value = param.value;
-      dataType = inferArrowType(param.value);
-    } else {
-      // Regular value, infer type
-      value = param;
-      dataType = inferArrowType(param);
-    }
-
-    const convertedValue = convertValue(value, dataType);
-    columns[fieldName] = [convertedValue];
-    types[fieldName] = dataType;
+    columns[fieldName] = [convertValue(value, resolved)];
+    types[fieldName] = resolved;
+    options[fieldName] = opts;
   }
 
-  return { columns, types };
+  return { columns, types, options };
 }
 
 /**
@@ -229,9 +460,55 @@ export function serializeParametersToIPC(params: any[]): Uint8Array {
     return new Uint8Array(0);
   }
 
-  const { columns } = buildParameterColumns(params);
-  const table = tableFromArrays(columns);
-  return tableToIPC(table);
+  const { columns, types, options } = buildParameterColumns(params);
+  return tableToIPC(buildParameterTable(columns, types, options));
+}
+
+/**
+ * Builds column data for named parameters ($name style).
+ *
+ * The bound batch names each column with the bare placeholder name — `name`, not
+ * `$name` — even though the parameter schema the server reports back from
+ * CreatePreparedStatement spells the field with the leading `$`. Binding a column
+ * named `$name` fails with "No value found for placeholder with name $name".
+ *
+ * Positional parameters are the other way round: those columns are named `$1`, `$2`
+ * (see {@link buildParameterColumns}).
+ */
+export function buildNamedParameterColumns(params: Record<string, any>): {
+  columns: { [key: string]: any[] };
+  types: { [key: string]: string };
+  options: { [key: string]: any };
+} {
+  const columns: { [key: string]: any[] } = {};
+  const types: { [key: string]: string } = {};
+  const options: { [key: string]: any } = {};
+
+  for (const [name, param] of Object.entries(params)) {
+    const fieldName = name.startsWith('$') ? name.slice(1) : name;
+    const { value, dataType, options: opts } = normalizeParam(param);
+    const resolved = dataType || inferArrowType(value);
+
+    columns[fieldName] = [convertValue(value, resolved)];
+    types[fieldName] = resolved;
+    options[fieldName] = opts;
+  }
+
+  return { columns, types, options };
+}
+
+/**
+ * Serializes named parameters to Arrow IPC format for DoPut
+ */
+export function serializeNamedParametersToIPC(
+  params: Record<string, any>,
+): Uint8Array {
+  if (Object.keys(params).length === 0) {
+    return new Uint8Array(0);
+  }
+
+  const { columns, types, options } = buildNamedParameterColumns(params);
+  return tableToIPC(buildParameterTable(columns, types, options));
 }
 
 /**
