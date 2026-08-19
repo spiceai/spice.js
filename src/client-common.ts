@@ -16,6 +16,10 @@ import {
   type QueryParameters,
   type SearchOptions,
   type SearchResponse,
+  type WireSearchResponse,
+  type ActiveQuery,
+  type ActiveQueriesResponse,
+  type CancelActiveQueryResponse,
 } from './interfaces';
 import type { GrpcFlightClient } from './grpc/client.node';
 import {
@@ -24,6 +28,7 @@ import {
   normalizeSchema,
   serializeArrowField,
 } from './arrow-utils';
+import { normalizeSearchResponse } from './search-utils';
 import { Logger } from './logger';
 import { Param } from './param';
 
@@ -198,6 +203,35 @@ function convertArrowValue(value: any, field?: any): any {
  * - Timestamp types: Converts Date objects to ISO 8601 strings (without Z for timestamps without timezone)
  * - List types: Converts Arrow Vector objects to JavaScript arrays
  */
+/**
+ * Coerces a `/v1/nsql` payload into the documented {@link NsqlResponse} shape.
+ *
+ * The runtime omits `schema` entirely when the generated query returned no rows,
+ * and a runtime that does not honor the `application/vnd.spiceai.nsql.v1+json`
+ * Accept header answers with a bare array of rows. Both are normalized here so
+ * callers can always read `sql`, `data`, `schema.fields` and `row_count`.
+ */
+function normalizeNsqlResponse(payload: unknown): NsqlResponse {
+  if (Array.isArray(payload)) {
+    return {
+      row_count: payload.length,
+      schema: { fields: [] },
+      data: payload,
+      sql: '',
+    };
+  }
+
+  const result = (payload ?? {}) as Partial<NsqlResponse>;
+  const data = result.data ?? [];
+
+  return {
+    row_count: result.row_count ?? data.length,
+    schema: { fields: result.schema?.fields ?? [] },
+    data,
+    sql: result.sql ?? '',
+  };
+}
+
 function wrapTableForDecimalConversion(table: Table): Table {
   const originalToArray = table.toArray.bind(table);
 
@@ -685,7 +719,39 @@ export class SpiceClient {
     if (this._grpcClient) {
       const useGrpc = await this._grpcClient.ensureInitialized();
       if (useGrpc) {
-        return this.doGrpcQueryRequest(queryText, parameters, onData, headers);
+        // Track whether any chunk has reached the caller's callback — once it
+        // has, falling back to HTTP would deliver duplicate data
+        let dataSent = false;
+        const trackingOnData = onData
+          ? (table: Table) => {
+              dataSent = true;
+              onData(table);
+            }
+          : undefined;
+
+        try {
+          return await this.doGrpcQueryRequest(
+            queryText,
+            parameters,
+            trackingOnData,
+            headers,
+          );
+        } catch (error) {
+          if (this._flightOnly || dataSent) {
+            throw error;
+          }
+          this._logger.warn(
+            `[spice.js] Arrow Flight query failed, falling back to HTTP: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+          return this.doHttpQueryRequest(
+            queryText,
+            parameters,
+            onData,
+            headers,
+          );
+        }
       }
 
       // If flightOnly mode is enabled and gRPC failed, throw error
@@ -773,22 +839,38 @@ export class SpiceClient {
       ? 'application/vnd.spiceai.sql.v1+json' // data.spiceai.io returns schema with 'data' field
       : 'application/json'; // OSS returns plain JSON array
 
-    // Prepare request body with parameters
     const httpParameters = this.convertParametersForHttp(parameters);
-    const requestBody = JSON.stringify({
-      sql: queryText,
-      parameters: httpParameters,
-    });
 
+    // The JSON envelope ({sql, parameters}) is only understood by the OSS
+    // runtime, and only when Content-Type is exactly application/json.
+    // Spice Cloud parses every request body as raw SQL, so queries without
+    // parameters are sent as plain text — the format every endpoint accepts.
+    let requestBody: string;
+    let contentType: string;
+    if (httpParameters.length === 0) {
+      requestBody = queryText;
+      contentType = 'text/plain';
+    } else if (this._isSpiceCloud) {
+      throw new Error(
+        'Parameterized queries over HTTP are not supported by Spice Cloud. Use Arrow Flight (gRPC) for parameterized queries.',
+      );
+    } else {
+      requestBody = JSON.stringify({
+        sql: queryText,
+        parameters: httpParameters,
+      });
+      contentType = 'application/json';
+    }
+
+    // Custom headers merge first — the computed Content-Type/Accept always
+    // win, because the SDK picks the body format (raw SQL vs JSON envelope)
+    // and parses the response according to these values; a caller override
+    // would desync the headers from the body.
     const requestHeaders: { [key: string]: string } = {
-      'Content-Type': 'application/json',
+      ...headers,
+      'Content-Type': contentType,
       Accept: acceptHeader,
     };
-
-    // Merge custom headers if provided
-    if (headers) {
-      Object.assign(requestHeaders, headers);
-    }
 
     const response = await this.fetchInternal(
       'POST',
@@ -1334,6 +1416,9 @@ export class SpiceClient {
       '/v1/nsql',
       undefined,
       JSON.stringify(request),
+      // Without this the runtime replies with a bare array of rows, which
+      // carries neither the generated SQL nor the schema.
+      { Accept: 'application/vnd.spiceai.nsql.v1+json' },
     );
 
     if (!response.ok) {
@@ -1344,7 +1429,7 @@ export class SpiceClient {
     }
 
     const result = await response.json();
-    return result as NsqlResponse;
+    return normalizeNsqlResponse(result);
   }
 
   /**
@@ -1397,8 +1482,8 @@ export class SpiceClient {
       );
     }
 
-    const result = await response.json();
-    return result as SearchResponse;
+    const result = (await response.json()) as WireSearchResponse;
+    return normalizeSearchResponse(result);
   }
 
   /**
@@ -1444,6 +1529,99 @@ export class SpiceClient {
     }
 
     return await response.json();
+  }
+
+  /**
+   * Lists the synchronous queries this client currently has running.
+   *
+   * Synchronous queries are the ones started by `sql()`, `query()`, `sqlJson()`,
+   * FlightSQL, `nsql()` and `search()` — not async query jobs, which the runtime
+   * only serves in cluster mode.
+   *
+   * The runtime does not return a query's id to the client that submitted it, so
+   * this is how to find the id that {@link cancelActiveQuery} needs. Results are
+   * scoped to this client, so another caller's in-flight queries are never listed.
+   *
+   * @returns Promise resolving to the active queries
+   */
+  async listActiveQueries(): Promise<ActiveQuery[]> {
+    if (!this._httpUrl) {
+      throw new Error('HTTP URL is required for listing active queries');
+    }
+
+    const response = await this.fetchInternal('GET', '/v1/sql/active');
+
+    if (response.status === 403) {
+      throw new Error(
+        'The configured API key does not allow listing queries. Use a key with write access.',
+      );
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to list active queries: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    const payload = (await response.json()) as ActiveQueriesResponse | null;
+    return payload?.queries ?? [];
+  }
+
+  /**
+   * Cancels a running synchronous query by id.
+   *
+   * `queryId` comes from {@link listActiveQueries}. Cancellation is scoped to this
+   * client: an id belonging to another caller is reported as not found rather than
+   * cancelled.
+   *
+   * @param queryId - The id of the query to cancel
+   * @returns Promise resolving to the cancellation response
+   */
+  async cancelActiveQuery(
+    queryId: string,
+  ): Promise<CancelActiveQueryResponse> {
+    if (!this._httpUrl) {
+      throw new Error('HTTP URL is required for cancelling a query');
+    }
+
+    if (!queryId) {
+      throw new Error(
+        'queryId is required. Use listActiveQueries() to find one.',
+      );
+    }
+
+    const response = await this.fetchInternal(
+      'POST',
+      `/v1/sql/${encodeURIComponent(queryId)}/cancel`,
+    );
+
+    if (response.status === 400) {
+      throw new Error(
+        `Query id '${queryId}' is not a valid UUID. Use the query_id from listActiveQueries().`,
+      );
+    }
+
+    if (response.status === 403) {
+      throw new Error(
+        'The configured API key does not allow cancelling queries. Use a key with write access.',
+      );
+    }
+
+    if (response.status === 404) {
+      throw new Error(
+        `No active query '${queryId}' found. It may have already finished, or it was submitted by a different client.`,
+      );
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to cancel query '${queryId}': ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    return (await response.json()) as CancelActiveQueryResponse;
   }
 
   /**
