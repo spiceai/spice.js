@@ -177,6 +177,38 @@ export interface SearchMatch {
   };
 }
 
+/**
+ * A single match exactly as the runtime serializes it on the wire.
+ *
+ * Differs from {@link SearchMatch} in two ways, both of which
+ * {@link normalizeSearchResponse} reconciles:
+ * - the similarity score is named `_score`
+ * - `data`, `primary_key` and `metadata` are omitted entirely when empty
+ *
+ * The four object-valued fields are optional so that a match survives a runtime
+ * that omits any of them; `normalizeSearchResponse` fills each in as `{}`.
+ *
+ * @internal
+ */
+export interface WireSearchMatch {
+  dataset: string;
+  _score: number;
+  matches?: Record<string, unknown>;
+  primary_key?: Record<string, unknown>;
+  data?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * A search response exactly as the runtime serializes it on the wire.
+ *
+ * @internal
+ */
+export interface WireSearchResponse {
+  duration_ms: number;
+  results: WireSearchMatch[];
+}
+
 export interface SearchResponse {
   /**
    * Total time taken to execute the search, in milliseconds
@@ -190,6 +222,56 @@ export interface SearchResponse {
 
 export interface QueryHeaders {
   [key: string]: string;
+}
+
+/**
+ * A synchronous query currently running on the runtime.
+ */
+export interface ActiveQuery {
+  /**
+   * Server-assigned id, and what cancelActiveQuery() takes
+   */
+  query_id: string;
+  /**
+   * The protocol the query arrived on: 'http', 'flight', 'flightsql' or 'internal'
+   */
+  protocol: string;
+  /**
+   * The query's SQL, truncated by the runtime for display
+   */
+  sql_preview: string;
+  /**
+   * When the query started, in milliseconds since the Unix epoch
+   */
+  started_at_ms: number;
+}
+
+/**
+ * Response from listing the active synchronous queries.
+ */
+export interface ActiveQueriesResponse {
+  /**
+   * The active queries the caller currently has running
+   */
+  queries: ActiveQuery[];
+  /**
+   * Number of active queries reported by the runtime
+   */
+  total_count: number;
+}
+
+/**
+ * Response from cancelling a running synchronous query.
+ */
+export interface CancelActiveQueryResponse {
+  /**
+   * The id of the query that was cancelled
+   */
+  query_id: string;
+  /**
+   * The query's state after cancellation, such as 'cancelled'
+   */
+  status: string;
 }
 
 // Legacy interface for backward compatibility

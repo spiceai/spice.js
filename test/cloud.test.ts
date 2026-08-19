@@ -7,8 +7,13 @@ describe('cloud', () => {
 
   const api_key = process.env.SPICEAI_API_KEY;
 
+  // These tests query Spice.ai Cloud, so without a key there is nothing to run.
+  // Skip rather than throw: a throw here runs during collection and fails the
+  // whole suite with zero tests, which is what test/setup.ts already warns will
+  // be skipped. Same shape as test/tpch-integration.test.ts.
   if (!api_key) {
-    throw 'API_KEY environment variable not set';
+    test.skip('Skipping cloud tests - SPICEAI_API_KEY not set', () => {});
+    return;
   }
 
   // URLs can be overridden via env vars (HTTP_URL, FLIGHT_URL)
