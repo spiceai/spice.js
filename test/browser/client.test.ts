@@ -38,17 +38,26 @@ describe('Browser SpiceClient', () => {
       expect(customClient).toBeInstanceOf(SpiceClient);
     });
 
-    test('should log configuration on initialization', () => {
+    test('should log configuration on initialization when SPICE_DEBUG is set', () => {
       consoleLogSpy.mockRestore();
       const debugSpy = jest.spyOn(console, 'debug').mockImplementation();
+      const originalEnv = process.env.SPICE_DEBUG;
+      process.env.SPICE_DEBUG = 'true';
 
-      new SpiceClient({
-        httpUrl: 'http://localhost:8090',
-        apiKey: 'test-key',
-      });
+      try {
+        new SpiceClient({
+          httpUrl: 'http://localhost:8090',
+          apiKey: 'test-key',
+        });
 
-      expect(debugSpy).toHaveBeenCalled();
-      debugSpy.mockRestore();
+        expect(debugSpy).toHaveBeenCalled();
+      } finally {
+        debugSpy.mockRestore();
+        // Assigning undefined to process.env stores the string "undefined" —
+        // delete instead when the variable was originally unset
+        if (originalEnv === undefined) delete process.env.SPICE_DEBUG;
+        else process.env.SPICE_DEBUG = originalEnv;
+      }
     });
 
     test('should not log when logging is disabled', () => {
@@ -173,7 +182,7 @@ describe('Browser SpiceClient', () => {
   });
 
   describe('SQL Queries', () => {
-    test('should execute SQL query via HTTP', async () => {
+    test('should execute SQL query via HTTP with text/plain body when no parameters', async () => {
       const mockResponse = {
         schema: [{ name: 'id', data_type: 'Int32' }],
         rows: [[1], [2], [3]],
@@ -197,10 +206,54 @@ describe('Browser SpiceClient', () => {
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            // Parameterized queries use JSON format
-            'Content-Type': 'application/json',
+            // Plain queries use raw SQL text — the format every endpoint
+            // accepts, including Spice Cloud
+            'Content-Type': 'text/plain',
             // Local OSS runtime uses application/json
             Accept: 'application/json',
+          }),
+          body: 'SELECT * FROM test_table',
+        }),
+      );
+    });
+
+    test('should execute parameterized SQL query via HTTP with JSON body', async () => {
+      const mockResponse = {
+        schema: [{ name: 'id', data_type: 'Int32' }],
+        rows: [[1]],
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {
+          get: jest.fn().mockReturnValue('application/json'),
+        },
+        text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+        json: jest.fn().mockResolvedValue(mockResponse),
+      });
+
+      const result = await client.sql(
+        'SELECT * FROM test_table WHERE id = $1',
+        {
+          parameters: [1],
+        },
+      );
+
+      expect(result).toBeDefined();
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:8090/v1/sql',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            // Parameterized queries use the JSON envelope understood by the
+            // OSS runtime
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          }),
+          body: JSON.stringify({
+            sql: 'SELECT * FROM test_table WHERE id = $1',
+            parameters: [1],
           }),
         }),
       );
@@ -219,7 +272,7 @@ describe('Browser SpiceClient', () => {
       await expect(client.sql('INVALID SQL')).rejects.toThrow();
     });
 
-    test('should execute sqlJson query', async () => {
+    test('should execute sqlJson query with text/plain body', async () => {
       const mockResponse = {
         schema: [{ name: 'id', data_type: 'Int32' }],
         rows: [[1], [2]],
@@ -241,6 +294,19 @@ describe('Browser SpiceClient', () => {
       expect(result).toHaveProperty('schema');
       expect(result).toHaveProperty('data');
       expect(result).toHaveProperty('execution_time_ms');
+
+      // sqlJson uses text/plain Content-Type (no parameterized query support)
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:8090/v1/sql',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'text/plain',
+            Accept: 'application/vnd.spiceai.sql.v1+json',
+          }),
+          body: 'SELECT * FROM test_table',
+        }),
+      );
     });
 
     test('should preserve numeric types in HTTP mode (sqlJson)', async () => {
@@ -372,11 +438,12 @@ describe('Browser SpiceClient', () => {
 
   describe('NSQL (Natural Language SQL)', () => {
     test('should execute NSQL query', async () => {
+      // Shape the runtime returns for application/vnd.spiceai.nsql.v1+json.
       const mockResponse = {
-        sql: 'SELECT * FROM users LIMIT 10',
-        schema: [{ name: 'id', data_type: 'Int32' }],
-        rows: [[1]],
         row_count: 1,
+        schema: { fields: [{ name: 'id', data_type: 'Int32' }] },
+        data: [{ id: 1 }],
+        sql: 'SELECT * FROM users LIMIT 10',
       };
 
       (global.fetch as jest.Mock).mockResolvedValueOnce({
@@ -391,14 +458,68 @@ describe('Browser SpiceClient', () => {
 
       const result = await client.nsql('show me users');
 
-      expect(result).toHaveProperty('sql');
       expect(result.sql).toBe('SELECT * FROM users LIMIT 10');
+      expect(result.row_count).toBe(1);
+      expect(result.data).toEqual([{ id: 1 }]);
+      expect(result.schema.fields).toEqual([{ name: 'id', data_type: 'Int32' }]);
       expect(global.fetch).toHaveBeenCalledWith(
         'http://localhost:8090/v1/nsql',
         expect.objectContaining({
           method: 'POST',
+          headers: expect.objectContaining({
+            Accept: 'application/vnd.spiceai.nsql.v1+json',
+          }),
         }),
       );
+    });
+
+    test('should normalize a bare row array into the documented shape', async () => {
+      // What the runtime sends when the Accept header is absent or stripped.
+      const rows = [{ id: 1 }, { id: 2 }];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {
+          get: jest.fn(),
+        },
+        text: jest.fn().mockResolvedValue(JSON.stringify(rows)),
+        json: jest.fn().mockResolvedValue(rows),
+      });
+
+      const result = await client.nsql('show me users');
+
+      expect(result.data).toEqual(rows);
+      expect(result.row_count).toBe(2);
+      expect(result.schema.fields).toEqual([]);
+      expect(result.sql).toBe('');
+    });
+
+    test('should tolerate an empty result set', async () => {
+      // The runtime omits schema fields entirely when no rows are returned.
+      const mockResponse = {
+        row_count: 0,
+        schema: {},
+        data: [],
+        sql: 'SELECT * FROM users WHERE false',
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {
+          get: jest.fn(),
+        },
+        text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+        json: jest.fn().mockResolvedValue(mockResponse),
+      });
+
+      const result = await client.nsql('show me users');
+
+      expect(result.schema.fields).toEqual([]);
+      expect(result.data).toEqual([]);
+      expect(result.row_count).toBe(0);
+      expect(result.sql).toBe('SELECT * FROM users WHERE false');
     });
 
     test('should handle NSQL errors', async () => {
