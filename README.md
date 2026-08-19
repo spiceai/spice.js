@@ -82,6 +82,32 @@ const table = await client.sql(
 
 The SDK handles all protocol negotiation automatically - you just write standard SQL with parameters.
 
+### Search
+
+`search()` runs vector similarity, keyword, and hybrid search against datasets that have
+an embedding column and a loaded embedding model.
+
+```js
+const results = await client.search('trips near the airport', {
+  datasets: ['taxi_trips'],
+  limit: 5,
+  additional_columns: ['trip_distance'],
+  keywords: ['airport'],
+});
+
+console.log(`${results.results.length} matches in ${results.duration_ms}ms`);
+
+for (const match of results.results) {
+  console.log(match.dataset, match.score, match.primary_key, match.data);
+}
+```
+
+Each match carries the `dataset` it was found in, its similarity `score`, the matched
+column values in `matches`, the dataset's `primary_key`, any `additional_columns` you
+requested in `data`, and `metadata`. The four object fields are always present — they
+default to `{}` when the runtime returns nothing for them, so you can read into them
+without a guard.
+
 ## Upgrading from v2 to v3
 
 Version 3.0 represents a major evolution of the SDK with cross-platform support, new APIs, and enhanced reliability.
@@ -560,6 +586,35 @@ Options:
 - `refresh_sql`: Custom SQL query to use for the refresh
 - `refresh_jitter_max`: Maximum jitter time for refresh scheduling
 
+#### `listActiveQueries()` / `cancelActiveQuery(queryId)` - List and cancel running queries
+
+`listActiveQueries()` reports the synchronous queries this client currently has running — those started by `sql()`, `query()`, `sqlJson()`, FlightSQL, `nsql()` and `search()` — and `cancelActiveQuery()` stops one by id.
+
+The runtime does not hand a query's id back to the client that submitted it, so the two are used together: list to find the query, then cancel it. Both are scoped to the caller, so a client only ever sees and cancels its own queries.
+
+```js
+const queries = await spiceClient.listActiveQueries();
+
+for (const query of queries) {
+  console.log(`${query.query_id} [${query.protocol}] ${query.sql_preview}`);
+  console.log(`  started at ${new Date(query.started_at_ms).toISOString()}`);
+}
+
+// Cancel a long-running query by id.
+if (queries.length > 0) {
+  const result = await spiceClient.cancelActiveQuery(queries[0].query_id);
+  console.log(`${result.query_id} is now ${result.status}`);
+}
+```
+
+Each `ActiveQuery` carries `query_id`, `protocol` (`http`, `flight`, `flightsql`, or `internal`), a truncated `sql_preview`, and `started_at_ms` as milliseconds since the Unix epoch.
+
+`cancelActiveQuery()` throws when the id is not a UUID, when the API key lacks write access, or when no such query is running — including the case where the id belongs to a different caller, which the runtime reports as not found rather than cancelling.
+
+The boundary is the **caller's identity, not the client instance**: the runtime scopes both `listActiveQueries()` and `cancelActiveQuery()` to the authenticated principal. Two clients using the same API key therefore share one set and can cancel each other's queries, and unauthenticated requests all share the runtime's public scope. Do not rely on one `SpiceClient` seeing only its own queries.
+
+Both work on Node and in the browser, since they use the HTTP control plane rather than Flight.
+
 #### `nsql(request)` - Natural language to SQL (NSQL)
 
 The `nsql()` method converts natural language queries into SQL and executes them, returning both the results and the generated SQL.
@@ -637,7 +692,26 @@ The `SpiceClient` automatically handles environments where Apache Arrow Flight g
 2. **Automatic**: If the Flight proto file is missing, it's automatically downloaded from `https://data.spiceai.io/v1/proto/flight` and cached
 3. **Fallback**: If gRPC cannot be initialized, automatically falls back to the HTTP `/v1/sql` endpoint
 
-Both gRPC and HTTP modes support compression (gzip, deflate) to reduce bandwidth usage. This ensures the SDK works efficiently in any environment without configuration changes. See [docs/http-fallback.md](./docs/http-fallback.md) for more details.
+Both gRPC and HTTP modes support compression (gzip, deflate) to reduce bandwidth usage. This ensures the SDK works efficiently in any environment without configuration changes.
+
+### TLS and mTLS (Node.js only)
+
+> **Note:** mTLS (client certificate authentication) is an [Enterprise](https://docs.spice.ai/docs/enterprise) feature of the Spice.ai runtime.
+
+The client accepts PEM certificate file paths for custom server verification and mutual TLS:
+
+```js
+const client = new SpiceClient({
+  flightUrl: 'my-spice-host:50051',
+  httpUrl: 'https://my-spice-host:8090',
+  tlsRootCertFile: './certs/ca.pem', // custom CA for server verification (optional)
+  tlsClientCertFile: './certs/client.pem', // ┐ provide both to enable mTLS
+  tlsClientKeyFile: './certs/client.key', //  ┘
+});
+```
+
+- `tlsClientCertFile` and `tlsClientKeyFile` must be provided together; the client certificate is presented during the TLS handshake on both the gRPC and HTTP transports.
+- The Spice runtime must be configured with `client_auth_mode: request` or `required`. See the [mTLS cookbook recipe](https://github.com/spiceai/cookbook/tree/trunk/mtls) for a complete walkthrough.
 
 ## Advanced
 
