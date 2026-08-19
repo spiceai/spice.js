@@ -438,11 +438,12 @@ describe('Browser SpiceClient', () => {
 
   describe('NSQL (Natural Language SQL)', () => {
     test('should execute NSQL query', async () => {
+      // Shape the runtime returns for application/vnd.spiceai.nsql.v1+json.
       const mockResponse = {
-        sql: 'SELECT * FROM users LIMIT 10',
-        schema: [{ name: 'id', data_type: 'Int32' }],
-        rows: [[1]],
         row_count: 1,
+        schema: { fields: [{ name: 'id', data_type: 'Int32' }] },
+        data: [{ id: 1 }],
+        sql: 'SELECT * FROM users LIMIT 10',
       };
 
       (global.fetch as jest.Mock).mockResolvedValueOnce({
@@ -457,14 +458,68 @@ describe('Browser SpiceClient', () => {
 
       const result = await client.nsql('show me users');
 
-      expect(result).toHaveProperty('sql');
       expect(result.sql).toBe('SELECT * FROM users LIMIT 10');
+      expect(result.row_count).toBe(1);
+      expect(result.data).toEqual([{ id: 1 }]);
+      expect(result.schema.fields).toEqual([{ name: 'id', data_type: 'Int32' }]);
       expect(global.fetch).toHaveBeenCalledWith(
         'http://localhost:8090/v1/nsql',
         expect.objectContaining({
           method: 'POST',
+          headers: expect.objectContaining({
+            Accept: 'application/vnd.spiceai.nsql.v1+json',
+          }),
         }),
       );
+    });
+
+    test('should normalize a bare row array into the documented shape', async () => {
+      // What the runtime sends when the Accept header is absent or stripped.
+      const rows = [{ id: 1 }, { id: 2 }];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {
+          get: jest.fn(),
+        },
+        text: jest.fn().mockResolvedValue(JSON.stringify(rows)),
+        json: jest.fn().mockResolvedValue(rows),
+      });
+
+      const result = await client.nsql('show me users');
+
+      expect(result.data).toEqual(rows);
+      expect(result.row_count).toBe(2);
+      expect(result.schema.fields).toEqual([]);
+      expect(result.sql).toBe('');
+    });
+
+    test('should tolerate an empty result set', async () => {
+      // The runtime omits schema fields entirely when no rows are returned.
+      const mockResponse = {
+        row_count: 0,
+        schema: {},
+        data: [],
+        sql: 'SELECT * FROM users WHERE false',
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {
+          get: jest.fn(),
+        },
+        text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+        json: jest.fn().mockResolvedValue(mockResponse),
+      });
+
+      const result = await client.nsql('show me users');
+
+      expect(result.schema.fields).toEqual([]);
+      expect(result.data).toEqual([]);
+      expect(result.row_count).toBe(0);
+      expect(result.sql).toBe('SELECT * FROM users WHERE false');
     });
 
     test('should handle NSQL errors', async () => {

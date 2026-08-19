@@ -203,6 +203,35 @@ function convertArrowValue(value: any, field?: any): any {
  * - Timestamp types: Converts Date objects to ISO 8601 strings (without Z for timestamps without timezone)
  * - List types: Converts Arrow Vector objects to JavaScript arrays
  */
+/**
+ * Coerces a `/v1/nsql` payload into the documented {@link NsqlResponse} shape.
+ *
+ * The runtime omits `schema` entirely when the generated query returned no rows,
+ * and a runtime that does not honor the `application/vnd.spiceai.nsql.v1+json`
+ * Accept header answers with a bare array of rows. Both are normalized here so
+ * callers can always read `sql`, `data`, `schema.fields` and `row_count`.
+ */
+function normalizeNsqlResponse(payload: unknown): NsqlResponse {
+  if (Array.isArray(payload)) {
+    return {
+      row_count: payload.length,
+      schema: { fields: [] },
+      data: payload,
+      sql: '',
+    };
+  }
+
+  const result = (payload ?? {}) as Partial<NsqlResponse>;
+  const data = result.data ?? [];
+
+  return {
+    row_count: result.row_count ?? data.length,
+    schema: { fields: result.schema?.fields ?? [] },
+    data,
+    sql: result.sql ?? '',
+  };
+}
+
 function wrapTableForDecimalConversion(table: Table): Table {
   const originalToArray = table.toArray.bind(table);
 
@@ -1387,6 +1416,9 @@ export class SpiceClient {
       '/v1/nsql',
       undefined,
       JSON.stringify(request),
+      // Without this the runtime replies with a bare array of rows, which
+      // carries neither the generated SQL nor the schema.
+      { Accept: 'application/vnd.spiceai.nsql.v1+json' },
     );
 
     if (!response.ok) {
@@ -1397,7 +1429,7 @@ export class SpiceClient {
     }
 
     const result = await response.json();
-    return result as NsqlResponse;
+    return normalizeNsqlResponse(result);
   }
 
   /**
