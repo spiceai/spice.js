@@ -67,7 +67,7 @@ main();
 
 The SpiceClient automatically selects the best available transport protocol in this order:
 
-1. **Arrow Flight SQL** - gRPC protocol with parameter substitution
+1. **Arrow Flight SQL** - gRPC protocol with server-side parameter binding
 2. **HTTP/HTTPS** - Fallback for browser environments or when Flight is unavailable
 
 For parameterized queries, the SDK provides secure parameter binding:
@@ -739,17 +739,30 @@ const table = await client.sql(
 console.table(table.toArray());
 ```
 
+Named parameters work too, using `$name` placeholders:
+
+```js
+const table = await client.sql(
+  'SELECT * FROM taxi_trips WHERE passenger_count = $passengers LIMIT 10',
+  { parameters: { passengers: 2 } },
+);
+```
+
 **Transport Hierarchy:**
 
 When parameters are provided, the SDK automatically:
 
-1. **Uses Flight SQL** - Client-side parameter substitution with Arrow Flight
+1. **Uses Flight SQL** - Binds parameters server-side via a prepared statement
 2. **Falls back to HTTP** - Sends parameters as JSON if Flight is unavailable
+
+Both paths bind on the server: values travel separately from the SQL text, as a typed
+Arrow record batch over Flight or as JSON over HTTP. Nothing is substituted into the
+query string on the client.
 
 **Key benefits:**
 
-- **SQL Injection Prevention**: Parameters are properly escaped and validated
-- **Type Safety**: Parameters maintain their data types
+- **SQL Injection Prevention**: Values are bound, never concatenated into the SQL text
+- **Type Safety**: Parameters keep their declared Arrow types end to end
 - **Automatic fallback**: Works in all environments (Node.js and browser)
 
 For more information, see [docs/PARAMETERIZED_QUERIES.md](./docs/PARAMETERIZED_QUERIES.md).
