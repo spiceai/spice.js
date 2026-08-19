@@ -17,6 +17,45 @@ permissions:
   contents: read
 
 jobs:
+  unit-tests:
+    name: Unit Tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - 20
+          - 24
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      # Unit suites that need no runtime or credentials. Kept as an explicit
+      # list so a hung integration file can never sneak into this fast job.
+      - name: Run unit tests
+        run: >
+          npm run test:node --
+          test/param.test.ts
+          test/prepared-statement-binding.test.ts
+          test/active-queries.test.ts
+          test/search.test.ts
+          test/mtls-config.test.ts
+          test/response-format-docs.test.ts
+          test/sqlJson-transport-modes.test.ts
+          test/sqlJson-type-preservation.test.ts
+          test/arrow-schema-serialization.test.ts
+
   browser-tests:
     name: Browser Tests (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
@@ -130,7 +169,7 @@ jobs:
           sleep 2
 
       - name: Run Node.js local runtime tests
-        run: npm run test:node -- test/local-runtime.test.ts test/local-runtime-params.test.ts test/user-agent.test.ts test/grpc-http-fallback.test.ts
+        run: npm run test:node -- test/local-runtime.test.ts test/local-runtime-params.test.ts test/local-runtime-active-queries.test.ts test/user-agent.test.ts test/grpc-http-fallback.test.ts
 
       - name: Run performance tests
         run: npm run test:perf
@@ -192,7 +231,7 @@ jobs:
         run: npm run build
 
       - name: Run cloud tests
-        run: npm test -- test/cloud.test.ts
+        run: npm test -- test/cloud.test.ts test/response-formats.test.ts
         timeout-minutes: 10
         env:
           SPICEAI_API_KEY: ${{ secrets.SPICEAI_API_KEY }} # spice.ai/spiceai/spice-js

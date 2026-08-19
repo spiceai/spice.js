@@ -547,6 +547,19 @@ export class SpiceClient {
         ? `${userAgent} ${platform.getUserAgent()}`
         : platform.getUserAgent();
       this._customHeaders = customHeaders;
+
+      // Client cert and key must be provided together for mTLS
+      if (
+        (tlsClientCertFile && !tlsClientKeyFile) ||
+        (!tlsClientCertFile && tlsClientKeyFile)
+      ) {
+        const missing = tlsClientCertFile
+          ? 'tlsClientKeyFile'
+          : 'tlsClientCertFile';
+        throw new Error(
+          `Both tlsClientCertFile and tlsClientKeyFile must be provided together for mTLS. ${missing} is missing.`,
+        );
+      }
       this._tlsClientCertFile = tlsClientCertFile;
       this._tlsClientKeyFile = tlsClientKeyFile;
       this._tlsRootCertFile = tlsRootCertFile;

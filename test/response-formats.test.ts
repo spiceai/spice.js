@@ -12,7 +12,10 @@ describe('Response Formats Integration Tests', () => {
   const api_key = process.env.SPICEAI_API_KEY;
 
   if (!api_key) {
-    throw new Error('SPICEAI_API_KEY environment variable not set');
+    // Skip rather than throw: a throw runs during collection and fails the
+    // whole suite with zero tests. Same shape as test/cloud.test.ts.
+    test.skip('Skipping cloud tests - SPICEAI_API_KEY not set', () => {});
+    return;
   }
 
   const HTTP_DATA_PATH = process.env.HTTP_URL || 'https://data.spiceai.io';
