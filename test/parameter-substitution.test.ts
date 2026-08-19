@@ -657,7 +657,7 @@ describe('Parameter Substitution', () => {
     class HttpParameterHelper {
       convertParametersForHttp(
         parameters?: any[] | Record<string, any>,
-      ): any[] {
+      ): any[] | Record<string, any> {
         if (!parameters) {
           return [];
         }
@@ -677,7 +677,10 @@ describe('Parameter Substitution', () => {
             return val;
           });
         } else {
-          return Object.entries(parameters).map(([name, value]) => {
+          // Named parameters - the runtime expects a plain JSON object map
+          // ({"name": value}); nested objects such as [{name, value}] are rejected
+          const converted: Record<string, any> = {};
+          for (const [name, value] of Object.entries(parameters)) {
             let serializedValue: any = value;
             if (value instanceof Date) serializedValue = value.toISOString();
             else if (typeof value === 'bigint')
@@ -689,9 +692,9 @@ describe('Parameter Substitution', () => {
             ) {
               serializedValue = (value as any).toString('base64');
             }
-
-            return { name, value: serializedValue };
-          });
+            converted[name] = serializedValue;
+          }
+          return converted;
         }
       }
     }
@@ -757,17 +760,16 @@ describe('Parameter Substitution', () => {
     });
 
     describe('named parameters', () => {
-      test('should return empty array for empty object', () => {
-        expect(httpHelper.convertParametersForHttp({})).toEqual([]);
+      test('should return empty object for empty object', () => {
+        expect(httpHelper.convertParametersForHttp({})).toEqual({});
       });
 
-      test('should convert named parameters to name/value pairs', () => {
+      test('should convert named parameters to a plain object map', () => {
         const result = httpHelper.convertParametersForHttp({
           name: 'Alice',
           age: 30,
         });
-        expect(result).toContainEqual({ name: 'name', value: 'Alice' });
-        expect(result).toContainEqual({ name: 'age', value: 30 });
+        expect(result).toEqual({ name: 'Alice', age: 30 });
       });
 
       test('should convert Date in named parameters', () => {
@@ -775,10 +777,7 @@ describe('Parameter Substitution', () => {
         const result = httpHelper.convertParametersForHttp({
           created_at: date,
         });
-        expect(result).toContainEqual({
-          name: 'created_at',
-          value: '2024-01-15T10:30:00.000Z',
-        });
+        expect(result).toEqual({ created_at: '2024-01-15T10:30:00.000Z' });
       });
 
       test('should convert bigint in named parameters', () => {
@@ -786,17 +785,14 @@ describe('Parameter Substitution', () => {
         const result = httpHelper.convertParametersForHttp({
           big_id: bigNum,
         });
-        expect(result).toContainEqual({
-          name: 'big_id',
-          value: '9223372036854775807',
-        });
+        expect(result).toEqual({ big_id: '9223372036854775807' });
       });
 
       test('should handle null in named parameters', () => {
         const result = httpHelper.convertParametersForHttp({
           optional: null,
         });
-        expect(result).toContainEqual({ name: 'optional', value: null });
+        expect(result).toEqual({ optional: null });
       });
 
       test('should handle mixed types in named parameters', () => {
@@ -810,16 +806,14 @@ describe('Parameter Substitution', () => {
           date: date,
           bigint: bigNum,
         });
-        expect(result).toHaveLength(6);
-        expect(result).toContainEqual({ name: 'str', value: 'text' });
-        expect(result).toContainEqual({ name: 'num', value: 42 });
-        expect(result).toContainEqual({ name: 'bool', value: true });
-        expect(result).toContainEqual({ name: 'nullable', value: null });
-        expect(result).toContainEqual({
-          name: 'date',
-          value: '2024-06-15T14:00:00.000Z',
+        expect(result).toEqual({
+          str: 'text',
+          num: 42,
+          bool: true,
+          nullable: null,
+          date: '2024-06-15T14:00:00.000Z',
+          bigint: '12345',
         });
-        expect(result).toContainEqual({ name: 'bigint', value: '12345' });
       });
     });
   });
