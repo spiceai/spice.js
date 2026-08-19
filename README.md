@@ -82,6 +82,32 @@ const table = await client.sql(
 
 The SDK handles all protocol negotiation automatically - you just write standard SQL with parameters.
 
+### Search
+
+`search()` runs vector similarity, keyword, and hybrid search against datasets that have
+an embedding column and a loaded embedding model.
+
+```js
+const results = await client.search('trips near the airport', {
+  datasets: ['taxi_trips'],
+  limit: 5,
+  additional_columns: ['trip_distance'],
+  keywords: ['airport'],
+});
+
+console.log(`${results.results.length} matches in ${results.duration_ms}ms`);
+
+for (const match of results.results) {
+  console.log(match.dataset, match.score, match.primary_key, match.data);
+}
+```
+
+Each match carries the `dataset` it was found in, its similarity `score`, the matched
+column values in `matches`, the dataset's `primary_key`, any `additional_columns` you
+requested in `data`, and `metadata`. The four object fields are always present — they
+default to `{}` when the runtime returns nothing for them, so you can read into them
+without a guard.
+
 ## Upgrading from v2 to v3
 
 Version 3.0 represents a major evolution of the SDK with cross-platform support, new APIs, and enhanced reliability.
@@ -666,7 +692,26 @@ The `SpiceClient` automatically handles environments where Apache Arrow Flight g
 2. **Automatic**: If the Flight proto file is missing, it's automatically downloaded from `https://data.spiceai.io/v1/proto/flight` and cached
 3. **Fallback**: If gRPC cannot be initialized, automatically falls back to the HTTP `/v1/sql` endpoint
 
-Both gRPC and HTTP modes support compression (gzip, deflate) to reduce bandwidth usage. This ensures the SDK works efficiently in any environment without configuration changes. See [docs/http-fallback.md](./docs/http-fallback.md) for more details.
+Both gRPC and HTTP modes support compression (gzip, deflate) to reduce bandwidth usage. This ensures the SDK works efficiently in any environment without configuration changes.
+
+### TLS and mTLS (Node.js only)
+
+> **Note:** mTLS (client certificate authentication) is an [Enterprise](https://docs.spice.ai/docs/enterprise) feature of the Spice.ai runtime.
+
+The client accepts PEM certificate file paths for custom server verification and mutual TLS:
+
+```js
+const client = new SpiceClient({
+  flightUrl: 'my-spice-host:50051',
+  httpUrl: 'https://my-spice-host:8090',
+  tlsRootCertFile: './certs/ca.pem', // custom CA for server verification (optional)
+  tlsClientCertFile: './certs/client.pem', // ┐ provide both to enable mTLS
+  tlsClientKeyFile: './certs/client.key', //  ┘
+});
+```
+
+- `tlsClientCertFile` and `tlsClientKeyFile` must be provided together; the client certificate is presented during the TLS handshake on both the gRPC and HTTP transports.
+- The Spice runtime must be configured with `client_auth_mode: request` or `required`. See the [mTLS cookbook recipe](https://github.com/spiceai/cookbook/tree/trunk/mtls) for a complete walkthrough.
 
 ## Advanced
 
