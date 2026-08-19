@@ -82,6 +82,32 @@ const table = await client.sql(
 
 The SDK handles all protocol negotiation automatically - you just write standard SQL with parameters.
 
+### Search
+
+`search()` runs vector similarity, keyword, and hybrid search against datasets that have
+an embedding column and a loaded embedding model.
+
+```js
+const results = await client.search('trips near the airport', {
+  datasets: ['taxi_trips'],
+  limit: 5,
+  additional_columns: ['trip_distance'],
+  keywords: ['airport'],
+});
+
+console.log(`${results.results.length} matches in ${results.duration_ms}ms`);
+
+for (const match of results.results) {
+  console.log(match.dataset, match.score, match.primary_key, match.data);
+}
+```
+
+Each match carries the `dataset` it was found in, its similarity `score`, the matched
+column values in `matches`, the dataset's `primary_key`, any `additional_columns` you
+requested in `data`, and `metadata`. The four object fields are always present — they
+default to `{}` when the runtime returns nothing for them, so you can read into them
+without a guard.
+
 ## Upgrading from v2 to v3
 
 Version 3.0 represents a major evolution of the SDK with cross-platform support, new APIs, and enhanced reliability.
