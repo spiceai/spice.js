@@ -130,7 +130,7 @@ jobs:
           sleep 2
 
       - name: Run Node.js local runtime tests
-        run: npm run test:node -- test/local-runtime.test.ts test/user-agent.test.ts test/grpc-http-fallback.test.ts
+        run: npm run test:node -- test/local-runtime.test.ts test/local-runtime-params.test.ts test/user-agent.test.ts test/grpc-http-fallback.test.ts
 
       - name: Run performance tests
         run: npm run test:perf

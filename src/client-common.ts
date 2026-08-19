@@ -661,7 +661,9 @@ export class SpiceClient {
   /**
    * Converts parameters for HTTP endpoint format
    */
-  private convertParametersForHttp(parameters?: QueryParameters): any[] {
+  private convertParametersForHttp(
+    parameters?: QueryParameters,
+  ): any[] | Record<string, any> {
     if (!parameters) {
       return [];
     }
@@ -684,8 +686,10 @@ export class SpiceClient {
         return extractedVal;
       });
     } else {
-      // Named parameters - convert to array of {name, value} objects
-      return Object.entries(parameters).map(([name, value]) => {
+      // Named parameters - the runtime expects a plain JSON object map
+      // ({"name": value}); nested objects such as [{name, value}] are rejected
+      const converted: Record<string, any> = {};
+      for (const [name, value] of Object.entries(parameters)) {
         const extractedValue = this.extractParamValue(value);
         let serializedValue: any = extractedValue;
         if (extractedValue instanceof Date)
@@ -699,9 +703,9 @@ export class SpiceClient {
         ) {
           serializedValue = (extractedValue as any).toString('base64');
         }
-
-        return { name, value: serializedValue };
-      });
+        converted[name] = serializedValue;
+      }
+      return converted;
     }
   }
 
@@ -845,9 +849,13 @@ export class SpiceClient {
     // runtime, and only when Content-Type is exactly application/json.
     // Spice Cloud parses every request body as raw SQL, so queries without
     // parameters are sent as plain text — the format every endpoint accepts.
+    const hasHttpParameters = Array.isArray(httpParameters)
+      ? httpParameters.length > 0
+      : Object.keys(httpParameters).length > 0;
+
     let requestBody: string;
     let contentType: string;
-    if (httpParameters.length === 0) {
+    if (!hasHttpParameters) {
       requestBody = queryText;
       contentType = 'text/plain';
     } else if (this._isSpiceCloud) {
