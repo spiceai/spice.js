@@ -670,6 +670,8 @@ Both gRPC and HTTP modes support compression (gzip, deflate) to reduce bandwidth
 
 ### TLS and mTLS (Node.js only)
 
+> **Note:** mTLS (client certificate authentication) is an [Enterprise](https://docs.spice.ai/docs/enterprise) feature of the Spice.ai runtime.
+
 The client accepts PEM certificate file paths for custom server verification and mutual TLS:
 
 ```js
