@@ -1441,6 +1441,47 @@ export class SpiceClient {
   }
 
   /**
+   * Translate a natural language query into SQL without running it.
+   *
+   * Use this to inspect or edit the generated query before running it, or to
+   * run it through {@link sql}/{@link sqlJson} for Arrow-typed results
+   * instead of the JSON rows `nsql()` returns.
+   *
+   * @param query - The natural language query to convert to SQL
+   * @param options - Optional configuration for the NSQL request
+   * @returns Promise resolving to the generated SQL string
+   */
+  async nsqlGenerateSql(query: string, options?: NsqlOptions): Promise<string> {
+    if (!this._httpUrl) {
+      throw new Error('HTTP URL is required for NSQL operation');
+    }
+
+    const request = {
+      query,
+      ...options,
+    };
+
+    const response = await this.fetchInternal(
+      'POST',
+      '/v1/nsql',
+      undefined,
+      JSON.stringify(request),
+      // Asks the runtime to only generate SQL, not run it. Without this the
+      // runtime defaults to the JSON envelope nsql() consumes.
+      { Accept: 'application/sql' },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `NSQL request failed: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    return (await response.text()).trim();
+  }
+
+  /**
    * Perform a hybrid search operation on a dataset.
    *
    * The search combines multiple search techniques:
