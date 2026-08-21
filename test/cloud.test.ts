@@ -114,7 +114,7 @@ describe('cloud', () => {
     });
 
     test('deprecated query() still works', async () => {
-      const tableResult = await cloudClient.query(
+      const tableResult = await cloudClient.sql(
         "SELECT 42 as answer, 'test' as message",
       );
       expect(tableResult.toArray()).toHaveLength(1);

@@ -16,7 +16,7 @@ describe('local', () => {
   });
 
   it('connection and query to local spice runtime works', async () => {
-    const tableResult = await client.query(
+    const tableResult = await client.sql(
       'SELECT * FROM test_postgresql_table_not_accelerated LIMIT 3',
     );
 
@@ -92,7 +92,7 @@ describe('local', () => {
         'SELECT id, int2_column, int4_column, float4_column, text_column, bool_column FROM test_postgresql_table_not_accelerated ORDER BY id LIMIT 3';
 
       // Get data from both methods
-      const table = await flightOnlyClient.query(query);
+      const table = await flightOnlyClient.sql(query);
       const jsonResult = await flightOnlyClient.sqlJson(query);
 
       // Verify Arrow Table
@@ -148,7 +148,7 @@ describe('local', () => {
         'SELECT id, int2_column, int4_column, int8_column, float4_column, float8_column, numeric_column FROM test_postgresql_table_not_accelerated ORDER BY id LIMIT 3';
 
       // Get data from both methods
-      const table = await flightOnlyClient.query(query);
+      const table = await flightOnlyClient.sql(query);
       const jsonResult = await flightOnlyClient.sqlJson(query);
 
       const arrowRows = table.toArray();
@@ -207,7 +207,7 @@ describe('local', () => {
         'SELECT id, int8_column FROM test_postgresql_table_not_accelerated WHERE id = 1';
 
       // Get data from both methods
-      const table = await flightOnlyClient.query(query);
+      const table = await flightOnlyClient.sql(query);
       const jsonResult = await flightOnlyClient.sqlJson(query);
 
       const arrowRows = table.toArray();
@@ -229,7 +229,7 @@ describe('local', () => {
       // Test with a computed large BigInt value
       const largeQuery =
         'SELECT 9007199254740992::BIGINT as large_int FROM test_postgresql_table_not_accelerated LIMIT 1';
-      const largeTable = await flightOnlyClient.query(largeQuery);
+      const largeTable = await flightOnlyClient.sql(largeQuery);
       const largeJsonResult = await flightOnlyClient.sqlJson(largeQuery);
 
       const largeArrowRows = largeTable.toArray();
@@ -250,7 +250,7 @@ describe('local', () => {
         'SELECT id, timestamp_column, date_column FROM test_postgresql_table_not_accelerated WHERE id = 1';
 
       // Get data from both methods
-      const table = await flightOnlyClient.query(query);
+      const table = await flightOnlyClient.sql(query);
       const jsonResult = await flightOnlyClient.sqlJson(query);
 
       const arrowRows = table.toArray();
@@ -378,7 +378,7 @@ describe('local', () => {
       });
 
       // Query should fail with gRPC error (since flightOnly means no HTTP fallback)
-      await expect(invalidClient.query('SELECT 1')).rejects.toThrow(
+      await expect(invalidClient.sql('SELECT 1')).rejects.toThrow(
         /UNAVAILABLE|flightOnly mode is enabled/,
       );
     });
@@ -394,7 +394,7 @@ describe('local', () => {
       ORDER BY id`;
 
       // Get data from both methods
-      const table = await flightOnlyClient.query(query);
+      const table = await flightOnlyClient.sql(query);
       const jsonResult = await flightOnlyClient.sqlJson(query);
 
       const arrowRows = table.toArray();
@@ -441,7 +441,7 @@ describe('local', () => {
         'SELECT id, int4_column, text_column, bool_column FROM test_postgresql_table_not_accelerated ORDER BY id';
 
       // Get data from both methods
-      const table = await flightOnlyClient.query(query);
+      const table = await flightOnlyClient.sql(query);
       const jsonResult = await flightOnlyClient.sqlJson(query);
 
       const arrowRows = table.toArray();

@@ -44,5 +44,19 @@ export type {
   ActiveQuery,
   ActiveQueriesResponse,
   CancelActiveQueryResponse,
+  ListQueriesOptions,
+  AsyncQuerySummary,
+  ListQueriesResponse,
   RefreshOverrides, // deprecated, kept for backward compatibility
 } from './interfaces';
+
+export { AsyncQuery } from './async-query';
+export type {
+  QueryStatus,
+  QueryStatusResponse,
+  QueryResponse,
+  QueryResultChunk,
+  QueryResultManifest,
+  QueryErrorDetails,
+  WaitForCompletionOptions,
+} from './async-query';

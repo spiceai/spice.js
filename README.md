@@ -357,7 +357,7 @@ console.table(result.toArray());
 
 **Recommended:**
 
-- [ ] Use `sql()` instead of `query()` for better performance
+- [ ] Use `sql()` instead of `query()` — `query()` now submits async jobs; see the Async queries section
 - [ ] Add health checks with `isSpiceHealthy()` and `isSpiceReady()`
 - [ ] Try `nsql()` for natural language queries
 - [ ] Use `refreshAcceleration()` for on-demand dataset refresh
@@ -377,7 +377,6 @@ console.table(result.toArray());
 If you're using these standard patterns, your code will work without changes:
 
 ✅ `SpiceClient` initialization with API key string or config object  
-✅ `query()` method (works but `sql()` is recommended)  
 ✅ Connection retry configuration via `setMaxRetries()`  
 ✅ Custom headers  
 ✅ Flight and HTTP URL configuration
@@ -588,7 +587,7 @@ Options:
 
 #### `listActiveQueries()` / `cancelActiveQuery(queryId)` - List and cancel running queries
 
-`listActiveQueries()` reports the synchronous queries this client currently has running — those started by `sql()`, `query()`, `sqlJson()`, FlightSQL, `nsql()` and `search()` — and `cancelActiveQuery()` stops one by id.
+`listActiveQueries()` reports the synchronous queries this client currently has running — those started by `sql()`, `sqlJson()`, FlightSQL, `nsql()` and `search()`, but not `query()`'s async jobs (see `listQueries()` for those) — and `cancelActiveQuery()` stops one by id.
 
 The runtime does not hand a query's id back to the client that submitted it, so the two are used together: list to find the query, then cancel it. Both are scoped to the caller, so a client only ever sees and cancels its own queries.
 
@@ -678,13 +677,31 @@ console.log(generatedSql); // "SELECT ... FROM ... ORDER BY ... LIMIT 5"
 const table = await spiceClient.sql(generatedSql);
 ```
 
-#### `query(sql: string, onData?: callback)` - Legacy query method
+#### `query(sql, options)` / `queryWithParams(sql, parameters)` - Async queries
 
-The `query()` method is the legacy API for executing SQL queries. It's still supported but `sql()` is recommended for new code.
+**Breaking change:** `query()` no longer executes synchronously. It now submits the query for asynchronous execution via the runtime's `/v1/queries` API and returns an `AsyncQuery` handle. Use `sql()` for the normal synchronous, streaming path — including with parameters, via `sql()`'s existing `options.parameters`.
+
+Async queries require the runtime to be running in distributed/scheduler mode (`spiced --role scheduler` with `runtime.scheduler.state_location` configured).
 
 ```js
-const table = await spiceClient.query('SELECT * FROM my_table');
+const job = await spiceClient.query('SELECT * FROM large_table');
+
+// Wait for completion and fetch results as an Arrow Table
+const table = await job.results();
+
+// Or poll manually
+const status = await job.status(); // 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'CLOSED'
+await job.waitForCompletion({ timeoutMs: 60_000 });
+await job.cancel();
+
+// Parameterized
+const job2 = await spiceClient.queryWithParams(
+  'SELECT * FROM large_table WHERE status = $1',
+  ['active'],
+);
 ```
+
+`listQueries({ status?, limit? })` lists async jobs submitted to the runtime — distinct from `listActiveQueries()`, which lists synchronous queries.
 
 ### Connection retry
 
