@@ -277,3 +277,31 @@ export interface CancelActiveQueryResponse {
 // Legacy interface for backward compatibility
 /** @deprecated Use RefreshAccelerationOptions instead */
 export interface RefreshOverrides extends RefreshAccelerationOptions {}
+
+/**
+ * Options for listing async query jobs.
+ */
+export interface ListQueriesOptions {
+  /** Filter by status (queued, running, completed, failed, cancelled). */
+  status?: string;
+  /** Maximum number of results. */
+  limit?: number;
+}
+
+/**
+ * Summary of an async query job returned by listQueries().
+ */
+export interface AsyncQuerySummary {
+  query_id: string;
+  status: string;
+  sql_preview: string;
+  created_at: string;
+}
+
+/**
+ * Response from listing async query jobs.
+ */
+export interface ListQueriesResponse {
+  queries: AsyncQuerySummary[];
+  total_count: number;
+}

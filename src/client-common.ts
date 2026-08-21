@@ -20,7 +20,25 @@ import {
   type ActiveQuery,
   type ActiveQueriesResponse,
   type CancelActiveQueryResponse,
+  type ListQueriesOptions,
+  type AsyncQuerySummary,
+  type ListQueriesResponse,
 } from './interfaces';
+import {
+  AsyncQuery,
+  type QueryStatus,
+  type QueryStatusResponse,
+  type QueryResponse,
+  type QueryResultChunk,
+} from './async-query';
+
+interface SubmitQueryResponse {
+  query_id: string;
+  status: QueryStatus;
+  error?: { error_code: string; message: string; sql_state?: string };
+  status_url: string;
+  results_url: string;
+}
 import type { GrpcFlightClient } from './grpc/client.node';
 import {
   jsonToArrowTable,
@@ -1035,14 +1053,198 @@ export class SpiceClient {
   }
 
   /**
-   * @deprecated Use sql() instead. This method will be removed in a future version.
+   * Submits a query for asynchronous execution and returns a handle for
+   * polling status and retrieving results. Requires the runtime to be
+   * running in distributed/scheduler mode; otherwise the runtime returns an
+   * error indicating async queries are only available in cluster mode.
+   *
+   * Use {@link sql} for the normal synchronous, streaming path.
+   *
+   * @param queryText - The SQL query to submit
+   * @param options - Optional configuration, including positional/named parameters
+   * @returns Promise resolving to an AsyncQuery handle
+   *
+   * @example
+   * const job = await client.query('SELECT * FROM large_table');
+   * const table = await job.results(); // waits for completion, then fetches results
+   *
+   * @example
+   * // Parameterized
+   * const job = await client.query('SELECT * FROM t WHERE id = $1', { parameters: [123] });
    */
   async query(
     queryText: string,
-    onData?: ((data: Table) => void) | undefined,
-    headers?: { [key: string]: string },
-  ): Promise<Table> {
-    return this.sql(queryText, onData, undefined, headers);
+    options?: SqlQueryOptions,
+  ): Promise<AsyncQuery> {
+    return this.submitAsyncQuery(queryText, options?.parameters);
+  }
+
+  /**
+   * Submits a parameterized query for asynchronous execution. Equivalent to
+   * {@link query} with `options.parameters` set.
+   *
+   * Use {@link sql} for the normal synchronous, streaming, parameterized path.
+   *
+   * @param queryText - The SQL query with positional ($1, $2, ...) or named ($name) placeholders
+   * @param parameters - Positional array or named object of parameter values
+   * @returns Promise resolving to an AsyncQuery handle
+   */
+  async queryWithParams(
+    queryText: string,
+    parameters: QueryParameters,
+  ): Promise<AsyncQuery> {
+    return this.submitAsyncQuery(queryText, parameters);
+  }
+
+  private async submitAsyncQuery(
+    queryText: string,
+    parameters?: QueryParameters,
+  ): Promise<AsyncQuery> {
+    if (!this._httpUrl) {
+      throw new Error('HTTP URL is required for async query operations');
+    }
+    if (!queryText) {
+      throw new Error('query text is required for query operation');
+    }
+
+    const request: { sql: string; parameters?: QueryParameters } = {
+      sql: queryText,
+    };
+    if (parameters !== undefined) {
+      request.parameters = parameters;
+    }
+
+    const response = await this.fetchInternal(
+      'POST',
+      '/v1/queries',
+      undefined,
+      JSON.stringify(request),
+    );
+
+    if (response.status === 503) {
+      const errorText = await response.text();
+      throw new Error(
+        `Async queries are not available: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to submit async query: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    const submitResponse = (await response.json()) as SubmitQueryResponse;
+    return new AsyncQuery(submitResponse.query_id, submitResponse.status, {
+      pollStatus: (queryId) => this.pollAsyncQueryStatus(queryId),
+      getQuery: (queryId) => this.getAsyncQuery(queryId),
+      getChunk: (queryId, chunkIndex) =>
+        this.getAsyncQueryChunk(queryId, chunkIndex),
+      cancel: (queryId) => this.cancelAsyncQuery(queryId),
+    });
+  }
+
+  private async pollAsyncQueryStatus(
+    queryId: string,
+  ): Promise<QueryStatusResponse> {
+    const response = await this.fetchInternal(
+      'GET',
+      `/v1/queries/${encodeURIComponent(queryId)}/status`,
+    );
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to get async query status: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+    return (await response.json()) as QueryStatusResponse;
+  }
+
+  private async getAsyncQuery(queryId: string): Promise<QueryResponse> {
+    const response = await this.fetchInternal(
+      'GET',
+      `/v1/queries/${encodeURIComponent(queryId)}`,
+    );
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to get async query: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+    return (await response.json()) as QueryResponse;
+  }
+
+  private async getAsyncQueryChunk(
+    queryId: string,
+    chunkIndex: number,
+  ): Promise<QueryResultChunk> {
+    const response = await this.fetchInternal(
+      'GET',
+      `/v1/queries/${encodeURIComponent(queryId)}/results/chunks/${chunkIndex}`,
+    );
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to get async query result chunk ${chunkIndex}: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+    return (await response.json()) as QueryResultChunk;
+  }
+
+  private async cancelAsyncQuery(queryId: string): Promise<QueryStatus> {
+    const response = await this.fetchInternal(
+      'POST',
+      `/v1/queries/${encodeURIComponent(queryId)}/cancel`,
+    );
+    if (response.status === 404) {
+      throw new Error(`Async query '${queryId}' not found`);
+    }
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to cancel async query: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+    const queryResponse = (await response.json()) as QueryResponse;
+    return queryResponse.status;
+  }
+
+  /**
+   * Lists async query jobs submitted to the runtime.
+   *
+   * Distinct from {@link listActiveQueries}, which lists synchronous queries
+   * (those started by {@link sql}, FlightSQL, NSQL, and search).
+   *
+   * @param options - Optional status filter and result limit
+   */
+  async listQueries(
+    options?: ListQueriesOptions,
+  ): Promise<AsyncQuerySummary[]> {
+    if (!this._httpUrl) {
+      throw new Error('HTTP URL is required for listing async queries');
+    }
+
+    const params: { [key: string]: string } = {};
+    if (options?.status) {
+      params.status = options.status;
+    }
+    if (options?.limit !== undefined) {
+      params.limit = String(options.limit);
+    }
+
+    const response = await this.fetchInternal(
+      'GET',
+      '/v1/queries',
+      Object.keys(params).length ? params : undefined,
+    );
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to list async queries: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+    const payload = (await response.json()) as ListQueriesResponse | null;
+    return payload?.queries ?? [];
   }
 
   /**

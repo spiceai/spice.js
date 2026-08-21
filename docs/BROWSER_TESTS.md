@@ -160,7 +160,7 @@ describe('Browser Feature', () => {
     });
 
     const client = new SpiceClient({ httpUrl: 'http://localhost:8090' });
-    const result = await client.query('SELECT 1');
+    const result = await client.sql('SELECT 1');
 
     expect(result).toBeDefined();
   });
