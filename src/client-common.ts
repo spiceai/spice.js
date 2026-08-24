@@ -1905,8 +1905,18 @@ export class SpiceClient {
       );
     }
 
-    const payload = (await response.json()) as ConnectionDetails[] | null;
-    return payload ?? [];
+    // The endpoint serializes a list of connections, so anything that is not an
+    // array is a malformed response. Coercing it to [] would report a healthy
+    // runtime with no connections, which is indistinguishable from a real one.
+    const payload: unknown = await response.json();
+    if (!Array.isArray(payload)) {
+      throw new Error(
+        `Failed to get runtime status: expected a JSON array of connections from /v1/status, received ${
+          payload === null ? 'null' : typeof payload
+        }`,
+      );
+    }
+    return payload as ConnectionDetails[];
   }
 
   /**

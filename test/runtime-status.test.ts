@@ -84,8 +84,28 @@ describe('SpiceClient.runtimeStatus()', () => {
     expect(details[0].status).toBe('Draining');
   });
 
-  it('should return an empty array when the runtime reports no connections', async () => {
+  it('should reject a null body rather than report no connections', async () => {
     mockFetch.mockResolvedValue(httpResponse(200, null));
+
+    // /v1/status serializes a list, so null is a malformed response. Returning []
+    // here would be reported as a healthy runtime that has no connections.
+    await expect(client.runtimeStatus()).rejects.toThrow(
+      'Failed to get runtime status: expected a JSON array of connections from /v1/status, received null',
+    );
+  });
+
+  it('should reject a non-array body', async () => {
+    mockFetch.mockResolvedValue(
+      httpResponse(200, { connections: [{ name: 'http' }] }),
+    );
+
+    await expect(client.runtimeStatus()).rejects.toThrow(
+      'Failed to get runtime status: expected a JSON array of connections from /v1/status, received object',
+    );
+  });
+
+  it('should return an empty array when the runtime reports an empty list', async () => {
+    mockFetch.mockResolvedValue(httpResponse(200, []));
 
     await expect(client.runtimeStatus()).resolves.toEqual([]);
   });

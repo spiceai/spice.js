@@ -320,7 +320,10 @@ export type ComponentStatus =
   | 'Error'
   | 'Refreshing'
   | 'ShuttingDown'
-  | 'NotLoaded';
+  | 'NotLoaded'
+  // Carries a status a newer runtime adds, while the literals above still drive
+  // completion. Consumers matching on this type need a default arm.
+  | (string & {});
 
 /**
  * The status of one runtime connection, as reported by `/v1/status`.
@@ -338,5 +341,5 @@ export interface ConnectionDetails {
    * Status of the component. Typed as a union of the statuses this SDK knows
    * about, widened so an unrecognized status from a newer runtime is preserved.
    */
-  status: ComponentStatus | (string & {});
+  status: ComponentStatus;
 }
