@@ -23,6 +23,7 @@ import {
   type ListQueriesOptions,
   type AsyncQuerySummary,
   type ListQueriesResponse,
+  type ConnectionDetails,
 } from './interfaces';
 import {
   AsyncQuery,
@@ -1873,6 +1874,39 @@ export class SpiceClient {
     }
 
     return (await response.json()) as CancelActiveQueryResponse;
+  }
+
+  /**
+   * Reports the status of each runtime connection.
+   *
+   * Where {@link isSpiceReady} collapses the whole runtime to one boolean, this
+   * reports per-component state, so a runtime that is still initializing can be
+   * told apart from one whose Flight endpoint is failing.
+   *
+   * @returns Promise resolving to one entry per runtime connection
+   */
+  async runtimeStatus(): Promise<ConnectionDetails[]> {
+    if (!this._httpUrl) {
+      throw new Error('HTTP URL is required for runtime status');
+    }
+
+    const response = await this.fetchInternal('GET', '/v1/status');
+
+    if (response.status === 403) {
+      throw new Error(
+        'The configured API key does not allow reading runtime status. Use a key with read access.',
+      );
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to get runtime status: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    const payload = (await response.json()) as ConnectionDetails[] | null;
+    return payload ?? [];
   }
 
   /**

@@ -46,6 +46,8 @@ export type {
   ListQueriesOptions,
   AsyncQuerySummary,
   ListQueriesResponse,
+  ComponentStatus,
+  ConnectionDetails,
   RefreshOverrides, // deprecated, kept for backward compatibility
 } from './interfaces';
 
