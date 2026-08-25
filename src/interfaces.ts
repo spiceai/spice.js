@@ -305,3 +305,41 @@ export interface ListQueriesResponse {
   queries: AsyncQuerySummary[];
   total_count: number;
 }
+
+/**
+ * The state of a single runtime component.
+ *
+ * Mirrors the runtime's `ComponentStatus`. A status the runtime adds in future is
+ * still carried through on {@link ConnectionDetails.status} rather than being
+ * dropped, so a newer runtime never breaks an older client.
+ */
+export type ComponentStatus =
+  | 'Initializing'
+  | 'Ready'
+  | 'Disabled'
+  | 'Error'
+  | 'Refreshing'
+  | 'ShuttingDown'
+  | 'NotLoaded'
+  // Carries a status a newer runtime adds, while the literals above still drive
+  // completion. Consumers matching on this type need a default arm.
+  | (string & {});
+
+/**
+ * The status of one runtime connection, as reported by `/v1/status`.
+ */
+export interface ConnectionDetails {
+  /**
+   * Name of the connection: 'http', 'flight', 'metrics' or 'opentelemetry'
+   */
+  name: string;
+  /**
+   * Endpoint the connection is served on, or 'N/A' when the component is disabled
+   */
+  endpoint: string;
+  /**
+   * Status of the component. Typed as a union of the statuses this SDK knows
+   * about, widened so an unrecognized status from a newer runtime is preserved.
+   */
+  status: ComponentStatus;
+}

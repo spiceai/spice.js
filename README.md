@@ -168,6 +168,7 @@ npm install @spiceai/spice@latest
 - ✅ **Platform-Optimized**: Node.js uses Apache Arrow Flight (gRPC), browsers use HTTP API
 - ✅ **New Query Methods**: `sql()`, `sqlJson()`, and `nsql()` for flexible querying
 - ✅ **Health Checks**: `isSpiceHealthy()` and `isSpiceReady()` for monitoring
+- ✅ **Runtime Status**: `runtimeStatus()` for per-component state
 - ✅ **Dataset Refresh**: `refreshAcceleration()` for on-demand dataset updates
 - ✅ **HTTP Fallback**: Automatic fallback to HTTP in serverless environments
 - ✅ **Proto Auto-Download**: Flight proto file automatically downloaded and cached when missing
@@ -561,6 +562,32 @@ if (await waitForSpice()) {
   const result = await spiceClient.sql('SELECT * FROM my_table');
 }
 ```
+
+#### `runtimeStatus()` - Per-component runtime status
+
+The `runtimeStatus()` method reports the status of each runtime connection. Where `isSpiceReady()` collapses the whole runtime to one boolean, this reports per-component state, so a runtime that is still initializing can be told apart from one whose Flight endpoint is failing.
+
+```js
+const details = await spiceClient.runtimeStatus();
+for (const d of details) {
+  console.log(`${d.name} @ ${d.endpoint}: ${d.status}`);
+}
+// http @ http://127.0.0.1:8090: Ready
+// flight @ 127.0.0.1:50051: Ready
+// metrics @ N/A: Disabled
+
+// Example: fail fast when the data path specifically is unhealthy
+const flight = details.find((d) => d.name === 'flight');
+if (flight && flight.status !== 'Ready') {
+  throw new Error(`Flight endpoint is ${flight.status}`);
+}
+```
+
+Each entry is a `ConnectionDetails`:
+
+- `name`: the connection — `'http'`, `'flight'`, `'metrics'` or `'opentelemetry'`
+- `endpoint`: where it is served, or `'N/A'` when the component is disabled
+- `status`: a `ComponentStatus` — `'Initializing'`, `'Ready'`, `'Disabled'`, `'Error'`, `'Refreshing'`, `'ShuttingDown'` or `'NotLoaded'`. A status added by a newer runtime is passed through rather than dropped.
 
 #### `refreshAcceleration(dataset: string, options?)` - Trigger dataset refresh
 
