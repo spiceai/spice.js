@@ -61,6 +61,21 @@ export interface RetryModule {
 }
 
 /**
+ * The error an aborted operation rejects with: the signal's own reason when it
+ * has one — `AbortSignal.timeout` sets a TimeoutError — and a standard
+ * AbortError otherwise.
+ */
+function abortError(signal: AbortSignal): Error {
+  const reason: unknown = signal.reason;
+  if (reason instanceof Error) {
+    return reason;
+  }
+  const error = new Error('The operation was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+/**
  * Helper function to recursively convert timestamps in nested structures
  */
 function convertTimestampsInValue(value: any, field?: any): any {
@@ -732,6 +747,7 @@ export class SpiceClient {
     parameters?: QueryParameters,
     onData?: (data: Table) => void,
     headers?: { [key: string]: string },
+    signal?: AbortSignal,
   ): Promise<Table> {
     // Transport hierarchy:
     // 1. Try gRPC Flight SQL (custom proto with parameter substitution)
@@ -757,6 +773,7 @@ export class SpiceClient {
             parameters,
             trackingOnData,
             headers,
+            signal,
           );
         } catch (error) {
           if (this._flightOnly || dataSent) {
@@ -792,7 +809,13 @@ export class SpiceClient {
     }
 
     // Fallback to HTTP
-    return this.doHttpQueryRequest(queryText, parameters, onData, headers);
+    return this.doHttpQueryRequest(
+      queryText,
+      parameters,
+      onData,
+      headers,
+      signal,
+    );
   }
 
   private async doGrpcQueryRequest(
@@ -800,9 +823,14 @@ export class SpiceClient {
     parameters?: QueryParameters,
     onData?: (data: Table) => void,
     headers?: { [key: string]: string },
+    signal?: AbortSignal,
   ): Promise<Table> {
     if (!this._grpcClient) {
       throw new Error('gRPC client not initialized');
+    }
+
+    if (signal?.aborted) {
+      throw abortError(signal);
     }
 
     try {
@@ -833,12 +861,35 @@ export class SpiceClient {
       });
 
       return new Promise((resolve, reject) => {
+        // Cancelling makes the call emit CANCELLED; surface the caller's abort
+        // reason instead, so an aborted query looks the same on both transports.
+        let abortedWith: Error | null = null;
+        let stopListening = () => {};
+
+        if (signal) {
+          const abortSignal = signal;
+          const onAbort = () => {
+            abortedWith = abortError(abortSignal);
+            (resultStream as { cancel?: () => void }).cancel?.();
+          };
+          abortSignal.addEventListener('abort', onAbort, { once: true });
+          stopListening = () =>
+            abortSignal.removeEventListener('abort', onAbort);
+        }
+
         resultStream.on('status', (_response: FlightStatus) => {
+          stopListening();
           const table = wrapTableForDecimalConversion(tableFromIPC(chunks));
           resolve(table);
         });
 
         resultStream.on('error', (err: any) => {
+          stopListening();
+          if (abortedWith) {
+            this._retry.dontRetry(abortedWith);
+            reject(abortedWith);
+            return;
+          }
           if (isDataAlreadySent) {
             this._retry.dontRetry(err);
           }
@@ -855,6 +906,7 @@ export class SpiceClient {
     parameters?: QueryParameters,
     onData?: (data: Table) => void,
     headers?: { [key: string]: string },
+    signal?: AbortSignal,
   ): Promise<Table> {
     // Use appropriate Accept header based on endpoint (use cached value)
     const acceptHeader = this._isSpiceCloud
@@ -904,6 +956,7 @@ export class SpiceClient {
       undefined,
       requestBody,
       requestHeaders,
+      signal,
     );
 
     if (!response.ok) {
@@ -1047,7 +1100,13 @@ export class SpiceClient {
 
     return this._retry.retryWithExponentialBackoff<Table>(
       () =>
-        this.doQueryRequest(queryText, options?.parameters, callback, headers),
+        this.doQueryRequest(
+          queryText,
+          options?.parameters,
+          callback,
+          headers,
+          options?.signal,
+        ),
       this._maxRetries,
     );
   }
@@ -1252,12 +1311,21 @@ export class SpiceClient {
    * Uses gRPC/Arrow if available, otherwise falls back to HTTP.
    * @param queryText - The SQL query to execute
    * @param headers - Optional headers to pass with the request (HTTP headers for HTTP, Flight metadata for gRPC)
+   * @param options - Optional configuration; `signal` cancels the query
    * @returns Promise resolving to an object containing row_count, schema, data, and execution_time_ms
+   *
+   * @example
+   * // Give the query five seconds, then cancel it
+   * await client.sqlJson('SELECT * FROM big_table', undefined, {
+   *   signal: AbortSignal.timeout(5000),
+   * });
    */
   async sqlJson(
     queryText: string,
     headers?: { [key: string]: string },
+    options?: Pick<SqlQueryOptions, 'signal'>,
   ): Promise<SqlV1JsonResponse> {
+    const signal = options?.signal;
     const startTime = Date.now();
 
     // Check if we should use gRPC/Arrow
@@ -1288,6 +1356,7 @@ export class SpiceClient {
 
       await this.sql(
         queryText,
+        { signal },
         (table) => {
           // Capture schema from first chunk
           if (!schema) {
@@ -1433,7 +1502,6 @@ export class SpiceClient {
             allRows.push(convertedRow);
           }
         },
-        undefined,
         headers,
       );
 
@@ -1462,6 +1530,7 @@ export class SpiceClient {
         undefined,
         queryText,
         requestHeaders,
+        signal,
       );
 
       if (!response.ok) {
@@ -1940,6 +2009,7 @@ export class SpiceClient {
     params?: { [key: string]: string },
     body?: string,
     customHeaders?: { [key: string]: string },
+    signal?: AbortSignal,
   ) {
     const url =
       params && Object.keys(params).length
@@ -1974,6 +2044,7 @@ export class SpiceClient {
       method,
       headers,
       body,
+      signal,
     });
   }
 }
