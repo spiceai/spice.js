@@ -95,15 +95,25 @@ const table = await client.sql('SELECT * FROM taxi_trips', {
 
 // Or cancel it yourself
 const controller = new AbortController();
-const pending = client.sqlJson('SELECT * FROM taxi_trips', undefined, {
+const pending = client.sqlJson('SELECT * FROM taxi_trips', {
   signal: controller.signal,
 });
 controller.abort();
 ```
 
-Racing the returned promise against a timer is not equivalent: that stops your
-code waiting for the result, but the query keeps running on the server, so a
-retry or a subsequent call stacks more work on top of it.
+The promise rejects with the signal's own `reason` — a `TimeoutError` from
+`AbortSignal.timeout()`, an `AbortError` from a bare `controller.abort()`, or
+whatever value you pass to `abort(reason)`. Branch on `err.name`; an aborted
+query is never retried.
+
+Racing the returned promise against a timer is not equivalent: that only stops
+your code waiting for the result, while the query keeps running, so a retry or
+a subsequent call stacks more work on top of it.
+
+Over Arrow Flight the SDK also asks the runtime to stop executing the query it
+started. Over HTTP, aborting ends the request but the runtime may still run the
+statement to completion — cancel it explicitly with `cancelActiveQuery()` if
+that matters.
 
 ### Search
 

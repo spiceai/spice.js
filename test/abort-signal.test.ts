@@ -55,12 +55,75 @@ describe('query cancellation', () => {
     );
     const controller = new AbortController();
 
-    await client.sqlJson('SELECT 1', undefined, { signal: controller.signal });
+    await client.sqlJson('SELECT 1', { signal: controller.signal });
 
     expect(mockFetch).toHaveBeenCalledWith(
       'http://localhost:8090/v1/sql',
       expect.objectContaining({ signal: controller.signal }),
     );
+  });
+
+  it('still accepts the legacy sqlJson(sql, headers, options) form', async () => {
+    mockFetch.mockResolvedValue(
+      httpResponse({ row_count: 0, schema: { fields: [] }, data: [] }),
+    );
+    const controller = new AbortController();
+
+    await client.sqlJson(
+      'SELECT 1',
+      { 'x-trace': 'abc' },
+      {
+        signal: controller.signal,
+      },
+    );
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:8090/v1/sql',
+      expect.objectContaining({
+        signal: controller.signal,
+        headers: expect.objectContaining({ 'x-trace': 'abc' }),
+      }),
+    );
+  });
+
+  it('reads headers from the options object', async () => {
+    mockFetch.mockResolvedValue(
+      httpResponse({ row_count: 0, schema: { fields: [] }, data: [] }),
+    );
+
+    await client.sqlJson('SELECT 1', { headers: { 'x-trace': 'xyz' } });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:8090/v1/sql',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-trace': 'xyz' }),
+      }),
+    );
+  });
+
+  it('treats a bare second argument as headers, as it always did', async () => {
+    mockFetch.mockResolvedValue(
+      httpResponse({ row_count: 0, schema: { fields: [] }, data: [] }),
+    );
+
+    await client.sqlJson('SELECT 1', { 'x-trace': 'legacy' });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:8090/v1/sql',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-trace': 'legacy' }),
+      }),
+    );
+  });
+
+  it('throws the reason without issuing a request when pre-aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      client.sql('SELECT 1', { signal: controller.signal }),
+    ).rejects.toBe(controller.signal.reason);
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('sends no signal when the caller supplies none', async () => {
@@ -136,6 +199,36 @@ describe('query cancellation over a real socket', () => {
   afterEach(() => {
     server.close();
   });
+
+  it("rejects with the caller's abort reason, verbatim", async () => {
+    const client = new SpiceClient({
+      httpUrl: `http://127.0.0.1:${port}`,
+      httpOnly: true,
+      logging: false,
+    });
+    const controller = new AbortController();
+    const reason = new Error('query budget exceeded');
+    const pending = client.sql('SELECT 1', { signal: controller.signal });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    controller.abort(reason);
+
+    // node-fetch raises its own AbortError; the SDK restores the reason.
+    await expect(pending).rejects.toBe(reason);
+  }, 20_000);
+
+  it('preserves a non-Error abort reason', async () => {
+    const client = new SpiceClient({
+      httpUrl: `http://127.0.0.1:${port}`,
+      httpOnly: true,
+      logging: false,
+    });
+    const controller = new AbortController();
+    const pending = client.sql('SELECT 1', { signal: controller.signal });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    controller.abort('too slow');
+
+    await expect(pending).rejects.toBe('too slow');
+  }, 20_000);
 
   it('aborts the in-flight request, rather than abandoning it', async () => {
     const client = new SpiceClient({

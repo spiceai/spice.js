@@ -126,6 +126,19 @@ export interface SqlQueryOptions {
    * query running on the server.
    */
   signal?: AbortSignal;
+  /**
+   * Extra request headers — HTTP headers over HTTP, Flight metadata over gRPC.
+   * Equivalent to the trailing `headers` argument, which stays supported.
+   */
+  headers?: { [key: string]: string };
+}
+
+/** Per-request options for {@link SpiceClient.sqlJson}. */
+export interface SqlJsonOptions {
+  /** Cancels the query. See {@link SqlQueryOptions.signal}. */
+  signal?: AbortSignal;
+  /** Extra request headers — HTTP headers over HTTP, Flight metadata over gRPC. */
+  headers?: { [key: string]: string };
 }
 
 export interface SearchOptions {

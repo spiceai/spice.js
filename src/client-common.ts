@@ -13,6 +13,7 @@ import {
   type NsqlOptions,
   type NsqlResponse,
   type SqlQueryOptions,
+  type SqlJsonOptions,
   type QueryParameters,
   type SearchOptions,
   type SearchResponse,
@@ -61,18 +62,37 @@ export interface RetryModule {
 }
 
 /**
- * The error an aborted operation rejects with: the signal's own reason when it
- * has one — `AbortSignal.timeout` sets a TimeoutError — and a standard
- * AbortError otherwise.
+ * Tells `sqlJson`'s options object apart from the headers bag it used to take
+ * in the same position. Header values are always strings, so a `signal` that
+ * is not a string — or a `headers` key at all — means this is the options
+ * object.
  */
-function abortError(signal: AbortSignal): Error {
-  const reason: unknown = signal.reason;
-  if (reason instanceof Error) {
-    return reason;
+function isSqlJsonOptions(
+  value?: { [key: string]: string } | SqlJsonOptions,
+): value is SqlJsonOptions {
+  if (!value) {
+    return false;
   }
-  const error = new Error('The operation was aborted');
-  error.name = 'AbortError';
-  return error;
+  if ('headers' in value) {
+    return true;
+  }
+  const signal = (value as SqlJsonOptions).signal;
+  return signal !== undefined && typeof signal !== 'string';
+}
+
+/**
+ * True when the runtime's truncated `sql_preview` could have come from this
+ * query text. The runtime cuts the preview short and marks it with an
+ * ellipsis, so an exact match is only available for short statements.
+ */
+function previewMatches(preview: string, queryText: string): boolean {
+  if (!preview) {
+    return false;
+  }
+  if (preview === queryText) {
+    return true;
+  }
+  return preview.endsWith('...') && queryText.startsWith(preview.slice(0, -3));
 }
 
 /**
@@ -776,7 +796,9 @@ export class SpiceClient {
             signal,
           );
         } catch (error) {
-          if (this._flightOnly || dataSent) {
+          // An abort is the caller's decision, not a transport failure —
+          // falling back here would re-run the query they just cancelled.
+          if (this._flightOnly || dataSent || signal?.aborted) {
             throw error;
           }
           this._logger.warn(
@@ -809,6 +831,7 @@ export class SpiceClient {
     }
 
     // Fallback to HTTP
+    signal?.throwIfAborted();
     return this.doHttpQueryRequest(
       queryText,
       parameters,
@@ -829,9 +852,7 @@ export class SpiceClient {
       throw new Error('gRPC client not initialized');
     }
 
-    if (signal?.aborted) {
-      throw abortError(signal);
-    }
+    signal?.throwIfAborted();
 
     try {
       const resultStream = await this._grpcClient.executeQuery(
@@ -861,33 +882,45 @@ export class SpiceClient {
       });
 
       return new Promise((resolve, reject) => {
-        // Cancelling makes the call emit CANCELLED; surface the caller's abort
-        // reason instead, so an aborted query looks the same on both transports.
-        let abortedWith: Error | null = null;
+        // Cancelling makes the call emit CANCELLED. Reject with the caller's
+        // own abort reason instead — the DOM convention for an abortable API —
+        // and settle as soon as the abort fires rather than waiting for gRPC.
+        let aborted = false;
         let stopListening = () => {};
 
         if (signal) {
           const abortSignal = signal;
           const onAbort = () => {
-            abortedWith = abortError(abortSignal);
+            aborted = true;
+            stopListening();
+            // Stop reading, then ask the runtime to stop executing. Dropping
+            // the stream alone leaves the query running server-side.
             (resultStream as { cancel?: () => void }).cancel?.();
+            void this.cancelFlightQuery(queryText);
+            // The DOM convention is to reject with the signal's reason
+            // verbatim, and a caller may abort with any value at all.
+            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+            reject(abortSignal.reason);
           };
           abortSignal.addEventListener('abort', onAbort, { once: true });
+          // `{ once: true }` alone leaks the listener on the success path, and
+          // a caller's long-lived signal keeps it alive.
           stopListening = () =>
             abortSignal.removeEventListener('abort', onAbort);
         }
 
         resultStream.on('status', (_response: FlightStatus) => {
           stopListening();
+          if (aborted) {
+            return;
+          }
           const table = wrapTableForDecimalConversion(tableFromIPC(chunks));
           resolve(table);
         });
 
         resultStream.on('error', (err: any) => {
           stopListening();
-          if (abortedWith) {
-            this._retry.dontRetry(abortedWith);
-            reject(abortedWith);
+          if (aborted) {
             return;
           }
           if (isDataAlreadySent) {
@@ -898,6 +931,44 @@ export class SpiceClient {
       });
     } catch (error) {
       throw error;
+    }
+  }
+
+  /**
+   * Ask the runtime to stop a Flight query this client started.
+   *
+   * Flight hands the caller no query id — the ticket carries a trace id and
+   * the SQL, and neither the FlightInfo nor the stream metadata carries the
+   * `query_id` that the cancel endpoint takes — so the query has to be found
+   * in the active list by its statement. Only an unambiguous match is
+   * cancelled: if two running Flight queries could be this one, both are left
+   * alone rather than risk stopping the wrong caller's work.
+   *
+   * Best-effort by design. The caller's promise has already rejected with
+   * their abort reason, so nothing here is allowed to throw or delay them.
+   */
+  private async cancelFlightQuery(queryText: string): Promise<void> {
+    try {
+      const candidates = (await this.listActiveQueries()).filter(
+        (query) =>
+          query.protocol === 'flight' &&
+          previewMatches(query.sql_preview, queryText),
+      );
+
+      if (candidates.length !== 1) {
+        this._logger.debug(
+          `[spice.js] not cancelling Flight query server-side: ${candidates.length} active queries match the statement`,
+        );
+        return;
+      }
+
+      await this.cancelActiveQuery(candidates[0].query_id);
+    } catch (error) {
+      this._logger.debug(
+        `[spice.js] server-side cancel of aborted Flight query failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
   }
 
@@ -1098,15 +1169,21 @@ export class SpiceClient {
       callback = onData;
     }
 
+    const requestHeaders = options?.headers ?? headers;
+
     return this._retry.retryWithExponentialBackoff<Table>(
-      () =>
-        this.doQueryRequest(
+      () => {
+        // Checked per attempt: a retry scheduled before the abort must not
+        // start new work after it.
+        options?.signal?.throwIfAborted();
+        return this.doQueryRequest(
           queryText,
           options?.parameters,
           callback,
-          headers,
+          requestHeaders,
           options?.signal,
-        ),
+        );
+      },
       this._maxRetries,
     );
   }
@@ -1322,9 +1399,31 @@ export class SpiceClient {
    */
   async sqlJson(
     queryText: string,
-    headers?: { [key: string]: string },
-    options?: Pick<SqlQueryOptions, 'signal'>,
+    options?: SqlJsonOptions,
+  ): Promise<SqlV1JsonResponse>;
+  /**
+   * @deprecated Pass `headers` inside the options object:
+   * `sqlJson(sql, { headers, signal })`.
+   */
+  async sqlJson(
+    queryText: string,
+    headers: { [key: string]: string } | undefined,
+    options?: SqlJsonOptions,
+  ): Promise<SqlV1JsonResponse>;
+  async sqlJson(
+    queryText: string,
+    headersOrOptions?: { [key: string]: string } | SqlJsonOptions,
+    legacyOptions?: SqlJsonOptions,
   ): Promise<SqlV1JsonResponse> {
+    const asOptions = isSqlJsonOptions(headersOrOptions)
+      ? headersOrOptions
+      : undefined;
+    const options = legacyOptions ?? asOptions;
+    const headers =
+      options?.headers ??
+      (asOptions
+        ? undefined
+        : (headersOrOptions as { [key: string]: string } | undefined));
     const signal = options?.signal;
     const startTime = Date.now();
 
@@ -2040,11 +2139,21 @@ export class SpiceClient {
       headers['X-API-Key'] = this._apiKey;
     }
 
-    return this._platform.fetch(url, {
-      method,
-      headers,
-      body,
-      signal,
-    });
+    try {
+      return await this._platform.fetch(url, {
+        method,
+        headers,
+        body,
+        signal,
+      });
+    } catch (error) {
+      // node-fetch discards the reason and always raises its own AbortError,
+      // so restore what the caller actually aborted with. The DOM convention
+      // is to reject with the signal's reason verbatim.
+      if (signal?.aborted) {
+        throw signal.reason;
+      }
+      throw error;
+    }
   }
 }
