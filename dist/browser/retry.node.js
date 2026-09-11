@@ -1,0 +1,60 @@
+/**
+ * Retry logic for Node.js with gRPC error codes
+ */
+import * as retry from 'retry';
+import * as grpc from '@grpc/grpc-js';
+//default max retry value
+const FLIGHT_QUERY_MAX_RETRIES = 3;
+const SPICE_NO_RETRY = '_SPICE_NO_RETRY';
+function dontRetry(err) {
+    err[SPICE_NO_RETRY] = true;
+}
+function shouldRetryOperationForError(err) {
+    // error marked as permanent so operation should not be retried
+    if (err && err[SPICE_NO_RETRY]) {
+        return false;
+    }
+    // the caller cancelled, so retrying would restart the work they just stopped
+    const name = err?.name;
+    if (name === 'AbortError' || name === 'TimeoutError') {
+        return false;
+    }
+    let code = err && err.code;
+    if (!code) {
+        return false;
+    }
+    return [
+        grpc.status.UNAVAILABLE,
+        grpc.status.DEADLINE_EXCEEDED,
+        grpc.status.ABORTED,
+        grpc.status.INTERNAL,
+        grpc.status.UNKNOWN,
+    ].includes(code);
+}
+async function retryWithExponentialBackoff(operation, maxRetries) {
+    if (maxRetries < 0) {
+        throw new Error('maxRetries must be greater than or equal to 0');
+    }
+    return new Promise((resolve, reject) => {
+        const operationRetry = retry.operation({
+            retries: maxRetries,
+            // the exponential factor that will be used
+            factor: 1.5,
+        });
+        operationRetry.attempt(() => {
+            operation()
+                .then(resolve)
+                .catch((err) => {
+                let shouldRetry = shouldRetryOperationForError(err);
+                if (shouldRetry && operationRetry.retry(err)) {
+                    return;
+                }
+                // in case we didn't try to retry the operation then mainError will be null
+                // so we need to pass err for this scenario as an alternative
+                reject(operationRetry.mainError() || err);
+            });
+        });
+    });
+}
+export { FLIGHT_QUERY_MAX_RETRIES, dontRetry, retryWithExponentialBackoff };
+//# sourceMappingURL=retry.node.js.map
