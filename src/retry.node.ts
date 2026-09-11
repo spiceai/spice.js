@@ -19,6 +19,12 @@ function shouldRetryOperationForError(err: any): boolean {
     return false;
   }
 
+  // the caller cancelled, so retrying would restart the work they just stopped
+  const name: unknown = (err as { name?: unknown } | null | undefined)?.name;
+  if (name === 'AbortError' || name === 'TimeoutError') {
+    return false;
+  }
+
   let code = err && err.code;
 
   if (!code) {

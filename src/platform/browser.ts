@@ -30,6 +30,7 @@ class BrowserPlatformAdapter implements PlatformAdapter {
       method: options.method,
       headers: options.headers,
       body: options.body,
+      signal: options.signal,
     });
 
     return {

@@ -35,6 +35,7 @@ export type {
   NsqlOptions,
   NsqlResponse,
   SqlQueryOptions,
+  SqlJsonOptions,
   QueryParameters,
   QueryParameterValue,
   SearchOptions,

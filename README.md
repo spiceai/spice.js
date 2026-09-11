@@ -82,6 +82,39 @@ const table = await client.sql(
 
 The SDK handles all protocol negotiation automatically - you just write standard SQL with parameters.
 
+### Cancelling a query
+
+Pass an `AbortSignal` to cancel a query. Over HTTP the request is aborted; over
+Arrow Flight the result stream is cancelled. An aborted query is never retried.
+
+```js
+// Give the query five seconds, then cancel it
+const table = await client.sql('SELECT * FROM taxi_trips', {
+  signal: AbortSignal.timeout(5000),
+});
+
+// Or cancel it yourself
+const controller = new AbortController();
+const pending = client.sqlJson('SELECT * FROM taxi_trips', {
+  signal: controller.signal,
+});
+controller.abort();
+```
+
+The promise rejects with the signal's own `reason` — a `TimeoutError` from
+`AbortSignal.timeout()`, an `AbortError` from a bare `controller.abort()`, or
+whatever value you pass to `abort(reason)`. Branch on `err.name`; an aborted
+query is never retried.
+
+Racing the returned promise against a timer is not equivalent: that only stops
+your code waiting for the result, while the query keeps running, so a retry or
+a subsequent call stacks more work on top of it.
+
+Over Arrow Flight the SDK also asks the runtime to stop executing the query it
+started. Over HTTP, aborting ends the request but the runtime may still run the
+statement to completion — cancel it explicitly with `cancelActiveQuery()` if
+that matters.
+
 ### Search
 
 `search()` runs vector similarity, keyword, and hybrid search against datasets that have
