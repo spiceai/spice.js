@@ -117,13 +117,9 @@ export interface SqlQueryOptions {
   parameters?: QueryParameters;
   /**
    * Cancels the query when it fires. Over HTTP the request is aborted; over
-   * Arrow Flight the result stream is cancelled. An aborted query is never
-   * retried.
-   *
-   * Use it to bound a long-running query — `AbortSignal.timeout(ms)` — or to
-   * drop work whose caller has gone away. Racing the returned promise against
-   * a timer is not equivalent: that stops the caller waiting, but leaves the
-   * query running on the server.
+   * Arrow Flight the result stream is cancelled and the runtime is asked to
+   * stop executing. The promise rejects with the signal's `reason`, and an
+   * aborted query is never retried.
    */
   signal?: AbortSignal;
   /**
