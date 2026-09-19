@@ -89,6 +89,29 @@ describe('endpoint defaults', () => {
 
       await expect(httpEndpointOf(client)).resolves.toBe(LOCAL_HTTP);
     });
+
+    it('keeps the local HTTP default for a spiceai.io host that is not the Cloud Flight endpoint', async () => {
+      const client = new SpiceClient({
+        apiKey: 'test-api-key',
+        flightUrl: 'staging.spiceai.io:443',
+      });
+
+      await expect(httpEndpointOf(client)).resolves.toBe(LOCAL_HTTP);
+    });
+
+    it('pairs a local IPv6 Flight endpoint with HTTP on the same address', async () => {
+      const client = new SpiceClient({ flightUrl: '[::1]:50051' });
+
+      await expect(httpEndpointOf(client)).resolves.toBe('http://[::1]:8090');
+    });
+
+    it('pairs a localhost Flight endpoint with HTTP on the same name', async () => {
+      const client = new SpiceClient({ flightUrl: 'localhost:50051' });
+
+      await expect(httpEndpointOf(client)).resolves.toBe(
+        'http://localhost:8090',
+      );
+    });
   });
 
   describe('when only the HTTP endpoint is given', () => {
@@ -123,6 +146,33 @@ describe('endpoint defaults', () => {
       });
 
       expect(flightEndpointOf(client)).toBe(LOCAL_FLIGHT);
+    });
+
+    it('keeps the local Flight default for a spiceai.io host that is not the Cloud HTTP endpoint', () => {
+      const client = new SpiceClient({
+        apiKey: 'test-api-key',
+        httpUrl: 'https://spiceai.io',
+      });
+
+      expect(flightEndpointOf(client)).toBe(LOCAL_FLIGHT);
+    });
+
+    it('pairs a local IPv6 HTTP endpoint with Flight on the same address', () => {
+      const client = new SpiceClient({ httpUrl: 'http://[::1]:8090' });
+
+      expect(flightEndpointOf(client)).toBe('[::1]:50051');
+    });
+
+    it('pairs a localhost HTTP endpoint with Flight on the same name', () => {
+      const client = new SpiceClient({ httpUrl: 'http://localhost:8090' });
+
+      expect(flightEndpointOf(client)).toBe('localhost:50051');
+    });
+
+    it('leaves Flight TLS off for the local IPv6 Flight endpoint it paired', () => {
+      const client = new SpiceClient({ httpUrl: 'http://[::1]:8090' });
+
+      expect((client as any)._flightTlsEnabled).toBe(false);
     });
   });
 });

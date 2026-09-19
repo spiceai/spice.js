@@ -496,6 +496,17 @@ export class SpiceClient {
   private static readonly DEFAULT_LOCAL_HTTP = 'http://127.0.0.1:8090';
   private static readonly DEFAULT_LOCAL_FLIGHT = '127.0.0.1:50051';
 
+  // The hostnames of the two Spice Cloud endpoints above, each the only host
+  // whose counterpart this client can name. A broader `*.spiceai.io` match
+  // would pair, say, a staging Flight host with the production HTTP endpoint.
+  private static readonly CLOUD_HTTP_HOSTNAME = 'data.spiceai.io';
+  private static readonly CLOUD_FLIGHT_HOSTNAME = 'flight.spiceai.io';
+
+  // The local runtime's default port per protocol, used to pair a local
+  // endpoint with its counterpart on the same host.
+  private static readonly LOCAL_HTTP_PORT = 8090;
+  private static readonly LOCAL_FLIGHT_PORT = 50051;
+
   /**
    * The hostname of a Flight address, which is `host:port` and may carry a
    * scheme (`grpc://`, `grpc+tls://`), so it cannot go through `URL`.
@@ -518,14 +529,19 @@ export class SpiceClient {
     return hostname.toLowerCase();
   }
 
-  private static isSpiceCloudHostname(hostname: string): boolean {
-    return hostname === 'spiceai.io' || hostname.endsWith('.spiceai.io');
-  }
-
   private static isLocalHostname(hostname: string): boolean {
     return (
       hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1'
     );
+  }
+
+  /**
+   * A hostname as it appears in a `host:port` address: an IPv6 literal is
+   * bracketed so its own colons are not read as the port separator, which is
+   * what keeps a paired local endpoint on the address family it was given.
+   */
+  private static asAddressHost(hostname: string): string {
+    return hostname.includes(':') ? `[${hostname}]` : hostname;
   }
 
   /**
@@ -541,11 +557,11 @@ export class SpiceClient {
   private static pairedHttpUrlFor(flightUrl: string): string | undefined {
     const hostname = SpiceClient.flightHostname(flightUrl);
 
-    if (SpiceClient.isSpiceCloudHostname(hostname)) {
+    if (hostname === SpiceClient.CLOUD_FLIGHT_HOSTNAME) {
       return SpiceClient.DEFAULT_CLOUD_HTTP;
     }
     if (SpiceClient.isLocalHostname(hostname)) {
-      return SpiceClient.DEFAULT_LOCAL_HTTP;
+      return `http://${SpiceClient.asAddressHost(hostname)}:${SpiceClient.LOCAL_HTTP_PORT}`;
     }
     return undefined;
   }
@@ -562,11 +578,11 @@ export class SpiceClient {
       return undefined;
     }
 
-    if (SpiceClient.isSpiceCloudHostname(hostname)) {
+    if (hostname === SpiceClient.CLOUD_HTTP_HOSTNAME) {
       return SpiceClient.DEFAULT_CLOUD_FLIGHT;
     }
     if (SpiceClient.isLocalHostname(hostname)) {
-      return SpiceClient.DEFAULT_LOCAL_FLIGHT;
+      return `${SpiceClient.asAddressHost(hostname)}:${SpiceClient.LOCAL_FLIGHT_PORT}`;
     }
     return undefined;
   }
@@ -642,7 +658,9 @@ export class SpiceClient {
         this._flightUrl.startsWith('127.0.0.1:') ||
         this._flightUrl === '127.0.0.1' ||
         this._flightUrl.startsWith('localhost:') ||
-        this._flightUrl === 'localhost';
+        this._flightUrl === 'localhost' ||
+        this._flightUrl.startsWith('[::1]:') ||
+        this._flightUrl === '[::1]';
 
       this._flightTlsEnabled =
         flightTlsEnabled !== undefined ? flightTlsEnabled : !isLocalhost;
