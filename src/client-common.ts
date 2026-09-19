@@ -527,25 +527,32 @@ export class SpiceClient {
       .replace(/^dns:(?:\/\/[^/]*\/)?/i, '')
       .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
 
-    // A bracketed IPv6 literal, normalised through `URL` — the same normaliser
-    // `pairedFlightUrlFor` applies on the HTTP side, so the two directions
-    // agree on when two spellings are the same host.
+    // A bracketed IPv6 literal, put through `urlHostname` — the same
+    // normaliser the HTTP side uses, so the two directions agree on when two
+    // spellings are the same host.
     const bracketed = /^\[([0-9A-Fa-f:.]+)\](?::\d+)?$/.exec(address);
     if (bracketed) {
-      try {
-        return new URL(`http://[${bracketed[1]}]`).hostname.replace(
-          /^\[|\]$/g,
-          '',
-        );
-      } catch {
-        return '';
-      }
+      return SpiceClient.urlHostname(`http://[${bracketed[1]}]`) ?? '';
     }
 
     // Otherwise a host carrying none of the characters that would make the
     // address something other than a plain `host[:port]`.
     const plain = /^([^[\]:/@?#]+)(?::\d+)?$/.exec(address);
     return plain ? plain[1].toLowerCase() : '';
+  }
+
+  /**
+   * The hostname `URL` resolves for an HTTP address, with the brackets taken
+   * off an IPv6 literal, or `undefined` when it is not a URL at all. `URL`
+   * lower-cases, applies IDNA and collapses an IPv6 literal to its canonical
+   * spelling, so this is what decides whether two addresses name one host.
+   */
+  private static urlHostname(url: string): string | undefined {
+    try {
+      return new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    } catch {
+      return undefined;
+    }
   }
 
   private static isLocalHostname(hostname: string): boolean {
@@ -587,13 +594,8 @@ export class SpiceClient {
 
   /** The Flight endpoint belonging with an HTTP endpoint. */
   private static pairedFlightUrlFor(httpUrl: string): string | undefined {
-    let hostname: string;
-    try {
-      // `URL` keeps the brackets around an IPv6 literal.
-      hostname = new URL(httpUrl).hostname
-        .toLowerCase()
-        .replace(/^\[|\]$/g, '');
-    } catch {
+    const hostname = SpiceClient.urlHostname(httpUrl);
+    if (hostname === undefined) {
       return undefined;
     }
 
