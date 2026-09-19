@@ -99,6 +99,28 @@ describe('endpoint defaults', () => {
       await expect(httpEndpointOf(client)).resolves.toBe(LOCAL_HTTP);
     });
 
+    // A Flight target is the whole address. Reading a hostname out of the front
+    // and ignoring the rest would pair each of these as if it were an endpoint
+    // the client knows, which is the one way a malformed address could send the
+    // API key somewhere the caller did not name.
+    it.each([
+      'flight.spiceai.io:443@somewhere.test',
+      'flight.spiceai.io:443/somewhere.test',
+      '[flight.spiceai.io]somewhere.test:443',
+      '[::1]somewhere.test:443',
+      '[a][::1]',
+    ])('keeps the local HTTP default for the malformed address %s', async (flightUrl) => {
+      const client = new SpiceClient({ apiKey: 'test-api-key', flightUrl });
+
+      await expect(httpEndpointOf(client)).resolves.toBe(LOCAL_HTTP);
+    });
+
+    it('still reads the hostname through a scheme, so an explicit grpc+tls endpoint keeps TLS', () => {
+      const client = new SpiceClient({ flightUrl: 'grpc+tls://localhost:50051' });
+
+      expect((client as any)._flightTlsEnabled).toBe(true);
+    });
+
     it('pairs a local IPv6 Flight endpoint with HTTP on the same address', async () => {
       const client = new SpiceClient({ flightUrl: '[::1]:50051' });
 

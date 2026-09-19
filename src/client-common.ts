@@ -510,23 +510,23 @@ export class SpiceClient {
   /**
    * The hostname of a Flight address, which is `host:port` and may carry a
    * scheme (`grpc://`, `grpc+tls://`), so it cannot go through `URL`.
+   *
+   * A Flight target is the whole address and nothing else, so both patterns
+   * are anchored at each end: an address this function does not recognise
+   * returns the empty string, which pairs with nothing. Reading a hostname out
+   * of the front and ignoring the rest would let `flight.spiceai.io:443@host`
+   * or `[flight.spiceai.io]host:443` be paired as if it were Spice Cloud.
    */
   private static flightHostname(flightUrl: string): string {
-    const hostAndPort = flightUrl
-      .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
-      .split('/')[0];
+    const address = flightUrl.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
 
-    // An IPv6 literal is bracketed; anything else keeps the text before the
-    // last colon, which is the port separator when there is one.
-    const bracketed = /^\[(.+)\]/.exec(hostAndPort);
-    if (bracketed) {
-      return bracketed[1].toLowerCase();
-    }
-
-    const portSeparator = hostAndPort.lastIndexOf(':');
+    // A bracketed IPv6 literal, or a host that carries none of the characters
+    // that would make the address something other than a plain `host[:port]`.
     const hostname =
-      portSeparator === -1 ? hostAndPort : hostAndPort.slice(0, portSeparator);
-    return hostname.toLowerCase();
+      /^\[([0-9A-Fa-f:.]+)\](?::\d+)?$/.exec(address) ??
+      /^([^[\]:/@?#]+)(?::\d+)?$/.exec(address);
+
+    return hostname ? hostname[1].toLowerCase() : '';
   }
 
   private static isLocalHostname(hostname: string): boolean {
