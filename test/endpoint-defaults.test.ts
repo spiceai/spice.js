@@ -99,6 +99,25 @@ describe('endpoint defaults', () => {
       await expect(httpEndpointOf(client)).resolves.toBe(LOCAL_HTTP);
     });
 
+    it.each([
+      'dns:flight.spiceai.io:443',
+      'dns:///flight.spiceai.io:443',
+      'dns://8.8.8.8/flight.spiceai.io:443',
+    ])('pairs the Cloud Flight endpoint named as the gRPC target %s', async (flightUrl) => {
+      const client = new SpiceClient({ apiKey: 'test-api-key', flightUrl });
+
+      await expect(httpEndpointOf(client)).resolves.toBe(CLOUD_HTTP);
+    });
+
+    it.each(['[0:0:0:0:0:0:0:1]:50051', '[::0001]:50051'])(
+      'pairs the IPv6 loopback written as %s with HTTP on the same address',
+      async (flightUrl) => {
+        const client = new SpiceClient({ flightUrl });
+
+        await expect(httpEndpointOf(client)).resolves.toBe('http://[::1]:8090');
+      },
+    );
+
     // A Flight target is the whole address. Reading a hostname out of the front
     // and ignoring the rest would pair each of these as if it were an endpoint
     // the client knows, which is the one way a malformed address could send the
@@ -109,6 +128,8 @@ describe('endpoint defaults', () => {
       '[flight.spiceai.io]somewhere.test:443',
       '[::1]somewhere.test:443',
       '[a][::1]',
+      'dns:flight.spiceai.io:443@somewhere.test',
+      'dns:///flight.spiceai.io:443/somewhere.test',
     ])('keeps the local HTTP default for the malformed address %s', async (flightUrl) => {
       const client = new SpiceClient({ apiKey: 'test-api-key', flightUrl });
 

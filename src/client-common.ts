@@ -509,7 +509,8 @@ export class SpiceClient {
 
   /**
    * The hostname of a Flight address, which is `host:port` and may carry a
-   * scheme (`grpc://`, `grpc+tls://`), so it cannot go through `URL`.
+   * scheme (`grpc://`, `grpc+tls://`) or gRPC's `dns:` name-resolver prefix,
+   * so it cannot go through `URL` as a whole.
    *
    * A Flight target is the whole address and nothing else, so both patterns
    * are anchored at each end: an address this function does not recognise
@@ -518,15 +519,33 @@ export class SpiceClient {
    * or `[flight.spiceai.io]host:443` be paired as if it were Spice Cloud.
    */
   private static flightHostname(flightUrl: string): string {
-    const address = flightUrl.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+    const address = flightUrl
+      // `dns:host:port` and `dns://authority/host:port` name the same host as
+      // `host:port`. It is the only gRPC resolver prefix that names a host the
+      // HTTP API could share — `unix:` has none, and `ipv4:`/`ipv6:`/`xds:`
+      // name an address list or a control plane — so it is the only one read.
+      .replace(/^dns:(?:\/\/[^/]*\/)?/i, '')
+      .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
 
-    // A bracketed IPv6 literal, or a host that carries none of the characters
-    // that would make the address something other than a plain `host[:port]`.
-    const hostname =
-      /^\[([0-9A-Fa-f:.]+)\](?::\d+)?$/.exec(address) ??
-      /^([^[\]:/@?#]+)(?::\d+)?$/.exec(address);
+    // A bracketed IPv6 literal, normalised through `URL` — the same normaliser
+    // `pairedFlightUrlFor` applies on the HTTP side, so the two directions
+    // agree on when two spellings are the same host.
+    const bracketed = /^\[([0-9A-Fa-f:.]+)\](?::\d+)?$/.exec(address);
+    if (bracketed) {
+      try {
+        return new URL(`http://[${bracketed[1]}]`).hostname.replace(
+          /^\[|\]$/g,
+          '',
+        );
+      } catch {
+        return '';
+      }
+    }
 
-    return hostname ? hostname[1].toLowerCase() : '';
+    // Otherwise a host carrying none of the characters that would make the
+    // address something other than a plain `host[:port]`.
+    const plain = /^([^[\]:/@?#]+)(?::\d+)?$/.exec(address);
+    return plain ? plain[1].toLowerCase() : '';
   }
 
   private static isLocalHostname(hostname: string): boolean {
