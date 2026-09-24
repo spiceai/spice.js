@@ -31,9 +31,17 @@ main();
 Querying data is done through a `SpiceClient` object that initializes the connection with Spice endpoint. `SpiceClient` has the following arguments:
 
 - `apiKey` (string, optional): API key to authenticate with the endpoint.
-- `flightUrl` (string, optional): URL of the Flight endpoint to use (default: `localhost:50051`)
-- `httpUrl` (string, optional): URL of the HTTP endpoint to use (default: `http://localhost:8090`)
+- `flightUrl` (string, optional): URL of the Flight endpoint to use (default: `127.0.0.1:50051`)
+- `httpUrl` (string, optional): URL of the HTTP endpoint to use (default: `http://127.0.0.1:8090`)
 - `logging` (boolean, optional): Enable or disable logging output (default: `true`). Set to `false` to silence all library console output.
+
+The runtime serves Flight and the HTTP API as one deployment, so the two endpoints
+are resolved together: naming one leaves the other pointing at the same runtime.
+Give only `flightUrl: 'flight.spiceai.io:443'` and the HTTP calls — health, readiness,
+status, `refreshAcceleration`, `search`, `nsql`, active and async queries — address
+Spice Cloud too; give only `httpUrl: 'http://127.0.0.1:8090'` and queries go to the
+local Flight endpoint. Only the local runtime and Spice Cloud have a known pairing;
+any other address may serve its HTTP API elsewhere, so name both when self-hosting.
 
 Read more about the Spice.ai Apache Arrow Flight API at [docs.spice.ai](https://docs.spice.ai/api/sql-query-api/apache-arrow-flight-api).
 
