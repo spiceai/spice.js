@@ -527,6 +527,122 @@ export class SpiceClient {
   private static readonly DEFAULT_CLOUD_HTTP = 'https://data.spiceai.io';
   private static readonly DEFAULT_CLOUD_FLIGHT = 'flight.spiceai.io:443';
 
+  // Default local runtime endpoints
+  private static readonly DEFAULT_LOCAL_HTTP = 'http://127.0.0.1:8090';
+  private static readonly DEFAULT_LOCAL_FLIGHT = '127.0.0.1:50051';
+
+  // The hostnames of the two Spice Cloud endpoints above, each the only host
+  // whose counterpart this client can name. A broader `*.spiceai.io` match
+  // would pair, say, a staging Flight host with the production HTTP endpoint.
+  private static readonly CLOUD_HTTP_HOSTNAME = 'data.spiceai.io';
+  private static readonly CLOUD_FLIGHT_HOSTNAME = 'flight.spiceai.io';
+
+  // The local runtime's default port per protocol, used to pair a local
+  // endpoint with its counterpart on the same host.
+  private static readonly LOCAL_HTTP_PORT = 8090;
+  private static readonly LOCAL_FLIGHT_PORT = 50051;
+
+  /**
+   * The hostname of a Flight address, which is `host:port` and may carry a
+   * scheme (`grpc://`, `grpc+tls://`) or gRPC's `dns:` name-resolver prefix,
+   * so it cannot go through `URL` as a whole.
+   *
+   * A Flight target is the whole address and nothing else, so both patterns
+   * are anchored at each end: an address this function does not recognise
+   * returns the empty string, which pairs with nothing. Reading a hostname out
+   * of the front and ignoring the rest would let `flight.spiceai.io:443@host`
+   * or `[flight.spiceai.io]host:443` be paired as if it were Spice Cloud.
+   */
+  private static flightHostname(flightUrl: string): string {
+    const address = flightUrl
+      // `dns:host:port` and `dns://authority/host:port` name the same host as
+      // `host:port`. It is the only gRPC resolver prefix that names a host the
+      // HTTP API could share — `unix:` has none, and `ipv4:`/`ipv6:`/`xds:`
+      // name an address list or a control plane — so it is the only one read.
+      .replace(/^dns:(?:\/\/[^/]*\/)?/i, '')
+      .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+
+    // A bracketed IPv6 literal, put through `urlHostname` — the same
+    // normaliser the HTTP side uses, so the two directions agree on when two
+    // spellings are the same host.
+    const bracketed = /^\[([0-9A-Fa-f:.]+)\](?::\d+)?$/.exec(address);
+    if (bracketed) {
+      return SpiceClient.urlHostname(`http://[${bracketed[1]}]`) ?? '';
+    }
+
+    // Otherwise a host carrying none of the characters that would make the
+    // address something other than a plain `host[:port]`.
+    const plain = /^([^[\]:/@?#]+)(?::\d+)?$/.exec(address);
+    return plain ? plain[1].toLowerCase() : '';
+  }
+
+  /**
+   * The hostname `URL` resolves for an HTTP address, with the brackets taken
+   * off an IPv6 literal, or `undefined` when it is not a URL at all. `URL`
+   * lower-cases, applies IDNA and collapses an IPv6 literal to its canonical
+   * spelling, so this is what decides whether two addresses name one host.
+   */
+  private static urlHostname(url: string): string | undefined {
+    try {
+      return new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    } catch {
+      return undefined;
+    }
+  }
+
+  private static isLocalHostname(hostname: string): boolean {
+    return (
+      hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1'
+    );
+  }
+
+  /**
+   * A hostname as it appears in a `host:port` address: an IPv6 literal is
+   * bracketed so its own colons are not read as the port separator, which is
+   * what keeps a paired local endpoint on the address family it was given.
+   */
+  private static asAddressHost(hostname: string): string {
+    return hostname.includes(':') ? `[${hostname}]` : hostname;
+  }
+
+  /**
+   * The HTTP endpoint belonging with a Flight endpoint.
+   *
+   * The runtime serves Flight and the `/v1/*` HTTP API as one deployment, so a
+   * client told where to send queries has to send its health checks, dataset
+   * refreshes, search and NSQL calls to the same runtime. Only the local
+   * runtime and Spice Cloud have a counterpart this client can name; any other
+   * Flight address may serve its HTTP API on another host or port, and
+   * inventing one would swap a wrong endpoint for a different wrong endpoint.
+   */
+  private static pairedHttpUrlFor(flightUrl: string): string | undefined {
+    const hostname = SpiceClient.flightHostname(flightUrl);
+
+    if (hostname === SpiceClient.CLOUD_FLIGHT_HOSTNAME) {
+      return SpiceClient.DEFAULT_CLOUD_HTTP;
+    }
+    if (SpiceClient.isLocalHostname(hostname)) {
+      return `http://${SpiceClient.asAddressHost(hostname)}:${SpiceClient.LOCAL_HTTP_PORT}`;
+    }
+    return undefined;
+  }
+
+  /** The Flight endpoint belonging with an HTTP endpoint. */
+  private static pairedFlightUrlFor(httpUrl: string): string | undefined {
+    const hostname = SpiceClient.urlHostname(httpUrl);
+    if (hostname === undefined) {
+      return undefined;
+    }
+
+    if (hostname === SpiceClient.CLOUD_HTTP_HOSTNAME) {
+      return SpiceClient.DEFAULT_CLOUD_FLIGHT;
+    }
+    if (SpiceClient.isLocalHostname(hostname)) {
+      return `${SpiceClient.asAddressHost(hostname)}:${SpiceClient.LOCAL_FLIGHT_PORT}`;
+    }
+    return undefined;
+  }
+
   public constructor(
     params: string | SpiceClientConfig = {},
     platform: PlatformAdapter,
@@ -573,24 +689,34 @@ export class SpiceClient {
         throw new Error('flightOnly and httpOnly cannot both be true');
       }
 
-      // Determine default endpoints based on whether API key is provided
+      // With neither endpoint named, an API key means Spice Cloud. With one of
+      // the two named, the other follows it, so both halves of the client
+      // address the same runtime — see pairedHttpUrlFor / pairedFlightUrlFor.
       const isCloudMode = apiKey && !httpUrl && !flightUrl;
+      const fallbackHttpUrl = isCloudMode
+        ? SpiceClient.DEFAULT_CLOUD_HTTP
+        : SpiceClient.DEFAULT_LOCAL_HTTP;
+      const fallbackFlightUrl = isCloudMode
+        ? SpiceClient.DEFAULT_CLOUD_FLIGHT
+        : SpiceClient.DEFAULT_LOCAL_FLIGHT;
 
       this._httpUrl =
         httpUrl ||
-        (isCloudMode
-          ? SpiceClient.DEFAULT_CLOUD_HTTP
-          : 'http://127.0.0.1:8090');
+        (flightUrl ? SpiceClient.pairedHttpUrlFor(flightUrl) : undefined) ||
+        fallbackHttpUrl;
       this._flightUrl =
         flightUrl ||
-        (isCloudMode ? SpiceClient.DEFAULT_CLOUD_FLIGHT : '127.0.0.1:50051');
+        (httpUrl ? SpiceClient.pairedFlightUrlFor(httpUrl) : undefined) ||
+        fallbackFlightUrl;
 
       // More explicit TLS check to avoid false positives
       const isLocalhost =
         this._flightUrl.startsWith('127.0.0.1:') ||
         this._flightUrl === '127.0.0.1' ||
         this._flightUrl.startsWith('localhost:') ||
-        this._flightUrl === 'localhost';
+        this._flightUrl === 'localhost' ||
+        this._flightUrl.startsWith('[::1]:') ||
+        this._flightUrl === '[::1]';
 
       this._flightTlsEnabled =
         flightTlsEnabled !== undefined ? flightTlsEnabled : !isLocalhost;
