@@ -58,6 +58,7 @@ class NodePlatformAdapter implements PlatformAdapter {
       headers,
       method: options.method,
       body: options.body,
+      signal: options.signal,
     };
 
     if (url.startsWith('https://')) {

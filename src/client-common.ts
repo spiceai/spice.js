@@ -13,6 +13,7 @@ import {
   type NsqlOptions,
   type NsqlResponse,
   type SqlQueryOptions,
+  type SqlJsonOptions,
   type QueryParameters,
   type SearchOptions,
   type SearchResponse,
@@ -58,6 +59,40 @@ export interface RetryModule {
     operation: any,
     maxRetries: number,
   ): Promise<T>;
+}
+
+/**
+ * Tells `sqlJson`'s options object apart from the headers bag it used to take
+ * in the same position. Header values are always strings, so a `signal` that
+ * is not a string — or a `headers` key at all — means this is the options
+ * object.
+ */
+function isSqlJsonOptions(
+  value?: { [key: string]: string } | SqlJsonOptions,
+): value is SqlJsonOptions {
+  if (!value) {
+    return false;
+  }
+  if ('headers' in value) {
+    return true;
+  }
+  const signal = (value as SqlJsonOptions).signal;
+  return signal !== undefined && typeof signal !== 'string';
+}
+
+/**
+ * True when the runtime's truncated `sql_preview` could have come from this
+ * query text. The runtime cuts the preview short and marks it with an
+ * ellipsis, so an exact match is only available for short statements.
+ */
+function previewMatches(preview: string, queryText: string): boolean {
+  if (!preview) {
+    return false;
+  }
+  if (preview === queryText) {
+    return true;
+  }
+  return preview.endsWith('...') && queryText.startsWith(preview.slice(0, -3));
 }
 
 /**
@@ -492,6 +527,122 @@ export class SpiceClient {
   private static readonly DEFAULT_CLOUD_HTTP = 'https://data.spiceai.io';
   private static readonly DEFAULT_CLOUD_FLIGHT = 'flight.spiceai.io:443';
 
+  // Default local runtime endpoints
+  private static readonly DEFAULT_LOCAL_HTTP = 'http://127.0.0.1:8090';
+  private static readonly DEFAULT_LOCAL_FLIGHT = '127.0.0.1:50051';
+
+  // The hostnames of the two Spice Cloud endpoints above, each the only host
+  // whose counterpart this client can name. A broader `*.spiceai.io` match
+  // would pair, say, a staging Flight host with the production HTTP endpoint.
+  private static readonly CLOUD_HTTP_HOSTNAME = 'data.spiceai.io';
+  private static readonly CLOUD_FLIGHT_HOSTNAME = 'flight.spiceai.io';
+
+  // The local runtime's default port per protocol, used to pair a local
+  // endpoint with its counterpart on the same host.
+  private static readonly LOCAL_HTTP_PORT = 8090;
+  private static readonly LOCAL_FLIGHT_PORT = 50051;
+
+  /**
+   * The hostname of a Flight address, which is `host:port` and may carry a
+   * scheme (`grpc://`, `grpc+tls://`) or gRPC's `dns:` name-resolver prefix,
+   * so it cannot go through `URL` as a whole.
+   *
+   * A Flight target is the whole address and nothing else, so both patterns
+   * are anchored at each end: an address this function does not recognise
+   * returns the empty string, which pairs with nothing. Reading a hostname out
+   * of the front and ignoring the rest would let `flight.spiceai.io:443@host`
+   * or `[flight.spiceai.io]host:443` be paired as if it were Spice Cloud.
+   */
+  private static flightHostname(flightUrl: string): string {
+    const address = flightUrl
+      // `dns:host:port` and `dns://authority/host:port` name the same host as
+      // `host:port`. It is the only gRPC resolver prefix that names a host the
+      // HTTP API could share — `unix:` has none, and `ipv4:`/`ipv6:`/`xds:`
+      // name an address list or a control plane — so it is the only one read.
+      .replace(/^dns:(?:\/\/[^/]*\/)?/i, '')
+      .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+
+    // A bracketed IPv6 literal, put through `urlHostname` — the same
+    // normaliser the HTTP side uses, so the two directions agree on when two
+    // spellings are the same host.
+    const bracketed = /^\[([0-9A-Fa-f:.]+)\](?::\d+)?$/.exec(address);
+    if (bracketed) {
+      return SpiceClient.urlHostname(`http://[${bracketed[1]}]`) ?? '';
+    }
+
+    // Otherwise a host carrying none of the characters that would make the
+    // address something other than a plain `host[:port]`.
+    const plain = /^([^[\]:/@?#]+)(?::\d+)?$/.exec(address);
+    return plain ? plain[1].toLowerCase() : '';
+  }
+
+  /**
+   * The hostname `URL` resolves for an HTTP address, with the brackets taken
+   * off an IPv6 literal, or `undefined` when it is not a URL at all. `URL`
+   * lower-cases, applies IDNA and collapses an IPv6 literal to its canonical
+   * spelling, so this is what decides whether two addresses name one host.
+   */
+  private static urlHostname(url: string): string | undefined {
+    try {
+      return new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    } catch {
+      return undefined;
+    }
+  }
+
+  private static isLocalHostname(hostname: string): boolean {
+    return (
+      hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1'
+    );
+  }
+
+  /**
+   * A hostname as it appears in a `host:port` address: an IPv6 literal is
+   * bracketed so its own colons are not read as the port separator, which is
+   * what keeps a paired local endpoint on the address family it was given.
+   */
+  private static asAddressHost(hostname: string): string {
+    return hostname.includes(':') ? `[${hostname}]` : hostname;
+  }
+
+  /**
+   * The HTTP endpoint belonging with a Flight endpoint.
+   *
+   * The runtime serves Flight and the `/v1/*` HTTP API as one deployment, so a
+   * client told where to send queries has to send its health checks, dataset
+   * refreshes, search and NSQL calls to the same runtime. Only the local
+   * runtime and Spice Cloud have a counterpart this client can name; any other
+   * Flight address may serve its HTTP API on another host or port, and
+   * inventing one would swap a wrong endpoint for a different wrong endpoint.
+   */
+  private static pairedHttpUrlFor(flightUrl: string): string | undefined {
+    const hostname = SpiceClient.flightHostname(flightUrl);
+
+    if (hostname === SpiceClient.CLOUD_FLIGHT_HOSTNAME) {
+      return SpiceClient.DEFAULT_CLOUD_HTTP;
+    }
+    if (SpiceClient.isLocalHostname(hostname)) {
+      return `http://${SpiceClient.asAddressHost(hostname)}:${SpiceClient.LOCAL_HTTP_PORT}`;
+    }
+    return undefined;
+  }
+
+  /** The Flight endpoint belonging with an HTTP endpoint. */
+  private static pairedFlightUrlFor(httpUrl: string): string | undefined {
+    const hostname = SpiceClient.urlHostname(httpUrl);
+    if (hostname === undefined) {
+      return undefined;
+    }
+
+    if (hostname === SpiceClient.CLOUD_HTTP_HOSTNAME) {
+      return SpiceClient.DEFAULT_CLOUD_FLIGHT;
+    }
+    if (SpiceClient.isLocalHostname(hostname)) {
+      return `${SpiceClient.asAddressHost(hostname)}:${SpiceClient.LOCAL_FLIGHT_PORT}`;
+    }
+    return undefined;
+  }
+
   public constructor(
     params: string | SpiceClientConfig = {},
     platform: PlatformAdapter,
@@ -538,24 +689,34 @@ export class SpiceClient {
         throw new Error('flightOnly and httpOnly cannot both be true');
       }
 
-      // Determine default endpoints based on whether API key is provided
+      // With neither endpoint named, an API key means Spice Cloud. With one of
+      // the two named, the other follows it, so both halves of the client
+      // address the same runtime — see pairedHttpUrlFor / pairedFlightUrlFor.
       const isCloudMode = apiKey && !httpUrl && !flightUrl;
+      const fallbackHttpUrl = isCloudMode
+        ? SpiceClient.DEFAULT_CLOUD_HTTP
+        : SpiceClient.DEFAULT_LOCAL_HTTP;
+      const fallbackFlightUrl = isCloudMode
+        ? SpiceClient.DEFAULT_CLOUD_FLIGHT
+        : SpiceClient.DEFAULT_LOCAL_FLIGHT;
 
       this._httpUrl =
         httpUrl ||
-        (isCloudMode
-          ? SpiceClient.DEFAULT_CLOUD_HTTP
-          : 'http://127.0.0.1:8090');
+        (flightUrl ? SpiceClient.pairedHttpUrlFor(flightUrl) : undefined) ||
+        fallbackHttpUrl;
       this._flightUrl =
         flightUrl ||
-        (isCloudMode ? SpiceClient.DEFAULT_CLOUD_FLIGHT : '127.0.0.1:50051');
+        (httpUrl ? SpiceClient.pairedFlightUrlFor(httpUrl) : undefined) ||
+        fallbackFlightUrl;
 
       // More explicit TLS check to avoid false positives
       const isLocalhost =
         this._flightUrl.startsWith('127.0.0.1:') ||
         this._flightUrl === '127.0.0.1' ||
         this._flightUrl.startsWith('localhost:') ||
-        this._flightUrl === 'localhost';
+        this._flightUrl === 'localhost' ||
+        this._flightUrl.startsWith('[::1]:') ||
+        this._flightUrl === '[::1]';
 
       this._flightTlsEnabled =
         flightTlsEnabled !== undefined ? flightTlsEnabled : !isLocalhost;
@@ -732,6 +893,7 @@ export class SpiceClient {
     parameters?: QueryParameters,
     onData?: (data: Table) => void,
     headers?: { [key: string]: string },
+    signal?: AbortSignal,
   ): Promise<Table> {
     // Transport hierarchy:
     // 1. Try gRPC Flight SQL (custom proto with parameter substitution)
@@ -757,9 +919,12 @@ export class SpiceClient {
             parameters,
             trackingOnData,
             headers,
+            signal,
           );
         } catch (error) {
-          if (this._flightOnly || dataSent) {
+          // An abort is the caller's decision, not a transport failure —
+          // falling back here would re-run the query they just cancelled.
+          if (this._flightOnly || dataSent || signal?.aborted) {
             throw error;
           }
           this._logger.warn(
@@ -792,7 +957,14 @@ export class SpiceClient {
     }
 
     // Fallback to HTTP
-    return this.doHttpQueryRequest(queryText, parameters, onData, headers);
+    signal?.throwIfAborted();
+    return this.doHttpQueryRequest(
+      queryText,
+      parameters,
+      onData,
+      headers,
+      signal,
+    );
   }
 
   private async doGrpcQueryRequest(
@@ -800,10 +972,13 @@ export class SpiceClient {
     parameters?: QueryParameters,
     onData?: (data: Table) => void,
     headers?: { [key: string]: string },
+    signal?: AbortSignal,
   ): Promise<Table> {
     if (!this._grpcClient) {
       throw new Error('gRPC client not initialized');
     }
+
+    signal?.throwIfAborted();
 
     try {
       const resultStream = await this._grpcClient.executeQuery(
@@ -833,12 +1008,47 @@ export class SpiceClient {
       });
 
       return new Promise((resolve, reject) => {
+        // Cancelling makes the call emit CANCELLED. Reject with the caller's
+        // own abort reason instead — the DOM convention for an abortable API —
+        // and settle as soon as the abort fires rather than waiting for gRPC.
+        let aborted = false;
+        let stopListening = () => {};
+
+        if (signal) {
+          const abortSignal = signal;
+          const onAbort = () => {
+            aborted = true;
+            stopListening();
+            // Stop reading, then ask the runtime to stop executing. Dropping
+            // the stream alone leaves the query running server-side.
+            (resultStream as { cancel?: () => void }).cancel?.();
+            void this.cancelFlightQuery(queryText);
+            // The DOM convention is to reject with the signal's reason
+            // verbatim, and a caller may abort with any value at all.
+            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+            reject(abortSignal.reason);
+          };
+          abortSignal.addEventListener('abort', onAbort, { once: true });
+          // `{ once: true }` alone leaks the listener on the success path, and
+          // a caller's long-lived signal keeps it alive.
+          stopListening = () =>
+            abortSignal.removeEventListener('abort', onAbort);
+        }
+
         resultStream.on('status', (_response: FlightStatus) => {
+          stopListening();
+          if (aborted) {
+            return;
+          }
           const table = wrapTableForDecimalConversion(tableFromIPC(chunks));
           resolve(table);
         });
 
         resultStream.on('error', (err: any) => {
+          stopListening();
+          if (aborted) {
+            return;
+          }
           if (isDataAlreadySent) {
             this._retry.dontRetry(err);
           }
@@ -850,11 +1060,50 @@ export class SpiceClient {
     }
   }
 
+  /**
+   * Ask the runtime to stop a Flight query this client started.
+   *
+   * Flight hands the caller no query id — the ticket carries a trace id and
+   * the SQL, and neither the FlightInfo nor the stream metadata carries the
+   * `query_id` that the cancel endpoint takes — so the query has to be found
+   * in the active list by its statement. Only an unambiguous match is
+   * cancelled: if two running Flight queries could be this one, both are left
+   * alone rather than risk stopping the wrong caller's work.
+   *
+   * Best-effort by design. The caller's promise has already rejected with
+   * their abort reason, so nothing here is allowed to throw or delay them.
+   */
+  private async cancelFlightQuery(queryText: string): Promise<void> {
+    try {
+      const candidates = (await this.listActiveQueries()).filter(
+        (query) =>
+          query.protocol === 'flight' &&
+          previewMatches(query.sql_preview, queryText),
+      );
+
+      if (candidates.length !== 1) {
+        this._logger.debug(
+          `[spice.js] not cancelling Flight query server-side: ${candidates.length} active queries match the statement`,
+        );
+        return;
+      }
+
+      await this.cancelActiveQuery(candidates[0].query_id);
+    } catch (error) {
+      this._logger.debug(
+        `[spice.js] server-side cancel of aborted Flight query failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
   private async doHttpQueryRequest(
     queryText: string,
     parameters?: QueryParameters,
     onData?: (data: Table) => void,
     headers?: { [key: string]: string },
+    signal?: AbortSignal,
   ): Promise<Table> {
     // Use appropriate Accept header based on endpoint (use cached value)
     const acceptHeader = this._isSpiceCloud
@@ -904,6 +1153,7 @@ export class SpiceClient {
       undefined,
       requestBody,
       requestHeaders,
+      signal,
     );
 
     if (!response.ok) {
@@ -1045,9 +1295,21 @@ export class SpiceClient {
       callback = onData;
     }
 
+    const requestHeaders = options?.headers ?? headers;
+
     return this._retry.retryWithExponentialBackoff<Table>(
-      () =>
-        this.doQueryRequest(queryText, options?.parameters, callback, headers),
+      () => {
+        // Checked per attempt: a retry scheduled before the abort must not
+        // start new work after it.
+        options?.signal?.throwIfAborted();
+        return this.doQueryRequest(
+          queryText,
+          options?.parameters,
+          callback,
+          requestHeaders,
+          options?.signal,
+        );
+      },
       this._maxRetries,
     );
   }
@@ -1252,12 +1514,43 @@ export class SpiceClient {
    * Uses gRPC/Arrow if available, otherwise falls back to HTTP.
    * @param queryText - The SQL query to execute
    * @param headers - Optional headers to pass with the request (HTTP headers for HTTP, Flight metadata for gRPC)
+   * @param options - Optional configuration; `signal` cancels the query
    * @returns Promise resolving to an object containing row_count, schema, data, and execution_time_ms
+   *
+   * @example
+   * // Give the query five seconds, then cancel it
+   * await client.sqlJson('SELECT * FROM big_table', undefined, {
+   *   signal: AbortSignal.timeout(5000),
+   * });
    */
   async sqlJson(
     queryText: string,
-    headers?: { [key: string]: string },
+    options?: SqlJsonOptions,
+  ): Promise<SqlV1JsonResponse>;
+  /**
+   * @deprecated Pass `headers` inside the options object:
+   * `sqlJson(sql, { headers, signal })`.
+   */
+  async sqlJson(
+    queryText: string,
+    headers: { [key: string]: string } | undefined,
+    options?: SqlJsonOptions,
+  ): Promise<SqlV1JsonResponse>;
+  async sqlJson(
+    queryText: string,
+    headersOrOptions?: { [key: string]: string } | SqlJsonOptions,
+    legacyOptions?: SqlJsonOptions,
   ): Promise<SqlV1JsonResponse> {
+    const asOptions = isSqlJsonOptions(headersOrOptions)
+      ? headersOrOptions
+      : undefined;
+    const options = legacyOptions ?? asOptions;
+    const headers =
+      options?.headers ??
+      (asOptions
+        ? undefined
+        : (headersOrOptions as { [key: string]: string } | undefined));
+    const signal = options?.signal;
     const startTime = Date.now();
 
     // Check if we should use gRPC/Arrow
@@ -1288,6 +1581,7 @@ export class SpiceClient {
 
       await this.sql(
         queryText,
+        { signal },
         (table) => {
           // Capture schema from first chunk
           if (!schema) {
@@ -1433,7 +1727,6 @@ export class SpiceClient {
             allRows.push(convertedRow);
           }
         },
-        undefined,
         headers,
       );
 
@@ -1462,6 +1755,7 @@ export class SpiceClient {
         undefined,
         queryText,
         requestHeaders,
+        signal,
       );
 
       if (!response.ok) {
@@ -1940,6 +2234,7 @@ export class SpiceClient {
     params?: { [key: string]: string },
     body?: string,
     customHeaders?: { [key: string]: string },
+    signal?: AbortSignal,
   ) {
     const url =
       params && Object.keys(params).length
@@ -1970,10 +2265,21 @@ export class SpiceClient {
       headers['X-API-Key'] = this._apiKey;
     }
 
-    return this._platform.fetch(url, {
-      method,
-      headers,
-      body,
-    });
+    try {
+      return await this._platform.fetch(url, {
+        method,
+        headers,
+        body,
+        signal,
+      });
+    } catch (error) {
+      // node-fetch discards the reason and always raises its own AbortError,
+      // so restore what the caller actually aborted with. The DOM convention
+      // is to reject with the signal's reason verbatim.
+      if (signal?.aborted) {
+        throw signal.reason;
+      }
+      throw error;
+    }
   }
 }
