@@ -15,9 +15,6 @@
     "src/platform/node.ts",
     "src/grpc/client.node.ts",
     "src/index.node.ts",
-    "src/retry.node.ts",
-    "src/client.ts",
-    "src/user-agent.ts",
-    "src/retry.ts"
+    "src/retry.node.ts"
   ]
 }

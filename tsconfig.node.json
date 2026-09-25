@@ -14,9 +14,6 @@
     "src/platform/browser.ts",
     "src/grpc/client.browser.ts",
     "src/index.browser.ts",
-    "src/retry.browser.ts",
-    "src/client.ts",
-    "src/retry.ts",
-    "src/user-agent.ts"
+    "src/retry.browser.ts"
   ]
 }
