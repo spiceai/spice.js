@@ -31,9 +31,17 @@ main();
 Querying data is done through a `SpiceClient` object that initializes the connection with Spice endpoint. `SpiceClient` has the following arguments:
 
 - `apiKey` (string, optional): API key to authenticate with the endpoint.
-- `flightUrl` (string, optional): URL of the Flight endpoint to use (default: `localhost:50051`)
-- `httpUrl` (string, optional): URL of the HTTP endpoint to use (default: `http://localhost:8090`)
+- `flightUrl` (string, optional): URL of the Flight endpoint to use (default: `127.0.0.1:50051`)
+- `httpUrl` (string, optional): URL of the HTTP endpoint to use (default: `http://127.0.0.1:8090`)
 - `logging` (boolean, optional): Enable or disable logging output (default: `true`). Set to `false` to silence all library console output.
+
+The runtime serves Flight and the HTTP API as one deployment, so the two endpoints
+are resolved together: naming one leaves the other pointing at the same runtime.
+Give only `flightUrl: 'flight.spiceai.io:443'` and the HTTP calls — health, readiness,
+status, `refreshAcceleration`, `search`, `nsql`, active and async queries — address
+Spice Cloud too; give only `httpUrl: 'http://127.0.0.1:8090'` and queries go to the
+local Flight endpoint. Only the local runtime and Spice Cloud have a known pairing;
+any other address may serve its HTTP API elsewhere, so name both when self-hosting.
 
 Read more about the Spice.ai Apache Arrow Flight API at [docs.spice.ai](https://docs.spice.ai/api/sql-query-api/apache-arrow-flight-api).
 
@@ -81,6 +89,39 @@ const table = await client.sql(
 ```
 
 The SDK handles all protocol negotiation automatically - you just write standard SQL with parameters.
+
+### Cancelling a query
+
+Pass an `AbortSignal` to cancel a query. Over HTTP the request is aborted; over
+Arrow Flight the result stream is cancelled. An aborted query is never retried.
+
+```js
+// Give the query five seconds, then cancel it
+const table = await client.sql('SELECT * FROM taxi_trips', {
+  signal: AbortSignal.timeout(5000),
+});
+
+// Or cancel it yourself
+const controller = new AbortController();
+const pending = client.sqlJson('SELECT * FROM taxi_trips', {
+  signal: controller.signal,
+});
+controller.abort();
+```
+
+The promise rejects with the signal's own `reason` — a `TimeoutError` from
+`AbortSignal.timeout()`, an `AbortError` from a bare `controller.abort()`, or
+whatever value you pass to `abort(reason)`. Branch on `err.name`; an aborted
+query is never retried.
+
+Racing the returned promise against a timer is not equivalent: that only stops
+your code waiting for the result, while the query keeps running, so a retry or
+a subsequent call stacks more work on top of it.
+
+Over Arrow Flight the SDK also asks the runtime to stop executing the query it
+started. Over HTTP, aborting ends the request but the runtime may still run the
+statement to completion — cancel it explicitly with `cancelActiveQuery()` if
+that matters.
 
 ### Search
 

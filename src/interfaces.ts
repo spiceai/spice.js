@@ -115,6 +115,26 @@ export interface SqlQueryOptions {
    * Positional parameters: [value1, value2, value3]
    */
   parameters?: QueryParameters;
+  /**
+   * Cancels the query when it fires. Over HTTP the request is aborted; over
+   * Arrow Flight the result stream is cancelled and the runtime is asked to
+   * stop executing. The promise rejects with the signal's `reason`, and an
+   * aborted query is never retried.
+   */
+  signal?: AbortSignal;
+  /**
+   * Extra request headers — HTTP headers over HTTP, Flight metadata over gRPC.
+   * Equivalent to the trailing `headers` argument, which stays supported.
+   */
+  headers?: { [key: string]: string };
+}
+
+/** Per-request options for {@link SpiceClient.sqlJson}. */
+export interface SqlJsonOptions {
+  /** Cancels the query. See {@link SqlQueryOptions.signal}. */
+  signal?: AbortSignal;
+  /** Extra request headers — HTTP headers over HTTP, Flight metadata over gRPC. */
+  headers?: { [key: string]: string };
 }
 
 export interface SearchOptions {
