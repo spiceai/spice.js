@@ -45,7 +45,10 @@ any other address may serve its HTTP API elsewhere, so name both when self-hosti
 
 An endpoint given as an empty or blank string is rejected when the client is
 constructed, rather than read as unset. Pass `undefined`, not `''`, for an endpoint
-you have not configured — for example `flightUrl: process.env.SPICE_FLIGHT_URL || undefined`.
+you have not configured. An environment variable can be passed through as it is —
+`flightUrl: process.env.SPICE_FLIGHT_URL` is `undefined` when the variable is unset,
+and an error when it is set but empty — but don't default it with `?? ''`, and don't
+turn `''` into `undefined` with `|| undefined`.
 
 Read more about the Spice.ai Apache Arrow Flight API at [docs.spice.ai](https://docs.spice.ai/api/sql-query-api/apache-arrow-flight-api).
 
