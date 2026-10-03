@@ -24,6 +24,7 @@ import {
   type ListQueriesOptions,
   type AsyncQuerySummary,
   type ListQueriesResponse,
+  type ConnectionDetails,
 } from './interfaces';
 import {
   AsyncQuery,
@@ -687,6 +688,20 @@ export class SpiceClient {
       // Validate mutually exclusive options
       if (this._flightOnly && this._httpOnly) {
         throw new Error('flightOnly and httpOnly cannot both be true');
+      }
+
+      // A blank endpoint is a configuration mistake, usually an unset
+      // environment variable, not a request for the default. Read as unset it
+      // would, with an API key, resolve both endpoints to Spice Cloud.
+      if (flightUrl !== undefined && flightUrl.trim() === '') {
+        throw new Error(
+          'flightUrl was given as an empty string. Pass a `host:port` address, or omit the option to use the default.',
+        );
+      }
+      if (httpUrl !== undefined && httpUrl.trim() === '') {
+        throw new Error(
+          'httpUrl was given as an empty string. Pass a URL such as `http://127.0.0.1:8090`, or omit the option to use the default.',
+        );
       }
 
       // With neither endpoint named, an API key means Spice Cloud. With one of
@@ -2167,6 +2182,49 @@ export class SpiceClient {
     }
 
     return (await response.json()) as CancelActiveQueryResponse;
+  }
+
+  /**
+   * Reports the status of each runtime connection.
+   *
+   * Where {@link isSpiceReady} collapses the whole runtime to one boolean, this
+   * reports per-component state, so a runtime that is still initializing can be
+   * told apart from one whose Flight endpoint is failing.
+   *
+   * @returns Promise resolving to one entry per runtime connection
+   */
+  async runtimeStatus(): Promise<ConnectionDetails[]> {
+    if (!this._httpUrl) {
+      throw new Error('HTTP URL is required for runtime status');
+    }
+
+    const response = await this.fetchInternal('GET', '/v1/status');
+
+    if (response.status === 403) {
+      throw new Error(
+        'The configured API key does not allow reading runtime status. Use a key with read access.',
+      );
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to get runtime status: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    // The endpoint serializes a list of connections, so anything that is not an
+    // array is a malformed response. Coercing it to [] would report a healthy
+    // runtime with no connections, which is indistinguishable from a real one.
+    const payload: unknown = await response.json();
+    if (!Array.isArray(payload)) {
+      throw new Error(
+        `Failed to get runtime status: expected a JSON array of connections from /v1/status, received ${
+          payload === null ? 'null' : typeof payload
+        }`,
+      );
+    }
+    return payload as ConnectionDetails[];
   }
 
   /**
