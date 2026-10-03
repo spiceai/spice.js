@@ -690,6 +690,20 @@ export class SpiceClient {
         throw new Error('flightOnly and httpOnly cannot both be true');
       }
 
+      // A blank endpoint is a configuration mistake, usually an unset
+      // environment variable, not a request for the default. Read as unset it
+      // would, with an API key, resolve both endpoints to Spice Cloud.
+      if (flightUrl !== undefined && flightUrl.trim() === '') {
+        throw new Error(
+          'flightUrl was given as an empty string. Pass a `host:port` address, or omit the option to use the default.',
+        );
+      }
+      if (httpUrl !== undefined && httpUrl.trim() === '') {
+        throw new Error(
+          'httpUrl was given as an empty string. Pass a URL such as `http://127.0.0.1:8090`, or omit the option to use the default.',
+        );
+      }
+
       // With neither endpoint named, an API key means Spice Cloud. With one of
       // the two named, the other follows it, so both halves of the client
       // address the same runtime — see pairedHttpUrlFor / pairedFlightUrlFor.
