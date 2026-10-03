@@ -43,6 +43,10 @@ Spice Cloud too; give only `httpUrl: 'http://127.0.0.1:8090'` and queries go to 
 local Flight endpoint. Only the local runtime and Spice Cloud have a known pairing;
 any other address may serve its HTTP API elsewhere, so name both when self-hosting.
 
+An endpoint given as an empty or blank string is rejected when the client is
+constructed, rather than read as unset. Pass `undefined`, not `''`, for an endpoint
+you have not configured — for example `flightUrl: process.env.SPICE_FLIGHT_URL || undefined`.
+
 Read more about the Spice.ai Apache Arrow Flight API at [docs.spice.ai](https://docs.spice.ai/api/sql-query-api/apache-arrow-flight-api).
 
 ### Usage with locally running [spice runtime](https://github.com/spiceai/spiceai)
