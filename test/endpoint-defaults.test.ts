@@ -218,4 +218,37 @@ describe('endpoint defaults', () => {
       expect((client as any)._flightTlsEnabled).toBe(false);
     });
   });
+
+  describe('when an endpoint is given as an empty string', () => {
+    // An unset environment variable passed through as `?? ''` must not read as
+    // "no endpoint named": with an API key, that resolves both halves to Spice
+    // Cloud and sends the key there instead of to the runtime the caller meant.
+    it.each([
+      ['flightUrl', { flightUrl: '' }],
+      ['flightUrl', { flightUrl: '   ' }],
+      ['httpUrl', { httpUrl: '' }],
+      ['httpUrl', { httpUrl: '   ' }],
+    ])('rejects a blank %s', (option, endpoints) => {
+      expect(
+        () => new SpiceClient({ apiKey: 'test-api-key', ...endpoints }),
+      ).toThrow(`${option} was given as an empty string`);
+    });
+
+    it('rejects a blank endpoint without an API key too', () => {
+      expect(() => new SpiceClient({ flightUrl: '' })).toThrow(
+        'flightUrl was given as an empty string',
+      );
+    });
+
+    it('still treats an omitted endpoint as unset', async () => {
+      const client = new SpiceClient({
+        apiKey: 'test-api-key',
+        flightUrl: undefined,
+        httpUrl: undefined,
+      });
+
+      await expect(httpEndpointOf(client)).resolves.toBe(CLOUD_HTTP);
+      expect(flightEndpointOf(client)).toBe(CLOUD_FLIGHT);
+    });
+  });
 });
