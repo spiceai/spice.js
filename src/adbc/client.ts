@@ -229,8 +229,11 @@ const TIMESTAMP_UNIT_PER_SECOND: Record<number, bigint> = {
 
 /** Converts a Date to an integer count of `unit` since the epoch. */
 function dateToUnit(value: Date, unit: TimeUnit): bigint {
-  const ms = BigInt(value.getTime());
-  return (ms * TIMESTAMP_UNIT_PER_SECOND[unit]) / 1_000n;
+  const scaled = BigInt(value.getTime()) * TIMESTAMP_UNIT_PER_SECOND[unit];
+  // Floor division: BigInt `/` truncates toward zero, which would move a
+  // pre-epoch instant with a sub-unit remainder to the wrong side of the epoch.
+  const q = scaled / 1_000n;
+  return scaled % 1_000n < 0n ? q - 1n : q;
 }
 
 /**
@@ -311,9 +314,16 @@ function buildTypedVector(values: any[], arrowType: DataType, dataType?: string)
     return vector;
   }
   if (DataType.isDate(arrowType) && dataType === 'date32') {
-    // Numbers are days since the epoch; Arrow's builder wants milliseconds.
+    // Numbers are days since the epoch. Dates are floored to their UTC day
+    // (pre-epoch included). Arrow's builder takes milliseconds.
     return vectorFromArray(
-      values.map((v) => (typeof v === 'number' ? v * 86_400_000 : v)),
+      values.map((v) =>
+        typeof v === 'number'
+          ? v * 86_400_000
+          : v instanceof Date
+            ? Math.floor(v.getTime() / 86_400_000) * 86_400_000
+            : v,
+      ),
       arrowType,
     );
   }

@@ -38,6 +38,17 @@ describe('Flight parameter encoding', () => {
     expect(bound(Param.timestamp(v, { unit: 'Nanosecond' })).values[0]).toBe(v);
   });
 
+  it('floors pre-epoch sub-unit instants', () => {
+    const pre = new Date('1969-12-31T23:59:59.500Z');
+    expect(bound(Param.timestamp(pre, { unit: 'Second' })).values[0]).toBe(-1n);
+    expect(bound(Param.date32(pre)).values[0]).toBe(-1);
+  });
+
+  it('encodes Param.decimal128 from a bigint', () => {
+    const { values } = bound(Param.decimal128(42n, { precision: 10, scale: 2 }));
+    expect(Array.from(values.slice(0, 4))).toEqual([4200, 0, 0, 0]);
+  });
+
   it('encodes Param.date32 from a Date and from a day count', () => {
     expect(bound(Param.date32(d)).values[0]).toBe(20738);
     expect(bound(Param.date32(20738)).values[0]).toBe(20738);
@@ -75,5 +86,16 @@ describe('bigint over HTTP', () => {
     expect(
       stringifyWithBigInt({ parameters: [9223372036854775807n, -5n, 'x'] }),
     ).toBe('{"parameters":[9223372036854775807,-5,"x"]}');
+  });
+
+  it('never rewrites caller strings or keys that look like placeholders', () => {
+    const input = {
+      '__spice_bigint_abc__1': '__spice_bigint_abc__123',
+      n: 7n,
+    };
+    expect(JSON.parse(stringifyWithBigInt(input))).toEqual({
+      '__spice_bigint_abc__1': '__spice_bigint_abc__123',
+      n: 7,
+    });
   });
 });

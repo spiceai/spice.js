@@ -2341,18 +2341,27 @@ export class SpiceClient {
   }
 }
 
-const BIGINT_TOKEN = '__spice_js_bigint__';
-
 /**
  * JSON.stringify that writes bigint values as exact integer literals
  * (JSON.stringify itself throws on bigint, and Number() would lose precision).
+ *
+ * Bigints are first written as placeholder strings, then swapped for the raw
+ * digits. The placeholder prefix is random and checked against the input's own
+ * JSON (strings and keys), so no caller-supplied text can collide with it.
  */
 export function stringifyWithBigInt(value: unknown): string {
+  const plain = JSON.stringify(value, (_key, v) =>
+    typeof v === 'bigint' ? v.toString() : v,
+  );
+  let token: string;
+  do {
+    token = `__spice_bigint_${Math.random().toString(36).slice(2)}__`;
+  } while (plain.includes(token));
   const json = JSON.stringify(value, (_key, v) =>
-    typeof v === 'bigint' ? `${BIGINT_TOKEN}${v.toString()}` : v,
+    typeof v === 'bigint' ? `${token}${v.toString()}` : v,
   );
   return json.replace(
-    new RegExp(`"${BIGINT_TOKEN}(-?\\d+)"`, 'g'),
+    new RegExp(`"${token}(-?\\d+)"`, 'g'),
     (_m, digits) => digits,
   );
 }
