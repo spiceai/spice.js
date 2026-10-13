@@ -9,6 +9,7 @@ import {
   tableFromArrays,
   tableToIPC,
   vectorFromArray,
+  TimeUnit,
   Binary,
   Bool,
   DateDay,
@@ -172,7 +173,7 @@ export function arrowTypeFor(
     case 'decimal256': {
       const { precision, scale } = options ?? {};
       return typeof precision === 'number' && typeof scale === 'number'
-        ? new Decimal(scale, precision)
+        ? new Decimal(scale, precision, dataType === 'decimal256' ? 256 : 128)
         : undefined;
     }
     case 'timestamp':
@@ -219,6 +220,117 @@ export function arrowTypeFor(
   }
 }
 
+const TIMESTAMP_UNIT_PER_SECOND: Record<number, bigint> = {
+  [TimeUnit.SECOND]: 1n,
+  [TimeUnit.MILLISECOND]: 1_000n,
+  [TimeUnit.MICROSECOND]: 1_000_000n,
+  [TimeUnit.NANOSECOND]: 1_000_000_000n,
+};
+
+/** Converts a Date to an integer count of `unit` since the epoch. */
+function dateToUnit(value: Date, unit: TimeUnit): bigint {
+  const ms = BigInt(value.getTime());
+  return (ms * TIMESTAMP_UNIT_PER_SECOND[unit]) / 1_000n;
+}
+
+/**
+ * Parses a decimal given as a string, number or bigint into its unscaled integer
+ * at `scale`, without going through floating point. Extra fractional digits are
+ * rejected rather than silently rounded.
+ */
+export function toUnscaledDecimal(value: unknown, scale: number): bigint {
+  if (typeof value === 'bigint') {
+    return value * 10n ** BigInt(scale);
+  }
+  const text = typeof value === 'number' ? numberToPlainString(value) : String(value).trim();
+  const match = /^([+-])?(\d*)(?:\.(\d*))?$/.exec(text);
+  if (!match || (match[2] === '' && (match[3] ?? '') === '')) {
+    throw new Error(`Invalid decimal parameter value: ${text}`);
+  }
+  const [, sign, intPart, fracRaw = ''] = match;
+  const frac = fracRaw.replace(/0+$/, '');
+  if (frac.length > scale) {
+    throw new Error(
+      `Decimal parameter ${text} has more than ${scale} fractional digits`,
+    );
+  }
+  const digits = `${intPart || '0'}${frac.padEnd(scale, '0')}`;
+  const unscaled = BigInt(digits);
+  return sign === '-' ? -unscaled : unscaled;
+}
+
+function numberToPlainString(value: number): string {
+  if (!Number.isFinite(value)) {
+    throw new Error(`Invalid decimal parameter value: ${value}`);
+  }
+  // Shortest round-trip representation; expand exponent notation.
+  const text = String(value);
+  if (!/e/i.test(text)) return text;
+  return value.toLocaleString('en-US', {
+    useGrouping: false,
+    maximumFractionDigits: 100,
+  });
+}
+
+/** Two's-complement little-endian 32-bit words, the layout Arrow decimals use. */
+function decimalWords(unscaled: bigint, bitWidth: number): Uint32Array {
+  const words = new Uint32Array(bitWidth / 32);
+  const limit = 1n << BigInt(bitWidth - 1);
+  if (unscaled >= limit || unscaled < -limit) {
+    throw new Error(`Decimal parameter overflows a ${bitWidth}-bit decimal`);
+  }
+  let v = BigInt.asUintN(bitWidth, unscaled);
+  for (let i = 0; i < words.length; i++) {
+    words[i] = Number(v & 0xffffffffn);
+    v >>= 32n;
+  }
+  return words;
+}
+
+/**
+ * Builds a vector for an explicitly typed parameter. Arrow's builders take epoch
+ * milliseconds for temporal types and raw words for decimals, so values the SDK
+ * accepts (Date, bigint in the declared unit, day counts, decimal strings) are
+ * converted here instead of being handed to vectorFromArray as-is.
+ */
+function buildTypedVector(values: any[], arrowType: DataType, dataType?: string) {
+  if (DataType.isTimestamp(arrowType)) {
+    const unit = (arrowType as any).unit as TimeUnit;
+    const raw = values.map((v) =>
+      v === null || v === undefined
+        ? null
+        : v instanceof Date
+          ? dateToUnit(v, unit)
+          : BigInt(v),
+    );
+    const vector = vectorFromArray(raw.map((v) => (v === null ? null : 0)), arrowType);
+    const data = vector.data[0];
+    raw.forEach((v, i) => {
+      if (v !== null) (data.values as BigInt64Array)[i] = v;
+    });
+    return vector;
+  }
+  if (DataType.isDate(arrowType) && dataType === 'date32') {
+    // Numbers are days since the epoch; Arrow's builder wants milliseconds.
+    return vectorFromArray(
+      values.map((v) => (typeof v === 'number' ? v * 86_400_000 : v)),
+      arrowType,
+    );
+  }
+  if (DataType.isDecimal(arrowType)) {
+    const { scale, bitWidth } = arrowType as any;
+    return vectorFromArray(
+      values.map((v) =>
+        v === null || v === undefined
+          ? null
+          : decimalWords(toUnscaledDecimal(v, scale), bitWidth),
+      ),
+      arrowType,
+    );
+  }
+  return vectorFromArray(values, arrowType);
+}
+
 /**
  * Builds a single-row Arrow table, honouring explicit types where they resolve
  * and leaving the rest to Arrow's inference.
@@ -234,7 +346,7 @@ function buildParameterTable(
   for (const [name, values] of Object.entries(columns)) {
     const arrowType = arrowTypeFor(types[name], optionsByField[name]);
     if (arrowType) {
-      explicit[name] = vectorFromArray(values, arrowType);
+      explicit[name] = buildTypedVector(values, arrowType, types[name]);
     } else {
       inferred[name] = values;
     }
@@ -407,8 +519,14 @@ function convertValue(value: any, dataType: string): any {
     return null;
   }
 
-  // Handle Date conversion to timestamp (microseconds)
-  if (value instanceof Date) {
+  // Temporal builders convert Date themselves (see buildTypedVector), at the
+  // declared unit. Any other type keeps the historical microsecond encoding.
+  if (
+    value instanceof Date &&
+    dataType !== 'timestamp' &&
+    dataType !== 'date32' &&
+    dataType !== 'date64'
+  ) {
     return BigInt(value.getTime()) * BigInt(1000);
   }
 

@@ -868,7 +868,8 @@ export class SpiceClient {
         const extractedVal = this.extractParamValue(val);
         if (extractedVal === null) return null;
         if (extractedVal instanceof Date) return extractedVal.toISOString();
-        if (typeof extractedVal === 'bigint') return extractedVal.toString();
+        // bigint stays a bigint so it serializes as an exact JSON integer (Int64),
+        // matching Flight, instead of a string the runtime would bind as Utf8.
         // Check if it's a Buffer-like object (has toString method and type property)
         if (
           extractedVal &&
@@ -888,8 +889,6 @@ export class SpiceClient {
         let serializedValue: any = extractedValue;
         if (extractedValue instanceof Date)
           serializedValue = extractedValue.toISOString();
-        else if (typeof extractedValue === 'bigint')
-          serializedValue = extractedValue.toString();
         else if (
           extractedValue &&
           typeof (extractedValue as any).toString === 'function' &&
@@ -1145,7 +1144,7 @@ export class SpiceClient {
         'Parameterized queries over HTTP are not supported by Spice Cloud. Use Arrow Flight (gRPC) for parameterized queries.',
       );
     } else {
-      requestBody = JSON.stringify({
+      requestBody = stringifyWithBigInt({
         sql: queryText,
         parameters: httpParameters,
       });
@@ -2340,4 +2339,20 @@ export class SpiceClient {
       throw error;
     }
   }
+}
+
+const BIGINT_TOKEN = '__spice_js_bigint__';
+
+/**
+ * JSON.stringify that writes bigint values as exact integer literals
+ * (JSON.stringify itself throws on bigint, and Number() would lose precision).
+ */
+export function stringifyWithBigInt(value: unknown): string {
+  const json = JSON.stringify(value, (_key, v) =>
+    typeof v === 'bigint' ? `${BIGINT_TOKEN}${v.toString()}` : v,
+  );
+  return json.replace(
+    new RegExp(`"${BIGINT_TOKEN}(-?\\d+)"`, 'g'),
+    (_m, digits) => digits,
+  );
 }
