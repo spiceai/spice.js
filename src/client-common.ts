@@ -940,7 +940,13 @@ export class SpiceClient {
           // An abort is the caller's decision, not a transport failure —
           // falling back here would re-run the query they just cancelled.
           if (this._flightOnly || dataSent || signal?.aborted) {
-            throw error;
+            throw toFlightAuthError(error) ?? error;
+          }
+          // An auth failure would fail the same way over HTTP (or worse, hide a
+          // misconfigured key), so surface it instead of silently falling back.
+          const authError = toFlightAuthError(error);
+          if (authError) {
+            throw authError;
           }
           this._logger.warn(
             `[spice.js] Arrow Flight query failed, falling back to HTTP: ${
@@ -2340,4 +2346,24 @@ export class SpiceClient {
       throw error;
     }
   }
+}
+
+/**
+ * Maps a gRPC UNAUTHENTICATED (16) / PERMISSION_DENIED (7) failure to a clear
+ * error. Returns undefined for any other error.
+ */
+export function toFlightAuthError(error: unknown): Error | undefined {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (code !== 16 && code !== 7) {
+    return undefined;
+  }
+  const detail = error instanceof Error ? error.message : String(error);
+  const authError = new Error(
+    `[spice.js] Arrow Flight authentication failed (${
+      code === 16 ? 'UNAUTHENTICATED' : 'PERMISSION_DENIED'
+    }): check the apiKey. ${detail}`,
+  );
+  (authError as Error & { code?: unknown; cause?: unknown }).code = code;
+  (authError as Error & { cause?: unknown }).cause = error;
+  return authError;
 }
