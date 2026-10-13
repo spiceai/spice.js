@@ -309,7 +309,13 @@ function buildTypedVector(values: any[], arrowType: DataType, dataType?: string)
     const vector = vectorFromArray(raw.map((v) => (v === null ? null : 0)), arrowType);
     const data = vector.data[0];
     raw.forEach((v, i) => {
-      if (v !== null) (data.values as BigInt64Array)[i] = v;
+      if (v === null) return;
+      if (v !== BigInt.asIntN(64, v)) {
+        throw new Error(
+          `Timestamp parameter ${v} is outside the signed 64-bit range for its unit`,
+        );
+      }
+      (data.values as BigInt64Array)[i] = v;
     });
     return vector;
   }

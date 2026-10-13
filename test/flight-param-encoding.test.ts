@@ -38,6 +38,15 @@ describe('Flight parameter encoding', () => {
     expect(bound(Param.timestamp(v, { unit: 'Nanosecond' })).values[0]).toBe(v);
   });
 
+  it('rejects timestamps outside the 64-bit range instead of wrapping', () => {
+    expect(() => bound(Param.timestamp(2n ** 63n, { unit: 'Nanosecond' }))).toThrow(
+      /outside the signed 64-bit range/,
+    );
+    expect(() =>
+      bound(Param.timestamp(new Date('2500-01-01T00:00:00Z'), { unit: 'Nanosecond' })),
+    ).toThrow(/outside the signed 64-bit range/);
+  });
+
   it('floors pre-epoch sub-unit instants', () => {
     const pre = new Date('1969-12-31T23:59:59.500Z');
     expect(bound(Param.timestamp(pre, { unit: 'Second' })).values[0]).toBe(-1n);
