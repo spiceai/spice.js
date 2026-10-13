@@ -4,10 +4,27 @@
 
 import * as https from 'https';
 import os from 'os';
+import { Agent } from 'undici';
 import type { PlatformAdapter, FetchOptions, FetchResponse } from './types';
 import { VERSION } from '../version';
 
 const httpsAgent = new https.Agent({ keepAlive: true });
+
+/**
+ * Undici (Node's built-in fetch) defaults headersTimeout and bodyTimeout to
+ * 300s. The previous node-fetch path had no such limit; cancellation is
+ * caller-controlled via AbortSignal. Disable both so long-running /v1/sql
+ * queries are not cut off after five minutes of waiting for headers or
+ * between body chunks.
+ */
+export const NODE_FETCH_DISPATCHER_OPTIONS = {
+  headersTimeout: 0,
+  bodyTimeout: 0,
+  keepAliveTimeout: 60_000,
+  keepAliveMaxTimeout: 600_000,
+} as const;
+
+const fetchDispatcher = new Agent(NODE_FETCH_DISPATCHER_OPTIONS);
 
 /**
  * Prefer the runtime's built-in fetch (Node 18+). node-fetch 2.x raises false
@@ -17,6 +34,11 @@ const httpsAgent = new https.Agent({ keepAlive: true });
  */
 export function hasGlobalFetch(): boolean {
   return typeof (globalThis as any).fetch === 'function';
+}
+
+/** Test helper: the Undici Agent passed as `dispatcher` to global fetch. */
+export function getNodeFetchDispatcher(): Agent {
+  return fetchDispatcher;
 }
 
 class NodePlatformAdapter implements PlatformAdapter {
@@ -62,6 +84,7 @@ class NodePlatformAdapter implements PlatformAdapter {
         method: options.method,
         body: options.body,
         signal: options.signal,
+        dispatcher: fetchDispatcher,
       });
     } else {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
