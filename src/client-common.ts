@@ -2359,9 +2359,9 @@ export function toFlightAuthError(error: unknown): Error | undefined {
   }
   const detail = error instanceof Error ? error.message : String(error);
   const authError = new Error(
-    `[spice.js] Arrow Flight authentication failed (${
-      code === 16 ? 'UNAUTHENTICATED' : 'PERMISSION_DENIED'
-    }): check the apiKey. ${detail}`,
+    code === 16
+      ? `[spice.js] Arrow Flight authentication failed (UNAUTHENTICATED): check the apiKey. ${detail}`
+      : `[spice.js] Arrow Flight permission denied (PERMISSION_DENIED): the apiKey is valid but lacks access to this operation. ${detail}`,
   );
   (authError as Error & { code?: unknown; cause?: unknown }).code = code;
   (authError as Error & { cause?: unknown }).cause = error;

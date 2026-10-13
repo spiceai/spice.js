@@ -73,6 +73,9 @@ describe('Flight auth over an insecure channel', () => {
     const mapped = toFlightAuthError(err);
     expect(mapped?.message).toMatch(/authentication failed \(UNAUTHENTICATED\)/);
     expect((mapped as any).code).toBe(16);
+    expect(
+      toFlightAuthError(Object.assign(new Error('7 PERMISSION_DENIED'), { code: 7 }))?.message,
+    ).toMatch(/permission denied \(PERMISSION_DENIED\)/);
     expect(toFlightAuthError(new Error('boom'))).toBeUndefined();
   });
 });
