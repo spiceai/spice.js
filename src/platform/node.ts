@@ -3,15 +3,21 @@
  */
 
 import * as https from 'https';
-import fetch, {
-  Headers,
-  RequestInit as NodeFetchRequestInit,
-} from 'node-fetch';
 import os from 'os';
 import type { PlatformAdapter, FetchOptions, FetchResponse } from './types';
 import { VERSION } from '../version';
 
 const httpsAgent = new https.Agent({ keepAlive: true });
+
+/**
+ * Prefer the runtime's built-in fetch (Node 18+). node-fetch 2.x raises false
+ * ERR_STREAM_PREMATURE_CLOSE errors on chunked responses (node-fetch#1767, #1576),
+ * which broke `sql()` against `/v1/sql`. node-fetch is only loaded as a fallback
+ * when no global fetch exists.
+ */
+export function hasGlobalFetch(): boolean {
+  return typeof (globalThis as any).fetch === 'function';
+}
 
 class NodePlatformAdapter implements PlatformAdapter {
   supportsGrpc(): boolean {
@@ -49,23 +55,29 @@ class NodePlatformAdapter implements PlatformAdapter {
   }
 
   async fetch(url: string, options: FetchOptions): Promise<FetchResponse> {
-    const headers = new Headers();
-    Object.entries(options.headers).forEach(([key, value]) => {
-      headers.set(key, value);
-    });
-
-    const fetchOptions: NodeFetchRequestInit = {
-      headers,
-      method: options.method,
-      body: options.body,
-      signal: options.signal,
-    };
-
-    if (url.startsWith('https://')) {
-      fetchOptions.agent = httpsAgent;
+    let response: any;
+    if (hasGlobalFetch()) {
+      response = await (globalThis as any).fetch(url, {
+        headers: { ...options.headers },
+        method: options.method,
+        body: options.body,
+        signal: options.signal,
+      });
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const nodeFetch = require('node-fetch');
+      const fetchFn = nodeFetch.default ?? nodeFetch;
+      const fetchOptions: Record<string, unknown> = {
+        headers: new nodeFetch.Headers(options.headers),
+        method: options.method,
+        body: options.body,
+        signal: options.signal,
+      };
+      if (url.startsWith('https://')) {
+        fetchOptions.agent = httpsAgent;
+      }
+      response = await fetchFn(url, fetchOptions);
     }
-
-    const response = await fetch(url, fetchOptions);
 
     return {
       ok: response.ok,
