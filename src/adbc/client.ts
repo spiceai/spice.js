@@ -334,13 +334,19 @@ function buildTypedVector(values: any[], arrowType: DataType, dataType?: string)
     );
   }
   if (DataType.isDecimal(arrowType)) {
-    const { scale, bitWidth } = arrowType as any;
+    const { scale, precision, bitWidth } = arrowType as any;
+    const bound = 10n ** BigInt(precision);
     return vectorFromArray(
-      values.map((v) =>
-        v === null || v === undefined
-          ? null
-          : decimalWords(toUnscaledDecimal(v, scale), bitWidth),
-      ),
+      values.map((v) => {
+        if (v === null || v === undefined) return null;
+        const unscaled = toUnscaledDecimal(v, scale);
+        if (unscaled >= bound || unscaled <= -bound) {
+          throw new Error(
+            `Decimal parameter ${String(v)} does not fit Decimal(${precision}, ${scale})`,
+          );
+        }
+        return decimalWords(unscaled, bitWidth);
+      }),
       arrowType,
     );
   }

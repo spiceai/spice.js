@@ -81,6 +81,15 @@ describe('Flight parameter encoding', () => {
     );
   });
 
+  it('rejects decimals that exceed the declared precision', () => {
+    expect(() =>
+      bound(Param.decimal128('123456789.01', { precision: 10, scale: 2 })),
+    ).toThrow(/does not fit Decimal\(10, 2\)/);
+    expect(() =>
+      bound(Param.decimal128('-99999999.99', { precision: 10, scale: 2 })),
+    ).not.toThrow();
+  });
+
   it('parses decimals without floating point', () => {
     expect(toUnscaledDecimal('12345678.90', 15)).toBe(12345678900000000000000n);
     expect(toUnscaledDecimal(12.34, 2)).toBe(1234n);
