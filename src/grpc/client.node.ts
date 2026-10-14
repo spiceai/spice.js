@@ -278,10 +278,19 @@ export class GrpcFlightClient {
     const channelOptions = {};
 
     if (!this.flightTlsEnabled) {
+      // grpc-js refuses to send call credentials over an insecure channel, so the
+      // auth/user-agent metadata is attached with a client interceptor instead.
+      const metadataInterceptor = (options: any, nextCall: any) =>
+        new grpc.InterceptingCall(nextCall(options), {
+          start: (metadata: grpc.Metadata, listener: any, next: any) => {
+            metadata.merge(meta);
+            next(metadata, listener);
+          },
+        });
       return new flightProto.FlightService(
         this.flightUrl,
         grpc.credentials.createInsecure(),
-        channelOptions,
+        { ...channelOptions, interceptors: [metadataInterceptor] },
       );
     }
 

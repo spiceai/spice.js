@@ -868,7 +868,8 @@ export class SpiceClient {
         const extractedVal = this.extractParamValue(val);
         if (extractedVal === null) return null;
         if (extractedVal instanceof Date) return extractedVal.toISOString();
-        if (typeof extractedVal === 'bigint') return extractedVal.toString();
+        // bigint stays a bigint so it serializes as an exact JSON integer (Int64),
+        // matching Flight, instead of a string the runtime would bind as Utf8.
         // Check if it's a Buffer-like object (has toString method and type property)
         if (
           extractedVal &&
@@ -888,8 +889,6 @@ export class SpiceClient {
         let serializedValue: any = extractedValue;
         if (extractedValue instanceof Date)
           serializedValue = extractedValue.toISOString();
-        else if (typeof extractedValue === 'bigint')
-          serializedValue = extractedValue.toString();
         else if (
           extractedValue &&
           typeof (extractedValue as any).toString === 'function' &&
@@ -940,7 +939,13 @@ export class SpiceClient {
           // An abort is the caller's decision, not a transport failure —
           // falling back here would re-run the query they just cancelled.
           if (this._flightOnly || dataSent || signal?.aborted) {
-            throw error;
+            throw toFlightAuthError(error) ?? error;
+          }
+          // An auth failure would fail the same way over HTTP (or worse, hide a
+          // misconfigured key), so surface it instead of silently falling back.
+          const authError = toFlightAuthError(error);
+          if (authError) {
+            throw authError;
           }
           this._logger.warn(
             `[spice.js] Arrow Flight query failed, falling back to HTTP: ${
@@ -1145,7 +1150,7 @@ export class SpiceClient {
         'Parameterized queries over HTTP are not supported by Spice Cloud. Use Arrow Flight (gRPC) for parameterized queries.',
       );
     } else {
-      requestBody = JSON.stringify({
+      requestBody = stringifyWithBigInt({
         sql: queryText,
         parameters: httpParameters,
       });
@@ -2340,4 +2345,49 @@ export class SpiceClient {
       throw error;
     }
   }
+}
+
+/**
+ * JSON.stringify that writes bigint values as exact integer literals
+ * (JSON.stringify itself throws on bigint, and Number() would lose precision).
+ *
+ * Bigints are first written as placeholder strings, then swapped for the raw
+ * digits. The placeholder prefix is random and checked against the input's own
+ * JSON (strings and keys), so no caller-supplied text can collide with it.
+ */
+export function stringifyWithBigInt(value: unknown): string {
+  const plain = JSON.stringify(value, (_key, v) =>
+    typeof v === 'bigint' ? v.toString() : v,
+  );
+  let token: string;
+  do {
+    token = `__spice_bigint_${Math.random().toString(36).slice(2)}__`;
+  } while (plain.includes(token));
+  const json = JSON.stringify(value, (_key, v) =>
+    typeof v === 'bigint' ? `${token}${v.toString()}` : v,
+  );
+  return json.replace(
+    new RegExp(`"${token}(-?\\d+)"`, 'g'),
+    (_m, digits) => digits,
+  );
+}
+
+/**
+ * Maps a gRPC UNAUTHENTICATED (16) / PERMISSION_DENIED (7) failure to a clear
+ * error. Returns undefined for any other error.
+ */
+export function toFlightAuthError(error: unknown): Error | undefined {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (code !== 16 && code !== 7) {
+    return undefined;
+  }
+  const detail = error instanceof Error ? error.message : String(error);
+  const authError = new Error(
+    code === 16
+      ? `[spice.js] Arrow Flight authentication failed (UNAUTHENTICATED): check the apiKey. ${detail}`
+      : `[spice.js] Arrow Flight permission denied (PERMISSION_DENIED): the apiKey is valid but lacks access to this operation. ${detail}`,
+  );
+  (authError as Error & { code?: unknown; cause?: unknown }).code = code;
+  (authError as Error & { cause?: unknown }).cause = error;
+  return authError;
 }

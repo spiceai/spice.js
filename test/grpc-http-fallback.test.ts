@@ -110,6 +110,25 @@ describe('gRPC to HTTP fallback', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  test.each([
+    [16, 'UNAUTHENTICATED', /authentication failed \(UNAUTHENTICATED\): check the apiKey/],
+    [7, 'PERMISSION_DENIED', /permission denied \(PERMISSION_DENIED\): the apiKey is valid but lacks access/],
+  ])(
+    'surfaces gRPC code %i (%s) instead of falling back to HTTP',
+    async (code, name, message) => {
+      for (const config of [{}, { flightOnly: true }]) {
+        const client = makeClient(config);
+        const authError = Object.assign(new Error(`${code} ${name}: denied`), { code });
+        (client as any)._grpcClient.executeQuery.mockRejectedValue(authError);
+
+        const failure = client.sql('SELECT 1');
+        await expect(failure).rejects.toThrow(message);
+        await expect(failure).rejects.toMatchObject({ code, cause: authError });
+        expect(fetchMock).not.toHaveBeenCalled();
+      }
+    },
+  );
+
   test('rejects without falling back when flightOnly is enabled', async () => {
     const client = makeClient({ flightOnly: true });
 
