@@ -385,7 +385,7 @@ export class Param {
    * @param value - Decimal value
    * @param options - Precision (total digits) and scale (decimal places)
    */
-  static decimal128(value: number | string, options: DecimalOptions): Param {
+  static decimal128(value: number | string | bigint, options: DecimalOptions): Param {
     return new Param(value, 'Decimal128', options);
   }
 
@@ -395,7 +395,7 @@ export class Param {
    * @param value - Decimal value
    * @param options - Precision (total digits) and scale (decimal places)
    */
-  static decimal256(value: number | string, options: DecimalOptions): Param {
+  static decimal256(value: number | string | bigint, options: DecimalOptions): Param {
     return new Param(value, 'Decimal256', options);
   }
 
