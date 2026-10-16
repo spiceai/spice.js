@@ -104,6 +104,57 @@ describe('SpiceClient.runtimeStatus()', () => {
     );
   });
 
+  it.each([
+    ['a null entry', [null], 'entry 0 is null'],
+    ['a non-object entry', [42], 'entry 0 is number'],
+    ['an array entry', [['http']], 'entry 0 is array'],
+    [
+      'an entry missing name',
+      [{ endpoint: '127.0.0.1:50051', status: 'Ready' }],
+      "entry 0 has no string 'name'",
+    ],
+    [
+      'an entry whose endpoint is not a string',
+      [{ name: 'flight', endpoint: 50051, status: 'Ready' }],
+      "entry 0 has no string 'endpoint'",
+    ],
+    [
+      'an entry missing status',
+      [{ name: 'flight', endpoint: '127.0.0.1:50051' }],
+      "entry 0 has no string 'status'",
+    ],
+    [
+      'a malformed entry after a valid one',
+      [
+        { name: 'http', endpoint: 'http://127.0.0.1:8090', status: 'Ready' },
+        null,
+      ],
+      'entry 1 is null',
+    ],
+  ])('should reject %s', async (_label, body, detail) => {
+    mockFetch.mockResolvedValue(httpResponse(200, body));
+
+    // A consumer doing details.find((d) => d.name === 'flight') would otherwise
+    // throw a TypeError on a null entry, far from the response that caused it.
+    await expect(client.runtimeStatus()).rejects.toThrow(
+      `Failed to get runtime status: malformed connection in /v1/status response: ${detail}`,
+    );
+  });
+
+  it('should keep fields a newer runtime adds to an entry', async () => {
+    const body = [
+      {
+        name: 'http',
+        endpoint: 'http://127.0.0.1:8090',
+        status: 'Ready',
+        since: '2026-01-01T00:00:00Z',
+      },
+    ];
+    mockFetch.mockResolvedValue(httpResponse(200, body));
+
+    await expect(client.runtimeStatus()).resolves.toEqual(body);
+  });
+
   it('should return an empty array when the runtime reports an empty list', async () => {
     mockFetch.mockResolvedValue(httpResponse(200, []));
 
