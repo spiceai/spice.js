@@ -340,7 +340,7 @@ describe('SpiceClient.search()', () => {
       },
     );
 
-    it.each([
+    it.each<[string, unknown, string]>([
       [
         'without a dataset',
         { _score: 0.5, matches: {} },
@@ -362,6 +362,14 @@ describe('SpiceClient.search()', () => {
         { dataset: 'docs', _score: 0.5, matches: 'hit' },
         "has a non-object 'matches'",
       ],
+      ...['matches', 'primary_key', 'data', 'metadata'].map(
+        (field) =>
+          [
+            `whose ${field} is null`,
+            { dataset: 'docs', _score: 0.5, matches: {}, [field]: null },
+            `has a non-object '${field}'`,
+          ] as [string, unknown, string],
+      ),
     ])('should reject a match %s', async (_name, match, problem) => {
       respondWith({ duration_ms: 1, results: [validMatch, match] });
       await expect(client.search('query')).rejects.toThrow(

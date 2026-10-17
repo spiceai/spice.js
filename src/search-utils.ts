@@ -23,7 +23,8 @@ function isObject(value: unknown): value is Record<string, unknown> {
  * names `_score` (older runtimes sent `score`, accepted here too). A match
  * missing either is malformed: defaulting them would hand the caller a result
  * with no dataset or no score that looks legitimate. `data`, `primary_key` and
- * `metadata` are omitted entirely when empty, so they are filled in as `{}`.
+ * `metadata` are omitted entirely when empty, so they are filled in as `{}`
+ * when absent; a present value, `null` included, must be an object.
  */
 function normalizeSearchMatch(match: unknown): SearchMatch | string {
   if (!isObject(match)) {
@@ -41,7 +42,7 @@ function normalizeSearchMatch(match: unknown): SearchMatch | string {
     'matches' | 'primary_key' | 'data' | 'metadata'
   >;
   for (const field of ['matches', 'primary_key', 'data', 'metadata'] as const) {
-    const value = match[field] ?? {};
+    const value = match[field] === undefined ? {} : match[field];
     if (!isObject(value)) {
       return `has a non-object '${field}'`;
     }
