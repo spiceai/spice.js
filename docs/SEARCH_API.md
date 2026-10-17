@@ -141,7 +141,12 @@ const results = await client.search('neural networks', {
 
 ## Error Handling
 
-The search method throws errors in the following cases:
+The search method throws when the client has no HTTP URL, when the query is
+empty, when the runtime answers with a non-2xx status, and when a 2xx response is
+not a search response (for example, a proxy's error envelope, or a match without
+`dataset` or `_score`). Errors from the runtime start with `Search request failed`;
+a malformed response reads `Search request failed: malformed /v1/search response: ...`
+and names the missing field.
 
 ```typescript
 try {

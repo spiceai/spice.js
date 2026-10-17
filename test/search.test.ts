@@ -301,4 +301,101 @@ describe('SpiceClient.search()', () => {
     // Reading a nested key must not throw.
     expect(match.data.anything).toBeUndefined();
   });
+
+  describe('malformed responses', () => {
+    const respondWith = (body: unknown) =>
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => body,
+        text: async () => JSON.stringify(body),
+      });
+
+    const validMatch = {
+      dataset: 'docs',
+      _score: 0.5,
+      matches: { content: ['hit'] },
+    };
+
+    it.each([
+      ['an empty object', {}, "no array 'results'"],
+      [
+        'an error envelope',
+        { error: 'upstream timeout' },
+        "no array 'results'",
+      ],
+      ['null', null, 'expected a JSON object, received null'],
+      ['an array', [validMatch], 'expected a JSON object, received array'],
+      [
+        'results without duration_ms',
+        { results: [validMatch] },
+        "no number 'duration_ms'",
+      ],
+    ])(
+      'should reject %s instead of reading it as an answer',
+      async (_name, body, problem) => {
+        respondWith(body);
+        await expect(client.search('query')).rejects.toThrow(
+          `Search request failed: malformed /v1/search response: ${problem}`,
+        );
+      },
+    );
+
+    it.each<[string, unknown, string]>([
+      [
+        'without a dataset',
+        { _score: 0.5, matches: {} },
+        "has no string 'dataset'",
+      ],
+      [
+        'without a score',
+        { dataset: 'docs', matches: {} },
+        "has no number '_score'",
+      ],
+      [
+        'with a non-numeric score',
+        { dataset: 'docs', _score: '0.5', matches: {} },
+        "has no number '_score'",
+      ],
+      ['that is null', null, 'is null'],
+      [
+        'whose matches is not an object',
+        { dataset: 'docs', _score: 0.5, matches: 'hit' },
+        "has a non-object 'matches'",
+      ],
+      ...['matches', 'primary_key', 'data', 'metadata'].map(
+        (field) =>
+          [
+            `whose ${field} is null`,
+            { dataset: 'docs', _score: 0.5, matches: {}, [field]: null },
+            `has a non-object '${field}'`,
+          ] as [string, unknown, string],
+      ),
+    ])('should reject a match %s', async (_name, match, problem) => {
+      respondWith({ duration_ms: 1, results: [validMatch, match] });
+      await expect(client.search('query')).rejects.toThrow(
+        `Search request failed: malformed /v1/search response: result 1 ${problem}`,
+      );
+    });
+
+    it('should accept the `score` field older runtimes sent', async () => {
+      respondWith({
+        duration_ms: 1,
+        results: [{ dataset: 'docs', score: 0.7, matches: {} }],
+      });
+
+      const result = await client.search('query');
+
+      expect(result.results[0].score).toBe(0.7);
+      expect(result.results[0]).not.toHaveProperty('_score');
+    });
+
+    it('should accept an empty result list', async () => {
+      respondWith({ duration_ms: 3, results: [] });
+
+      await expect(client.search('query')).resolves.toEqual({
+        duration_ms: 3,
+        results: [],
+      });
+    });
+  });
 });

@@ -17,7 +17,6 @@ import {
   type QueryParameters,
   type SearchOptions,
   type SearchResponse,
-  type WireSearchResponse,
   type ActiveQuery,
   type ActiveQueriesResponse,
   type CancelActiveQueryResponse,
@@ -2070,8 +2069,7 @@ export class SpiceClient {
       );
     }
 
-    const result = (await response.json()) as WireSearchResponse;
-    return normalizeSearchResponse(result);
+    return normalizeSearchResponse(await response.json());
   }
 
   /**
