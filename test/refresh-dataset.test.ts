@@ -37,7 +37,9 @@ describe('SpiceClient.refreshDataset()', () => {
 
   it('should POST to the dataset acceleration refresh endpoint', async () => {
     mockFetch.mockResolvedValue(
-      httpResponse(201, { message: 'Dataset refresh triggered for taxi_trips.' }),
+      httpResponse(201, {
+        message: 'Dataset refresh triggered for taxi_trips.',
+      }),
     );
 
     const result = await client.refreshDataset('taxi_trips');
@@ -62,7 +64,10 @@ describe('SpiceClient.refreshDataset()', () => {
       'http://localhost:8090/v1/datasets/eth.recent%20blocks/acceleration/refresh',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ refresh_mode: 'full', refresh_jitter_max: '5s' }),
+        body: JSON.stringify({
+          refresh_mode: 'full',
+          refresh_jitter_max: '5s',
+        }),
       }),
     );
   });

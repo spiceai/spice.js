@@ -588,7 +588,9 @@ describe('Browser SpiceClient', () => {
 
       expect(result.message).toBe('ok');
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/v1/datasets/test_dataset/acceleration/refresh'),
+        expect.stringContaining(
+          '/v1/datasets/test_dataset/acceleration/refresh',
+        ),
         expect.objectContaining({ method: 'POST' }),
       );
     });
