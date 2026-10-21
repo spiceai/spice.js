@@ -2092,7 +2092,7 @@ export class SpiceClient {
    * @param options - Optional refresh configuration
    * @returns Promise resolving to the refresh response message
    */
-  async refreshAcceleration(
+  async refreshDataset(
     dataset: string,
     options?: RefreshAccelerationOptions,
   ): Promise<RefreshAccelerationResponse> {
@@ -2117,6 +2117,20 @@ export class SpiceClient {
     }
 
     return await response.json();
+  }
+
+  /**
+   * Triggers an on-demand refresh for an accelerated dataset.
+   * @param dataset - The name of the dataset to refresh
+   * @param options - Optional refresh configuration
+   * @returns Promise resolving to the refresh response message
+   * @deprecated Use {@link refreshDataset}, the name the other Spice SDKs use.
+   */
+  async refreshAcceleration(
+    dataset: string,
+    options?: RefreshAccelerationOptions,
+  ): Promise<RefreshAccelerationResponse> {
+    return this.refreshDataset(dataset, options);
   }
 
   /**

@@ -552,7 +552,7 @@ describe('Browser SpiceClient', () => {
         json: jest.fn().mockResolvedValue(mockResponse),
       });
 
-      const result = await client.refreshAcceleration('test_dataset');
+      const result = await client.refreshDataset('test_dataset');
 
       expect(result).toHaveProperty('message');
       expect(result.message).toBe('Refresh triggered successfully');
@@ -569,8 +569,30 @@ describe('Browser SpiceClient', () => {
       });
 
       await expect(
-        client.refreshAcceleration('nonexistent_dataset'),
+        client.refreshDataset('nonexistent_dataset'),
       ).rejects.toThrow();
+    });
+
+    test('should keep refreshAcceleration() as an alias for refreshDataset()', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {
+          get: jest.fn(),
+        },
+        text: jest.fn().mockResolvedValue('{"message":"ok"}'),
+        json: jest.fn().mockResolvedValue({ message: 'ok' }),
+      });
+
+      const result = await client.refreshAcceleration('test_dataset');
+
+      expect(result.message).toBe('ok');
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '/v1/datasets/test_dataset/acceleration/refresh',
+        ),
+        expect.objectContaining({ method: 'POST' }),
+      );
     });
   });
 
