@@ -32,7 +32,8 @@
   "dependencies": {
     "@types/node-fetch": "^2.6.12",
     "@types/retry": "^0.12.5",
-    "apache-arrow": "21.1.0"
+    "apache-arrow": "21.1.0",
+    "undici": "^7.30.0"
   },
   "optionalDependencies": {
     "@grpc/grpc-js": "^1.14.3",
@@ -43,7 +44,7 @@
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.0.9",
+    "@types/node": "^26.4.0",
     "@typescript-eslint/eslint-plugin": "^8.46.2",
     "@typescript-eslint/parser": "^8.46.2",
     "dotenv": "^17.2.3",

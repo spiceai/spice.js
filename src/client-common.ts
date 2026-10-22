@@ -286,6 +286,29 @@ function normalizeNsqlResponse(payload: unknown): NsqlResponse {
   };
 }
 
+/**
+ * Explains why a `/v1/status` entry is not a {@link ConnectionDetails}, or
+ * returns `undefined` when it is one.
+ */
+function describeMalformedConnection(entry: unknown): string | undefined {
+  if (entry === null) {
+    return 'is null';
+  }
+  if (Array.isArray(entry)) {
+    return 'is array';
+  }
+  if (typeof entry !== 'object') {
+    return `is ${typeof entry}`;
+  }
+  const fields = entry as Record<string, unknown>;
+  for (const field of ['name', 'endpoint', 'status'] as const) {
+    if (typeof fields[field] !== 'string') {
+      return `has no string '${field}'`;
+    }
+  }
+  return undefined;
+}
+
 function wrapTableForDecimalConversion(table: Table): Table {
   const originalToArray = table.toArray.bind(table);
 
@@ -2069,7 +2092,7 @@ export class SpiceClient {
    * @param options - Optional refresh configuration
    * @returns Promise resolving to the refresh response message
    */
-  async refreshAcceleration(
+  async refreshDataset(
     dataset: string,
     options?: RefreshAccelerationOptions,
   ): Promise<RefreshAccelerationResponse> {
@@ -2094,6 +2117,20 @@ export class SpiceClient {
     }
 
     return await response.json();
+  }
+
+  /**
+   * Triggers an on-demand refresh for an accelerated dataset.
+   * @param dataset - The name of the dataset to refresh
+   * @param options - Optional refresh configuration
+   * @returns Promise resolving to the refresh response message
+   * @deprecated Use {@link refreshDataset}, the name the other Spice SDKs use.
+   */
+  async refreshAcceleration(
+    dataset: string,
+    options?: RefreshAccelerationOptions,
+  ): Promise<RefreshAccelerationResponse> {
+    return this.refreshDataset(dataset, options);
   }
 
   /**
@@ -2229,6 +2266,18 @@ export class SpiceClient {
         }`,
       );
     }
+    // Every entry the runtime serializes carries all three fields as strings.
+    // Check them here so a malformed entry fails with an error naming the
+    // response, not a TypeError in the caller. Extra fields are kept, so a newer
+    // runtime that adds one does not break this client.
+    payload.forEach((entry: unknown, index) => {
+      const problem = describeMalformedConnection(entry);
+      if (problem) {
+        throw new Error(
+          `Failed to get runtime status: malformed connection in /v1/status response: entry ${index} ${problem}`,
+        );
+      }
+    });
     return payload as ConnectionDetails[];
   }
 
