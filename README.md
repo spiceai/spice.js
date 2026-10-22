@@ -38,10 +38,17 @@ Querying data is done through a `SpiceClient` object that initializes the connec
 The runtime serves Flight and the HTTP API as one deployment, so the two endpoints
 are resolved together: naming one leaves the other pointing at the same runtime.
 Give only `flightUrl: 'flight.spiceai.io:443'` and the HTTP calls — health, readiness,
-status, `refreshAcceleration`, `search`, `nsql`, active and async queries — address
+status, `refreshDataset`, `search`, `nsql`, active and async queries — address
 Spice Cloud too; give only `httpUrl: 'http://127.0.0.1:8090'` and queries go to the
 local Flight endpoint. Only the local runtime and Spice Cloud have a known pairing;
 any other address may serve its HTTP API elsewhere, so name both when self-hosting.
+
+An endpoint given as an empty or blank string is rejected when the client is
+constructed, rather than read as unset. Pass `undefined`, not `''`, for an endpoint
+you have not configured. An environment variable can be passed through as it is —
+`flightUrl: process.env.SPICE_FLIGHT_URL` is `undefined` when the variable is unset,
+and an error when it is set but empty — but don't default it with `?? ''`, and don't
+turn `''` into `undefined` with `|| undefined`.
 
 Read more about the Spice.ai Apache Arrow Flight API at [docs.spice.ai](https://docs.spice.ai/api/sql-query-api/apache-arrow-flight-api).
 
@@ -209,7 +216,8 @@ npm install @spiceai/spice@latest
 - ✅ **Platform-Optimized**: Node.js uses Apache Arrow Flight (gRPC), browsers use HTTP API
 - ✅ **New Query Methods**: `sql()`, `sqlJson()`, and `nsql()` for flexible querying
 - ✅ **Health Checks**: `isSpiceHealthy()` and `isSpiceReady()` for monitoring
-- ✅ **Dataset Refresh**: `refreshAcceleration()` for on-demand dataset updates
+- ✅ **Runtime Status**: `runtimeStatus()` for per-component state
+- ✅ **Dataset Refresh**: `refreshDataset()` for on-demand dataset updates
 - ✅ **HTTP Fallback**: Automatic fallback to HTTP in serverless environments
 - ✅ **Proto Auto-Download**: Flight proto file automatically downloaded and cached when missing
 - ✅ **TypeScript Strict Mode**: Enhanced type safety throughout the codebase
@@ -284,7 +292,7 @@ const client = new SpiceClient({
 });
 ```
 
-This applies to all configuration parameters including `apiKey`, `httpUrl`, `flightUrl`, and method options like `refreshAcceleration()`.
+This applies to all configuration parameters including `apiKey`, `httpUrl`, `flightUrl`, and method options like `refreshDataset()`.
 
 #### 4. Constructor Changes (v2.0.0)
 
@@ -363,10 +371,10 @@ async function waitForSpice(client, maxAttempts = 10) {
 
 ```typescript
 // Basic refresh
-await client.refreshAcceleration('my_dataset');
+await client.refreshDataset('my_dataset');
 
 // Advanced with options
-await client.refreshAcceleration('my_dataset', {
+await client.refreshDataset('my_dataset', {
   refresh_mode: 'append',
   refresh_sql: 'SELECT * FROM source WHERE updated_at > NOW() - INTERVAL 1 DAY',
   refresh_jitter_max: '1s',
@@ -401,7 +409,7 @@ console.table(result.toArray());
 - [ ] Use `sql()` instead of `query()` — `query()` now submits async jobs; see the Async queries section
 - [ ] Add health checks with `isSpiceHealthy()` and `isSpiceReady()`
 - [ ] Try `nsql()` for natural language queries
-- [ ] Use `refreshAcceleration()` for on-demand dataset refresh
+- [ ] Use `refreshDataset()` for on-demand dataset refresh
 
 **If deploying to browsers:**
 
@@ -603,17 +611,44 @@ if (await waitForSpice()) {
 }
 ```
 
-#### `refreshAcceleration(dataset: string, options?)` - Trigger dataset refresh
+#### `runtimeStatus()` - Per-component runtime status
 
-The `refreshAcceleration()` method triggers an on-demand refresh for an accelerated dataset.
+The `runtimeStatus()` method reports the status of each runtime connection. Where `isSpiceReady()` collapses the whole runtime to one boolean, this reports per-component state, so a runtime that is still initializing can be told apart from one whose Flight endpoint is failing.
+
+```js
+const details = await spiceClient.runtimeStatus();
+for (const d of details) {
+  console.log(`${d.name} @ ${d.endpoint}: ${d.status}`);
+}
+// http @ http://127.0.0.1:8090: Ready
+// flight @ 127.0.0.1:50051: Ready
+// metrics @ N/A: Disabled
+
+// Example: fail fast when the data path specifically is unhealthy
+const flight = details.find((d) => d.name === 'flight');
+if (flight && flight.status !== 'Ready') {
+  throw new Error(`Flight endpoint is ${flight.status}`);
+}
+```
+
+Each entry is a `ConnectionDetails`:
+
+- `name`: the connection — `'http'`, `'flight'`, `'metrics'` or `'opentelemetry'`
+- `endpoint`: where it is served, or `'N/A'` when the component is disabled
+- `status`: a `ComponentStatus` — `'Initializing'`, `'Ready'`, `'Disabled'`, `'Error'`, `'Refreshing'`, `'ShuttingDown'` or `'NotLoaded'`. A status added by a newer runtime is passed through rather than dropped.
+
+#### `refreshDataset(dataset: string, options?)` - Trigger dataset refresh
+
+The `refreshDataset()` method triggers an on-demand refresh for an accelerated dataset.
+`refreshAcceleration()`, its earlier name, still works as a deprecated alias.
 
 ```js
 // Basic refresh
-const result = await spiceClient.refreshAcceleration('my_dataset');
+const result = await spiceClient.refreshDataset('my_dataset');
 console.log(result.message);
 
 // Refresh with custom options
-const result = await spiceClient.refreshAcceleration('my_dataset', {
+const result = await spiceClient.refreshDataset('my_dataset', {
   refresh_mode: 'full', // 'full', 'append', 'changes', or 'disabled'
   refresh_sql: 'SELECT * FROM source WHERE updated_at > NOW() - INTERVAL 1 DAY',
   refresh_jitter_max: '1s',

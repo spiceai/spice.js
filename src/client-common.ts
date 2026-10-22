@@ -24,6 +24,7 @@ import {
   type ListQueriesOptions,
   type AsyncQuerySummary,
   type ListQueriesResponse,
+  type ConnectionDetails,
 } from './interfaces';
 import {
   AsyncQuery,
@@ -283,6 +284,29 @@ function normalizeNsqlResponse(payload: unknown): NsqlResponse {
     data,
     sql: result.sql ?? '',
   };
+}
+
+/**
+ * Explains why a `/v1/status` entry is not a {@link ConnectionDetails}, or
+ * returns `undefined` when it is one.
+ */
+function describeMalformedConnection(entry: unknown): string | undefined {
+  if (entry === null) {
+    return 'is null';
+  }
+  if (Array.isArray(entry)) {
+    return 'is array';
+  }
+  if (typeof entry !== 'object') {
+    return `is ${typeof entry}`;
+  }
+  const fields = entry as Record<string, unknown>;
+  for (const field of ['name', 'endpoint', 'status'] as const) {
+    if (typeof fields[field] !== 'string') {
+      return `has no string '${field}'`;
+    }
+  }
+  return undefined;
 }
 
 function wrapTableForDecimalConversion(table: Table): Table {
@@ -689,6 +713,20 @@ export class SpiceClient {
         throw new Error('flightOnly and httpOnly cannot both be true');
       }
 
+      // A blank endpoint is a configuration mistake, usually an unset
+      // environment variable, not a request for the default. Read as unset it
+      // would, with an API key, resolve both endpoints to Spice Cloud.
+      if (flightUrl !== undefined && flightUrl.trim() === '') {
+        throw new Error(
+          'flightUrl was given as an empty string. Pass a `host:port` address, or omit the option to use the default.',
+        );
+      }
+      if (httpUrl !== undefined && httpUrl.trim() === '') {
+        throw new Error(
+          'httpUrl was given as an empty string. Pass a URL such as `http://127.0.0.1:8090`, or omit the option to use the default.',
+        );
+      }
+
       // With neither endpoint named, an API key means Spice Cloud. With one of
       // the two named, the other follows it, so both halves of the client
       // address the same runtime — see pairedHttpUrlFor / pairedFlightUrlFor.
@@ -853,7 +891,8 @@ export class SpiceClient {
         const extractedVal = this.extractParamValue(val);
         if (extractedVal === null) return null;
         if (extractedVal instanceof Date) return extractedVal.toISOString();
-        if (typeof extractedVal === 'bigint') return extractedVal.toString();
+        // bigint stays a bigint so it serializes as an exact JSON integer (Int64),
+        // matching Flight, instead of a string the runtime would bind as Utf8.
         // Check if it's a Buffer-like object (has toString method and type property)
         if (
           extractedVal &&
@@ -873,8 +912,6 @@ export class SpiceClient {
         let serializedValue: any = extractedValue;
         if (extractedValue instanceof Date)
           serializedValue = extractedValue.toISOString();
-        else if (typeof extractedValue === 'bigint')
-          serializedValue = extractedValue.toString();
         else if (
           extractedValue &&
           typeof (extractedValue as any).toString === 'function' &&
@@ -925,7 +962,13 @@ export class SpiceClient {
           // An abort is the caller's decision, not a transport failure —
           // falling back here would re-run the query they just cancelled.
           if (this._flightOnly || dataSent || signal?.aborted) {
-            throw error;
+            throw toFlightAuthError(error) ?? error;
+          }
+          // An auth failure would fail the same way over HTTP (or worse, hide a
+          // misconfigured key), so surface it instead of silently falling back.
+          const authError = toFlightAuthError(error);
+          if (authError) {
+            throw authError;
           }
           this._logger.warn(
             `[spice.js] Arrow Flight query failed, falling back to HTTP: ${
@@ -1130,7 +1173,7 @@ export class SpiceClient {
         'Parameterized queries over HTTP are not supported by Spice Cloud. Use Arrow Flight (gRPC) for parameterized queries.',
       );
     } else {
-      requestBody = JSON.stringify({
+      requestBody = stringifyWithBigInt({
         sql: queryText,
         parameters: httpParameters,
       });
@@ -2049,7 +2092,7 @@ export class SpiceClient {
    * @param options - Optional refresh configuration
    * @returns Promise resolving to the refresh response message
    */
-  async refreshAcceleration(
+  async refreshDataset(
     dataset: string,
     options?: RefreshAccelerationOptions,
   ): Promise<RefreshAccelerationResponse> {
@@ -2074,6 +2117,20 @@ export class SpiceClient {
     }
 
     return await response.json();
+  }
+
+  /**
+   * Triggers an on-demand refresh for an accelerated dataset.
+   * @param dataset - The name of the dataset to refresh
+   * @param options - Optional refresh configuration
+   * @returns Promise resolving to the refresh response message
+   * @deprecated Use {@link refreshDataset}, the name the other Spice SDKs use.
+   */
+  async refreshAcceleration(
+    dataset: string,
+    options?: RefreshAccelerationOptions,
+  ): Promise<RefreshAccelerationResponse> {
+    return this.refreshDataset(dataset, options);
   }
 
   /**
@@ -2167,6 +2224,61 @@ export class SpiceClient {
     }
 
     return (await response.json()) as CancelActiveQueryResponse;
+  }
+
+  /**
+   * Reports the status of each runtime connection.
+   *
+   * Where {@link isSpiceReady} collapses the whole runtime to one boolean, this
+   * reports per-component state, so a runtime that is still initializing can be
+   * told apart from one whose Flight endpoint is failing.
+   *
+   * @returns Promise resolving to one entry per runtime connection
+   */
+  async runtimeStatus(): Promise<ConnectionDetails[]> {
+    if (!this._httpUrl) {
+      throw new Error('HTTP URL is required for runtime status');
+    }
+
+    const response = await this.fetchInternal('GET', '/v1/status');
+
+    if (response.status === 403) {
+      throw new Error(
+        'The configured API key does not allow reading runtime status. Use a key with read access.',
+      );
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to get runtime status: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
+
+    // The endpoint serializes a list of connections, so anything that is not an
+    // array is a malformed response. Coercing it to [] would report a healthy
+    // runtime with no connections, which is indistinguishable from a real one.
+    const payload: unknown = await response.json();
+    if (!Array.isArray(payload)) {
+      throw new Error(
+        `Failed to get runtime status: expected a JSON array of connections from /v1/status, received ${
+          payload === null ? 'null' : typeof payload
+        }`,
+      );
+    }
+    // Every entry the runtime serializes carries all three fields as strings.
+    // Check them here so a malformed entry fails with an error naming the
+    // response, not a TypeError in the caller. Extra fields are kept, so a newer
+    // runtime that adds one does not break this client.
+    payload.forEach((entry: unknown, index) => {
+      const problem = describeMalformedConnection(entry);
+      if (problem) {
+        throw new Error(
+          `Failed to get runtime status: malformed connection in /v1/status response: entry ${index} ${problem}`,
+        );
+      }
+    });
+    return payload as ConnectionDetails[];
   }
 
   /**
@@ -2282,4 +2394,49 @@ export class SpiceClient {
       throw error;
     }
   }
+}
+
+/**
+ * JSON.stringify that writes bigint values as exact integer literals
+ * (JSON.stringify itself throws on bigint, and Number() would lose precision).
+ *
+ * Bigints are first written as placeholder strings, then swapped for the raw
+ * digits. The placeholder prefix is random and checked against the input's own
+ * JSON (strings and keys), so no caller-supplied text can collide with it.
+ */
+export function stringifyWithBigInt(value: unknown): string {
+  const plain = JSON.stringify(value, (_key, v) =>
+    typeof v === 'bigint' ? v.toString() : v,
+  );
+  let token: string;
+  do {
+    token = `__spice_bigint_${Math.random().toString(36).slice(2)}__`;
+  } while (plain.includes(token));
+  const json = JSON.stringify(value, (_key, v) =>
+    typeof v === 'bigint' ? `${token}${v.toString()}` : v,
+  );
+  return json.replace(
+    new RegExp(`"${token}(-?\\d+)"`, 'g'),
+    (_m, digits) => digits,
+  );
+}
+
+/**
+ * Maps a gRPC UNAUTHENTICATED (16) / PERMISSION_DENIED (7) failure to a clear
+ * error. Returns undefined for any other error.
+ */
+export function toFlightAuthError(error: unknown): Error | undefined {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (code !== 16 && code !== 7) {
+    return undefined;
+  }
+  const detail = error instanceof Error ? error.message : String(error);
+  const authError = new Error(
+    code === 16
+      ? `[spice.js] Arrow Flight authentication failed (UNAUTHENTICATED): check the apiKey. ${detail}`
+      : `[spice.js] Arrow Flight permission denied (PERMISSION_DENIED): the apiKey is valid but lacks access to this operation. ${detail}`,
+  );
+  (authError as Error & { code?: unknown; cause?: unknown }).code = code;
+  (authError as Error & { cause?: unknown }).cause = error;
+  return authError;
 }
