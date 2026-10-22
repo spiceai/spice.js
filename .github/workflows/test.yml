@@ -24,9 +24,9 @@ jobs:
       fail-fast: false
       matrix:
         node:
-          - 20
           - 22
           - 24
+          - 26
     steps:
       - uses: actions/checkout@v5
 
@@ -55,9 +55,9 @@ jobs:
           - ubuntu-latest
           - macos-latest
         node:
-          - 20
           - 22
           - 24
+          - 26
     steps:
       - uses: actions/checkout@v5
 
@@ -173,9 +173,9 @@ jobs:
           - ubuntu-latest
           - macos-latest
         node:
-          - 20
           - 22
           - 24
+          - 26
     steps:
       - uses: actions/checkout@v5
 
