@@ -24,9 +24,9 @@ jobs:
       fail-fast: false
       matrix:
         node:
-          - 20
           - 22
           - 24
+          - 26
     steps:
       - uses: actions/checkout@v5
 
@@ -55,9 +55,9 @@ jobs:
           - ubuntu-latest
           - macos-latest
         node:
-          - 20
           - 22
           - 24
+          - 26
     steps:
       - uses: actions/checkout@v5
 
@@ -130,7 +130,7 @@ jobs:
           sleep 2
 
       - name: Run Node.js local runtime tests
-        run: npm run test:node -- test/local-runtime.test.ts test/local-runtime-params.test.ts test/user-agent.test.ts test/grpc-http-fallback.test.ts
+        run: npm run test:node -- test/local-runtime.test.ts test/local-runtime-params.test.ts test/user-agent.test.ts test/grpc-http-fallback.test.ts test/http-chunked-response.test.ts test/flight-param-encoding.test.ts test/flight-insecure-auth.test.ts
 
       - name: Run performance tests
         run: npm run test:perf
@@ -173,9 +173,9 @@ jobs:
           - ubuntu-latest
           - macos-latest
         node:
-          - 20
           - 22
           - 24
+          - 26
     steps:
       - uses: actions/checkout@v5
 
