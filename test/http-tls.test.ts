@@ -210,4 +210,53 @@ describe('HTTP calls honor the TLS certificate options', () => {
       server.close();
     }
   });
+
+  it('reads certificate files again for a new client after they are rotated in place', async () => {
+    const rotated = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'spicejs-tls-rotated-'),
+    );
+    makePki(rotated);
+    const caPath = path.join(dir, 'current-ca.pem');
+    const servers: https.Server[] = [];
+    try {
+      fs.copyFileSync(file('ca.pem'), caPath);
+      const before = https.createServer(
+        {
+          key: fs.readFileSync(file('server.key')),
+          cert: fs.readFileSync(file('server.pem')),
+        },
+        handler,
+      );
+      servers.push(before);
+      const first = new SpiceClient({
+        httpUrl: await listen(before),
+        httpOnly: true,
+        logging: false,
+        tlsRootCertFile: caPath,
+      });
+      expect(await first.isSpiceReady()).toBe(true);
+
+      // The CA is rotated at the same path and the server now presents a
+      // certificate from the new CA; a client created afterwards must trust it.
+      fs.copyFileSync(path.join(rotated, 'ca.pem'), caPath);
+      const after = https.createServer(
+        {
+          key: fs.readFileSync(path.join(rotated, 'server.key')),
+          cert: fs.readFileSync(path.join(rotated, 'server.pem')),
+        },
+        handler,
+      );
+      servers.push(after);
+      const second = new SpiceClient({
+        httpUrl: await listen(after),
+        httpOnly: true,
+        logging: false,
+        tlsRootCertFile: caPath,
+      });
+      expect(await second.isSpiceReady()).toBe(true);
+    } finally {
+      servers.forEach((server) => server.close());
+      fs.rmSync(rotated, { recursive: true, force: true });
+    }
+  });
 });

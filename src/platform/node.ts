@@ -53,11 +53,13 @@ interface HttpTransport {
 }
 
 /**
- * One transport per distinct set of certificate files, so each client's
- * private CA and client certificate reach the TLS handshake, and the files
- * are read once rather than on every request.
+ * One transport per client's TLS settings (the client passes the same object
+ * on every call), so each client's private CA and client certificate reach
+ * the TLS handshake. The files are read on that client's first HTTP call:
+ * a client created after a certificate is rotated loads the new files, and
+ * clients never share credentials through matching path strings.
  */
-const tlsTransports = new Map<string, HttpTransport>();
+const tlsTransports = new WeakMap<HttpTlsFiles, HttpTransport>();
 
 function transportFor(tls?: HttpTlsFiles): HttpTransport {
   if (
@@ -66,12 +68,7 @@ function transportFor(tls?: HttpTlsFiles): HttpTransport {
   ) {
     return { dispatcher: fetchDispatcher, httpsAgent };
   }
-  const key = JSON.stringify([
-    tls.rootCertFile,
-    tls.clientCertFile,
-    tls.clientKeyFile,
-  ]);
-  let transport = tlsTransports.get(key);
+  let transport = tlsTransports.get(tls);
   if (!transport) {
     const options = {
       ca: tls.rootCertFile ? fs.readFileSync(tls.rootCertFile) : undefined,
@@ -87,7 +84,7 @@ function transportFor(tls?: HttpTlsFiles): HttpTransport {
       }),
       httpsAgent: new https.Agent({ keepAlive: true, ...options }),
     };
-    tlsTransports.set(key, transport);
+    tlsTransports.set(tls, transport);
   }
   return transport;
 }
