@@ -2,10 +2,16 @@
  * Node.js platform adapter with full gRPC support
  */
 
+import * as fs from 'fs';
 import * as https from 'https';
 import os from 'os';
 import { Agent } from 'undici';
-import type { PlatformAdapter, FetchOptions, FetchResponse } from './types';
+import type {
+  PlatformAdapter,
+  FetchOptions,
+  FetchResponse,
+  HttpTlsFiles,
+} from './types';
 import { VERSION } from '../version';
 
 const httpsAgent = new https.Agent({ keepAlive: true });
@@ -39,6 +45,51 @@ export function hasGlobalFetch(): boolean {
 /** Test helper: the Undici Agent passed as `dispatcher` to global fetch. */
 export function getNodeFetchDispatcher(): Agent {
   return fetchDispatcher;
+}
+
+interface HttpTransport {
+  dispatcher: Agent;
+  httpsAgent: https.Agent;
+}
+
+/**
+ * One transport per distinct set of certificate files, so each client's
+ * private CA and client certificate reach the TLS handshake, and the files
+ * are read once rather than on every request.
+ */
+const tlsTransports = new Map<string, HttpTransport>();
+
+function transportFor(tls?: HttpTlsFiles): HttpTransport {
+  if (
+    !tls ||
+    (!tls.rootCertFile && !tls.clientCertFile && !tls.clientKeyFile)
+  ) {
+    return { dispatcher: fetchDispatcher, httpsAgent };
+  }
+  const key = JSON.stringify([
+    tls.rootCertFile,
+    tls.clientCertFile,
+    tls.clientKeyFile,
+  ]);
+  let transport = tlsTransports.get(key);
+  if (!transport) {
+    const options = {
+      ca: tls.rootCertFile ? fs.readFileSync(tls.rootCertFile) : undefined,
+      cert: tls.clientCertFile
+        ? fs.readFileSync(tls.clientCertFile)
+        : undefined,
+      key: tls.clientKeyFile ? fs.readFileSync(tls.clientKeyFile) : undefined,
+    };
+    transport = {
+      dispatcher: new Agent({
+        ...NODE_FETCH_DISPATCHER_OPTIONS,
+        connect: options,
+      }),
+      httpsAgent: new https.Agent({ keepAlive: true, ...options }),
+    };
+    tlsTransports.set(key, transport);
+  }
+  return transport;
 }
 
 class NodePlatformAdapter implements PlatformAdapter {
@@ -77,6 +128,7 @@ class NodePlatformAdapter implements PlatformAdapter {
   }
 
   async fetch(url: string, options: FetchOptions): Promise<FetchResponse> {
+    const transport = transportFor(options.tls);
     let response: any;
     if (hasGlobalFetch()) {
       response = await (globalThis as any).fetch(url, {
@@ -84,7 +136,7 @@ class NodePlatformAdapter implements PlatformAdapter {
         method: options.method,
         body: options.body,
         signal: options.signal,
-        dispatcher: fetchDispatcher,
+        dispatcher: transport.dispatcher,
       });
     } else {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -97,7 +149,7 @@ class NodePlatformAdapter implements PlatformAdapter {
         signal: options.signal,
       };
       if (url.startsWith('https://')) {
-        fetchOptions.agent = httpsAgent;
+        fetchOptions.agent = transport.httpsAgent;
       }
       response = await fetchFn(url, fetchOptions);
     }

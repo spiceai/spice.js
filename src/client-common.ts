@@ -3,7 +3,7 @@
  */
 
 import { Table, tableFromIPC } from 'apache-arrow';
-import type { PlatformAdapter } from './platform/types';
+import type { HttpTlsFiles, PlatformAdapter } from './platform/types';
 import { FlightData, FlightStatus, getIpcMessage } from './flight';
 import {
   type SpiceClientConfig,
@@ -536,6 +536,7 @@ export class SpiceClient {
   private _tlsClientCertFile?: string;
   private _tlsClientKeyFile?: string;
   private _tlsRootCertFile?: string;
+  private _httpTls?: HttpTlsFiles;
   private _maxRetries: number;
   private _customHeaders?: { [key: string]: string };
   private _platform: PlatformAdapter;
@@ -766,6 +767,13 @@ export class SpiceClient {
       this._tlsClientCertFile = tlsClientCertFile;
       this._tlsClientKeyFile = tlsClientKeyFile;
       this._tlsRootCertFile = tlsRootCertFile;
+      if (tlsRootCertFile || tlsClientCertFile || tlsClientKeyFile) {
+        this._httpTls = {
+          rootCertFile: tlsRootCertFile,
+          clientCertFile: tlsClientCertFile,
+          clientKeyFile: tlsClientKeyFile,
+        };
+      }
     }
 
     // Determine if this is Spice Cloud endpoint (compute once)
@@ -2326,6 +2334,7 @@ export class SpiceClient {
       const response = await this._platform.fetch(url, {
         method: 'GET',
         headers,
+        tls: this._httpTls,
       });
 
       if (!response.ok) {
@@ -2381,6 +2390,7 @@ export class SpiceClient {
         headers,
         body,
         signal,
+        tls: this._httpTls,
       });
     } catch (error) {
       // node-fetch discards the reason and always raises its own AbortError,
