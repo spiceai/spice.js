@@ -10,7 +10,6 @@ This composite action constructs a Vercel deployment endpoint URL based on the b
   uses: ./.github/actions/setup-vercel-endpoint
   with:
     vercel-endpoint-override: ${{ secrets.VERCEL_ENDPOINT }}
-    vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     branch-name: ${{ github.head_ref || github.ref_name }}
 ```
 
@@ -19,7 +18,6 @@ This composite action constructs a Vercel deployment endpoint URL based on the b
 | Name | Description | Required | Default |
 |------|-------------|----------|---------|
 | `vercel-endpoint-override` | Override Vercel endpoint URL (if set, skips construction) | No | `''` |
-| `vercel-bypass-secret` | Vercel protection bypass secret for authentication | No | `''` |
 | `branch-name` | Branch name to construct endpoint from | Yes | - |
 | `max-attempts` | Maximum number of attempts to wait for deployment | No | `30` |
 | `wait-interval` | Time in seconds to wait between attempts | No | `10` |
@@ -41,7 +39,7 @@ This composite action constructs a Vercel deployment endpoint URL based on the b
 
 4. **Wait for Ready**: Polls the `/health` endpoint until it returns HTTP 200 with "ok" in the response body, or until max attempts is reached
 
-5. **Bypass Protection**: If `vercel-bypass-secret` is provided, includes the `x-vercel-protection-bypass` header in health check requests
+5. **Deployment Protection**: Mints a GitHub OIDC token per health check and sends it in the `x-vercel-trusted-oidc-idp-token` header (Vercel Trusted Sources). The calling job needs `permissions: id-token: write`.
 
 ## Examples
 
@@ -52,7 +50,6 @@ This composite action constructs a Vercel deployment endpoint URL based on the b
   uses: ./.github/actions/setup-vercel-endpoint
   with:
     branch-name: ${{ github.head_ref }}
-    vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
 - name: Run tests against Vercel
   run: npm test
@@ -69,7 +66,6 @@ Result: `https://spice-js-git-my-branch-name-spice.vercel.app`
   uses: ./.github/actions/setup-vercel-endpoint
   with:
     branch-name: ${{ github.ref_name }}  # Will be like "v3.0.0"
-    vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 ```
 
 Result: `https://spice-js.vercel.app` (production)

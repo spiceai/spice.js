@@ -146,6 +146,9 @@ jobs:
     runs-on: spiceai-dev-runners
     # Don't fail the entire workflow if Vercel is not available
     continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write # OIDC token for Vercel Trusted Sources
     outputs:
       vercel-api-endpoint: ${{ steps.vercel.outputs.vercel-api-endpoint }}
       vercel-available: ${{ steps.vercel.outcome == 'success' }}
@@ -157,7 +160,6 @@ jobs:
         uses: ./.github/actions/setup-vercel-endpoint
         with:
           vercel-endpoint-override: ${{ secrets.VERCEL_ENDPOINT }}
-          vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           branch-name: ${{ github.head_ref || github.ref_name }}
 
   cloud-tests:
@@ -166,6 +168,9 @@ jobs:
     needs: vercel-setup
     # Run even if vercel-setup failed (Vercel tests will be skipped)
     if: ${{ always() }}
+    permissions:
+      contents: read
+      id-token: write # OIDC token for Vercel Trusted Sources
     strategy:
       fail-fast: false
       matrix:
@@ -191,6 +196,15 @@ jobs:
       - name: Build project
         run: npm run build
 
+      - name: Mint GitHub OIDC token for Vercel Trusted Sources
+        id: vercel-oidc
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const token = await core.getIDToken();
+            core.setSecret(token);
+            core.setOutput('token', token);
+
       - name: Run cloud tests
         run: npm test -- test/cloud.test.ts
         timeout-minutes: 10
@@ -200,7 +214,7 @@ jobs:
           HTTP_URL: ${{ secrets.HTTP_URL || 'https://data.spiceai.io' }}
           FLIGHT_URL: ${{ secrets.FLIGHT_URL || 'flight.spiceai.io:443' }}
           VERCEL_ENDPOINT: ${{ needs.vercel-setup.outputs.vercel-api-endpoint }}
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.vercel-oidc.outputs.token }}
 
   tpch-tests:
     name: TPCH Integration Tests

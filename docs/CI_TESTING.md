@@ -163,7 +163,8 @@ The CI uses the same commands as local development:
 - `HTTP_URL` - HTTP endpoint (defaults to `https://data.spiceai.io`)
 - `FLIGHT_URL` - Flight endpoint (defaults to `flight.spiceai.io:443`)
 - `VERCEL_ENDPOINT` - Custom Vercel endpoint for testing
-- `VERCEL_AUTOMATION_BYPASS_SECRET` - Vercel bypass token
+- `VERCEL_TRUSTED_OIDC_TOKEN` - GitHub OIDC token for Vercel Trusted Sources (minted in CI; requires `id-token: write`)
+- `VERCEL_AUTOMATION_BYPASS_SECRET` - Vercel bypass token (local runs only)
 
 ### Local Runtime Tests
 

@@ -30,6 +30,12 @@ describe('cloud', () => {
 
   // Build custom headers for Vercel client
   const vercelCustomHeaders: { [key: string]: string } = {};
+  // CI: GitHub OIDC token accepted by Vercel Trusted Sources
+  const vercelOidcToken = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
+  if (vercelOidcToken) {
+    vercelCustomHeaders['x-vercel-trusted-oidc-idp-token'] = vercelOidcToken;
+  }
+  // Local: protection bypass secret
   const vercelBypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
   if (vercelBypassSecret) {
     vercelCustomHeaders['x-vercel-protection-bypass'] = vercelBypassSecret;
