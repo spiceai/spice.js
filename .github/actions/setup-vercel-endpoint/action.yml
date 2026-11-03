@@ -5,10 +5,6 @@ inputs:
     description: 'Override Vercel endpoint URL (optional)'
     required: false
     default: ''
-  vercel-bypass-secret:
-    description: 'Vercel protection bypass secret'
-    required: false
-    default: ''
   branch-name:
     description: 'Branch name to construct endpoint from'
     required: true
@@ -42,7 +38,6 @@ runs:
       id: wait-for-deployment
       shell: bash
       env:
-        VERCEL_BYPASS_SECRET: ${{ inputs.vercel-bypass-secret }}
         VERCEL_ENDPOINT_OVERRIDE: ${{ inputs.vercel-endpoint-override }}
         BRANCH_NAME: ${{ inputs.branch-name }}
         MAX_ATTEMPTS: ${{ inputs.max-attempts }}
@@ -52,11 +47,21 @@ runs:
         # Production endpoint (always available as fallback)
         PRODUCTION_ENDPOINT="https://spice-js.vercel.app"
 
-        # Prepare curl headers
-        CURL_HEADERS=""
-        if [ -n "${VERCEL_BYPASS_SECRET}" ]; then
-          CURL_HEADERS="-H 'x-vercel-protection-bypass: ${VERCEL_BYPASS_SECRET}'"
-        fi
+        # Mint a GitHub OIDC token (default audience) for Vercel Trusted Sources.
+        # Requires `permissions: id-token: write` on the calling job. Minted per
+        # request because tokens are short-lived and polling can take minutes.
+        oidc_token() {
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" ]; then
+            return 0
+          fi
+          local token
+          token=$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}" \
+            | sed -n 's/.*"value"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+          if [ -n "$token" ]; then
+            echo "::add-mask::${token}" >&2
+            echo "$token"
+          fi
+        }
 
         # Function to check if an endpoint is ready
         check_endpoint() {
@@ -64,8 +69,15 @@ runs:
           local health_url="${endpoint}/api/health"
           
           # Use curl with retries, timeouts, and follow redirects
+          local token
+          token=$(oidc_token)
+          local curl_headers=()
+          if [ -n "$token" ]; then
+            curl_headers=(-H "x-vercel-trusted-oidc-idp-token: ${token}")
+          fi
+
           local response
-          response=$(eval "curl -sL --retry 2 --retry-delay 1 --connect-timeout 5 --max-time 15 -w '\n%{http_code}' ${CURL_HEADERS} '${health_url}'" 2>/dev/null || echo -e "\n000")
+          response=$(curl -sL --retry 2 --retry-delay 1 --connect-timeout 5 --max-time 15 -w '\n%{http_code}' "${curl_headers[@]}" "${health_url}" 2>/dev/null || echo -e "\n000")
           local http_code=$(echo "$response" | tail -n 1)
           local body=$(echo "$response" | sed '$d')
           

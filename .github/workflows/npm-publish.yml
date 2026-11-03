@@ -37,8 +37,16 @@ jobs:
         uses: ./.github/actions/setup-vercel-endpoint
         with:
           vercel-endpoint-override: ${{ secrets.VERCEL_ENDPOINT }}
-          vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           branch-name: ${{ github.ref_name }}
+
+      - name: Mint GitHub OIDC token for Vercel Trusted Sources
+        id: vercel-oidc
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const token = await core.getIDToken();
+            core.setSecret(token);
+            core.setOutput('token', token);
 
       - name: Test
         run: npm test -- test/cloud.test.ts
@@ -49,7 +57,7 @@ jobs:
           HTTP_URL: ${{ secrets.HTTP_URL || 'https://data.spiceai.io' }}
           FLIGHT_URL: ${{ secrets.FLIGHT_URL || 'flight.spiceai.io:443' }}
           VERCEL_ENDPOINT: ${{ steps.vercel.outputs.vercel-api-endpoint }}
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.vercel-oidc.outputs.token }}
 
   publish-npm:
     needs: build
