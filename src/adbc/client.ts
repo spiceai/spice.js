@@ -102,7 +102,11 @@ export function normalizeParam(param: any): {
 
   // Internal shape already.
   if (typeof param.dataType === 'string') {
-    return { value: param.value, dataType: param.dataType, options: param.options };
+    return {
+      value: param.value,
+      dataType: param.dataType,
+      options: param.options,
+    };
   }
 
   // Public Param: { value, type: ArrowTypeId, options }.
@@ -245,7 +249,10 @@ export function toUnscaledDecimal(value: unknown, scale: number): bigint {
   if (typeof value === 'bigint') {
     return value * 10n ** BigInt(scale);
   }
-  const text = typeof value === 'number' ? numberToPlainString(value) : String(value).trim();
+  const text =
+    typeof value === 'number'
+      ? numberToPlainString(value)
+      : String(value).trim();
   const match = /^([+-])?(\d*)(?:\.(\d*))?$/.exec(text);
   if (!match || (match[2] === '' && (match[3] ?? '') === '')) {
     throw new Error(`Invalid decimal parameter value: ${text}`);
@@ -296,7 +303,11 @@ function decimalWords(unscaled: bigint, bitWidth: number): Uint32Array {
  * accepts (Date, bigint in the declared unit, day counts, decimal strings) are
  * converted here instead of being handed to vectorFromArray as-is.
  */
-function buildTypedVector(values: any[], arrowType: DataType, dataType?: string) {
+function buildTypedVector(
+  values: any[],
+  arrowType: DataType,
+  dataType?: string,
+) {
   if (DataType.isTimestamp(arrowType)) {
     const unit = (arrowType as any).unit as TimeUnit;
     const raw = values.map((v) =>
@@ -306,7 +317,10 @@ function buildTypedVector(values: any[], arrowType: DataType, dataType?: string)
           ? dateToUnit(v, unit)
           : BigInt(v),
     );
-    const vector = vectorFromArray(raw.map((v) => (v === null ? null : 0)), arrowType);
+    const vector = vectorFromArray(
+      raw.map((v) => (v === null ? null : 0)),
+      arrowType,
+    );
     const data = vector.data[0];
     raw.forEach((v, i) => {
       if (v === null) return;

@@ -294,9 +294,15 @@ export class GrpcFlightClient {
       );
     }
 
-    const rootCerts = this.tlsRootCertFile ? fs.readFileSync(this.tlsRootCertFile) : null;
-    const clientCert = this.tlsClientCertFile ? fs.readFileSync(this.tlsClientCertFile) : null;
-    const clientKey = this.tlsClientKeyFile ? fs.readFileSync(this.tlsClientKeyFile) : null;
+    const rootCerts = this.tlsRootCertFile
+      ? fs.readFileSync(this.tlsRootCertFile)
+      : null;
+    const clientCert = this.tlsClientCertFile
+      ? fs.readFileSync(this.tlsClientCertFile)
+      : null;
+    const clientKey = this.tlsClientKeyFile
+      ? fs.readFileSync(this.tlsClientKeyFile)
+      : null;
     const creds = grpc.credentials.createSsl(rootCerts, clientKey, clientCert);
     const metaCallback = (_params: any, callback: any) => {
       callback(null, meta);

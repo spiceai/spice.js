@@ -42,7 +42,7 @@ function shouldRetryOperationForError(err: any): boolean {
 
 async function retryWithExponentialBackoff<Type>(
   operation: any,
-  maxRetries: number
+  maxRetries: number,
 ): Promise<Type> {
   if (maxRetries < 0) {
     throw new Error('maxRetries must be greater than or equal to 0');

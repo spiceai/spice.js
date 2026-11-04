@@ -185,6 +185,29 @@ describe('jsonToArrowTable with lossless rows', () => {
     expect(table.get(0)!.x).toBe('123456789012345678901234567890');
   });
 
+  test('round-2 edge cases', () => {
+    let t = build('[{"x":null},{"x":9007199254740993}]');
+    expect(t.get(1)!.x).toBe(BigInt('9007199254740993'));
+    t = jsonToArrowTable(
+      [{ name: 'x', data_type: 'BIGINT' }],
+      parseJsonLossless('[{"x":9007199254740993}]'),
+    );
+    expect(t.get(0)!.x).toBe(BigInt('9007199254740993'));
+    t = build('[{"x":-1},{"x":18446744073709551615}]');
+    expect(t.toArray().map((r: any) => r.x)).toEqual([
+      '-1',
+      '18446744073709551615',
+    ]);
+    t = build(
+      '[{"s":{"\\u0000bigint:1":"\\u0000bigint:2","n":9007199254740993}}]',
+    );
+    expect(JSON.parse(t.get(0)!.s)).toEqual({
+      '\u0000bigint:1': '\u0000bigint:2',
+      n: 9007199254740992,
+    });
+    expect(t.get(0)!.s).toContain('"n":9007199254740993');
+  });
+
   test('a declared Int64 column of safe values is unchanged', () => {
     const table = jsonToArrowTable(
       [{ name: 'i', data_type: 'Int64' }],

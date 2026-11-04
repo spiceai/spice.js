@@ -11,12 +11,7 @@ import { Table } from 'apache-arrow';
 import { jsonToArrowTable } from './arrow-utils';
 
 export type QueryStatus =
-  | 'PENDING'
-  | 'RUNNING'
-  | 'SUCCEEDED'
-  | 'FAILED'
-  | 'CANCELLED'
-  | 'CLOSED';
+  'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'CLOSED';
 
 function isTerminal(status: QueryStatus): boolean {
   return (

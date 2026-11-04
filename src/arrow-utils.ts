@@ -134,10 +134,34 @@ function containsBigInt(value: any): boolean {
 
 /** JSON.stringify that writes `bigint`s as exact (unquoted) integer literals. */
 function stringifyValue(value: any): string {
-  const marker = '\u0000bigint:';
-  return JSON.stringify(value, (_key, v) =>
-    typeof v === 'bigint' ? marker + v.toString() : v,
-  ).replace(/"\\u0000bigint:(-?\d+)"/g, '$1');
+  if (typeof value === 'bigint') return value.toString();
+  if (Array.isArray(value)) {
+    return (
+      '[' +
+      value
+        .map((v) =>
+          v === undefined || typeof v === 'function'
+            ? 'null'
+            : stringifyValue(v),
+        )
+        .join(',') +
+      ']'
+    );
+  }
+  if (
+    value !== null &&
+    typeof value === 'object' &&
+    typeof value.toJSON !== 'function'
+  ) {
+    const parts: string[] = [];
+    for (const key of Object.keys(value)) {
+      const v = value[key];
+      if (v === undefined || typeof v === 'function') continue;
+      parts.push(JSON.stringify(key) + ':' + stringifyValue(v));
+    }
+    return '{' + parts.join(',') + '}';
+  }
+  return JSON.stringify(value);
 }
 
 /**
@@ -151,8 +175,9 @@ function stringifyValue(value: any): string {
  */
 export type Int64ColumnPlan = 'int64' | 'uint64' | 'json' | 'number';
 
-function isIntegerDeclared(dataType: string): boolean {
-  return /^(?:u?int(?:8|16|32|64)?|uint\d+)$/i.test(dataType);
+/** Declared non-integer numeric types, where values are doubles anyway. */
+function isNonIntegerNumericDeclared(dataType: string): boolean {
+  return /^(?:float|double|decimal|numeric|real)/i.test(dataType.trim());
 }
 
 /**
@@ -186,16 +211,21 @@ export function planInt64Columns(
       plan.set(col.name, nested ? 'json' : 'number');
       return;
     }
-    if (declared && !isIntegerDeclared(declared)) {
+    if (isNonIntegerNumericDeclared(declared)) {
       // e.g. Float64 / Decimal: not an Int64 column, keep prior behavior.
       plan.set(col.name, 'number');
       return;
     }
-    const bigints = values.filter((v): v is bigint => typeof v === 'bigint');
+    // Range-check every value, not just the unsafe ones, so e.g. -1 next to
+    // UInt64 max is not silently wrapped.
+    const bigints = values
+      .filter((v) => v !== null && v !== undefined)
+      .map((v) => BigInt(v as number | bigint));
     const fitsInt64 = bigints.every((v) => v >= INT64_MIN && v <= INT64_MAX);
     const fitsUint64 = bigints.every((v) => v >= 0 && v <= UINT64_MAX);
-    if (/^u/i.test(declared) ? fitsUint64 : fitsInt64) {
-      plan.set(col.name, /^u/i.test(declared) ? 'uint64' : 'int64');
+    const unsignedDeclared = /^u(?:int|big)/i.test(declared.trim());
+    if (unsignedDeclared ? fitsUint64 : fitsInt64) {
+      plan.set(col.name, unsignedDeclared ? 'uint64' : 'int64');
     } else if (fitsUint64) {
       plan.set(col.name, 'uint64');
     } else {
