@@ -133,7 +133,7 @@ function containsBigInt(value: any): boolean {
 }
 
 /** JSON.stringify that writes `bigint`s as exact (unquoted) integer literals. */
-function stringifyValue(value: any): string {
+export function stringifyValue(value: any): string {
   if (typeof value === 'bigint') return value.toString();
   if (Array.isArray(value)) {
     return (

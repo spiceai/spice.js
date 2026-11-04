@@ -254,6 +254,14 @@ describe('SpiceClient HTTP results keep Int64 precision', () => {
     expect(row.small).toBe(42);
   });
 
+  test('toArray() timestamp handling keeps nested Int64 text exact', async () => {
+    body = '[{"s":{"id":9007199254740993,"ts":"2024-01-01T00:00:00.000Z"}}]';
+    const client = new SpiceClient({ httpUrl: 'http://localhost:8090' });
+    const table = await client.sql('SELECT 1');
+    const row: any = table.toArray()[0];
+    expect(String(row.s)).toContain('"id":9007199254740993');
+  });
+
   test('streamed chunks share one Int64 schema', async () => {
     body = '[{"x":1}]\n[{"x":9007199254740993}]';
     const client = new SpiceClient({ httpUrl: 'http://localhost:8090' });

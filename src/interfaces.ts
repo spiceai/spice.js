@@ -88,14 +88,22 @@ import type { Param } from './param';
  * Query parameter value types supported by DataFusion
  */
 export type QueryParameterValue =
-  string | number | boolean | Date | null | bigint | Buffer | Param;
+  | string
+  | number
+  | boolean
+  | Date
+  | null
+  | bigint
+  | Buffer
+  | Param;
 
 /**
  * Query parameters for parameterized queries
  * Can be an object with named parameters or an array for positional parameters
  */
 export type QueryParameters =
-  { [key: string]: QueryParameterValue } | QueryParameterValue[];
+  | { [key: string]: QueryParameterValue }
+  | QueryParameterValue[];
 
 /**
  * Options for SQL queries

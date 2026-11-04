@@ -44,6 +44,7 @@ import type { GrpcFlightClient } from './grpc/client.node';
 import {
   jsonToArrowTable,
   planInt64Columns,
+  stringifyValue,
   convertToSqlV1Format,
   normalizeSchema,
   serializeArrowField,
@@ -486,14 +487,16 @@ function wrapTableForDecimalConversion(table: Table): Table {
           // If value is a JSON string, parse it first, convert timestamps, then stringify back
           if (typeof value === 'string') {
             try {
-              const parsed = JSON.parse(value);
+              // Lossless parse/serialize: Int64 values kept as JSON text
+              // must not be rounded by this round trip.
+              const parsed = parseJsonLossless(value);
               const converted = convertTimestampsInValue(parsed, originalField);
               // Always update if we successfully parsed and converted
               const shouldUpdate =
-                JSON.stringify(converted) !== JSON.stringify(parsed);
+                stringifyValue(converted) !== stringifyValue(parsed);
               if (shouldUpdate) {
                 ensureConvertedRow();
-                convertedRow[field.name] = JSON.stringify(converted);
+                convertedRow[field.name] = stringifyValue(converted);
               }
             } catch (e) {
               // Not valid JSON, keep as-is
