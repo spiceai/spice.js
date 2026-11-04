@@ -48,6 +48,7 @@ import {
   serializeArrowField,
 } from './arrow-utils';
 import { normalizeSearchResponse } from './search-utils';
+import { parseJsonLossless } from './json-lossless';
 import { Logger } from './logger';
 import { Param } from './param';
 
@@ -1232,7 +1233,8 @@ export class SpiceClient {
 
     for (const line of lines) {
       try {
-        const jsonData = JSON.parse(line);
+        // Lossless: Int64 values outside ±(2^53-1) stay exact (bigint).
+        const jsonData = parseJsonLossless(line);
         const sqlV1 = convertToSqlV1Format(jsonData, isSpiceAI);
 
         // Extract schema from first response
@@ -1268,7 +1270,8 @@ export class SpiceClient {
     isSpiceAI: boolean,
   ): Table {
     try {
-      const jsonData = JSON.parse(body);
+      // Lossless: Int64 values outside ±(2^53-1) stay exact (bigint).
+      const jsonData = parseJsonLossless(body);
       const sqlV1 = convertToSqlV1Format(jsonData, isSpiceAI);
       const schema = normalizeSchema(sqlV1.schema);
       const rows = sqlV1.data;
@@ -1807,7 +1810,9 @@ export class SpiceClient {
         );
       }
 
-      const jsonData = await response.json();
+      // Integers outside ±(2^53-1) come back as exact decimal strings, the
+      // same values the Arrow Flight branch above returns.
+      const jsonData = parseJsonLossless(await response.text(), 'string');
       const executionTime = Date.now() - startTime;
 
       // Process timestamps in the data to match sql() behavior

@@ -1,4 +1,11 @@
-import { Table, tableFromArrays } from 'apache-arrow';
+import {
+  Int64,
+  Table,
+  Uint64,
+  Vector,
+  tableFromArrays,
+  vectorFromArray,
+} from 'apache-arrow';
 import { SqlV1JsonResponse } from './interfaces';
 
 /**
@@ -112,6 +119,82 @@ export function convertToSqlV1Format(
   };
 }
 
+
+const INT64_MAX = BigInt('9223372036854775807');
+
+function containsBigInt(value: any): boolean {
+  if (typeof value === 'bigint') return true;
+  if (Array.isArray(value)) return value.some(containsBigInt);
+  if (value !== null && typeof value === 'object' && !(value instanceof Date)) {
+    return Object.values(value).some(containsBigInt);
+  }
+  return false;
+}
+
+/** Turns every integer `number` inside `value` into a `bigint`, deeply. */
+function integersToBigInt(value: any): any {
+  if (typeof value === 'number' && Number.isInteger(value)) {
+    return BigInt(value);
+  }
+  if (Array.isArray(value)) return value.map(integersToBigInt);
+  if (value !== null && typeof value === 'object' && !(value instanceof Date)) {
+    const result: any = {};
+    for (const key of Object.keys(value)) {
+      result[key] = integersToBigInt(value[key]);
+    }
+    return result;
+  }
+  return value;
+}
+
+/**
+ * Builds the columns of an HTTP result table, keeping 64-bit integers exact.
+ *
+ * The HTTP response is parsed with {@link parseJsonLossless}, so an integer
+ * outside the safe range arrives as a `bigint`. A column that holds one is
+ * typed Int64 (UInt64 when the server declares UInt64 or a value exceeds the
+ * Int64 range), with its safe-range integers widened to `bigint` too, the same
+ * values the Arrow Flight path returns. Columns without such a value are left
+ * to inference exactly as before.
+ */
+function buildColumn(col: any, values: any[]): any {
+  if (!values.some(containsBigInt)) {
+    return values;
+  }
+  const widened = values.map(integersToBigInt);
+  const scalar = widened.every(
+    (v) => v === null || v === undefined || typeof v === 'bigint',
+  );
+  if (!scalar) {
+    // Nested (List/Struct) values: let Arrow infer from the widened values.
+    return widened;
+  }
+  const declared = typeof col.data_type === 'string' ? col.data_type : '';
+  const unsigned =
+    /^u(?:int)?64$/i.test(declared) ||
+    widened.some((v) => typeof v === 'bigint' && v > INT64_MAX);
+  return vectorFromArray(widened, unsigned ? new Uint64() : new Int64());
+}
+
+/** tableFromArrays that also accepts already-typed Vector columns. */
+function tableFromColumns(columns: { [key: string]: any }): Table {
+  const vectors: { [key: string]: any } = {};
+  for (const name of Object.keys(columns)) {
+    const column = columns[name];
+    vectors[name] = column instanceof Vector ? column : vectorFromArray(column);
+  }
+  return new Table(vectors);
+}
+
+/**
+ * JSON.stringify that writes `bigint`s as their decimal string.
+ */
+function stringifyValue(value: any): string {
+  return JSON.stringify(value, (_key, v) =>
+    typeof v === 'bigint' ? v.toString() : v,
+  );
+}
+
 /**
  * Converts JSON data to Arrow Table using schema-aware conversion
  */
@@ -153,13 +236,18 @@ export function jsonToArrowTable(schema: any[], rows: any[]): Table {
     }
   });
 
+  // Keep 64-bit integers exact; other columns are inferred as before.
+  schema.forEach((col: any) => {
+    columns[col.name] = buildColumn(col, columns[col.name]);
+  });
+
   // Use tableFromArrays - it will infer types from the data
   // Arrow's tableFromArrays can handle most types, but may struggle with:
   // - Empty arrays (can't infer element type)
   // - Mixed-type arrays
   // - Complex nested structures
   try {
-    const table = tableFromArrays(columns);
+    const table = tableFromColumns(columns);
     // Attach original schema metadata for type conversion
     (table as any)._originalSchema = schema;
     return table;
@@ -168,7 +256,9 @@ export function jsonToArrowTable(schema: any[], rows: any[]): Table {
     const simpleColumns: { [key: string]: any[] } = {};
 
     schema.forEach((col: any) => {
-      simpleColumns[col.name] = columns[col.name].map((val: any) => {
+      simpleColumns[col.name] = Array.from(
+        columns[col.name] as ArrayLike<any>,
+      ).map((val: any) => {
         if (val === null || val === undefined) return null;
 
         // Handle arrays - keep as-is, Arrow will try to infer the type
@@ -178,7 +268,7 @@ export function jsonToArrowTable(schema: any[], rows: any[]): Table {
 
         // Stringify objects that aren't Dates
         if (typeof val === 'object' && !(val instanceof Date)) {
-          return JSON.stringify(val);
+          return stringifyValue(val);
         }
 
         return val;
@@ -198,7 +288,7 @@ export function jsonToArrowTable(schema: any[], rows: any[]): Table {
         stringColumns[col.name] = simpleColumns[col.name].map((val: any) => {
           if (val === null || val === undefined) return null;
           if (typeof val === 'string') return val;
-          return JSON.stringify(val);
+          return stringifyValue(val);
         });
       });
       const table = tableFromArrays(stringColumns);
