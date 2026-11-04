@@ -16,9 +16,11 @@ export type UnsafeIntegerMode = 'bigint' | 'string';
 const INTEGER_LITERAL = /^-?(?:0|[1-9]\d*)$/;
 
 // Only an integer literal with 16 or more digits can fall outside the safe
-// range (MAX_SAFE_INTEGER has 16 digits), so bodies without one take the
+// range (MAX_SAFE_INTEGER has 16 digits). A JSON number starts the document or
+// follows '[', ':' or ',', so bodies without such a token (long digit runs
+// inside ordinary strings, e.g. ids or timestamps, don't match) take the
 // native fast path.
-const MAYBE_UNSAFE_INTEGER = /\d{16}/;
+const MAYBE_UNSAFE_INTEGER = /(?:^|[[:,])\s*-?\d{16}/;
 
 function convertUnsafe(literal: string, mode: UnsafeIntegerMode): unknown {
   return mode === 'bigint' ? BigInt(literal) : literal;

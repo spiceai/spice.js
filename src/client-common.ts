@@ -43,6 +43,7 @@ interface SubmitQueryResponse {
 import type { GrpcFlightClient } from './grpc/client.node';
 import {
   jsonToArrowTable,
+  planInt64Columns,
   convertToSqlV1Format,
   normalizeSchema,
   serializeArrowField,
@@ -1228,7 +1229,10 @@ export class SpiceClient {
     onData: ((data: Table) => void) | undefined,
     isSpiceAI: boolean,
   ): Table {
-    const allRows: any[] = [];
+    // The body is already buffered, so parse every chunk first: the column
+    // types (e.g. Int64 for integers outside ±(2^53-1)) are then decided once
+    // for the whole result, and every streamed chunk shares one schema.
+    const chunks: any[][] = [];
     let schema: any[] = [];
 
     for (const line of lines) {
@@ -1242,17 +1246,8 @@ export class SpiceClient {
           schema = normalizeSchema(sqlV1.schema);
         }
 
-        // Accumulate rows
         if (sqlV1.data.length > 0) {
-          allRows.push(...sqlV1.data);
-
-          // Send partial results if callback provided
-          if (onData) {
-            const partialTable = wrapTableForDecimalConversion(
-              jsonToArrowTable(schema, sqlV1.data),
-            );
-            onData(partialTable);
-          }
+          chunks.push(sqlV1.data);
         }
       } catch (parseError) {
         this._logger.warn(
@@ -1261,7 +1256,23 @@ export class SpiceClient {
       }
     }
 
-    return wrapTableForDecimalConversion(jsonToArrowTable(schema, allRows));
+    const allRows = chunks.flat();
+    const int64Plan = planInt64Columns(schema, allRows);
+
+    // Send partial results if callback provided
+    if (onData) {
+      for (const rows of chunks) {
+        onData(
+          wrapTableForDecimalConversion(
+            jsonToArrowTable(schema, rows, int64Plan),
+          ),
+        );
+      }
+    }
+
+    return wrapTableForDecimalConversion(
+      jsonToArrowTable(schema, allRows, int64Plan),
+    );
   }
 
   private parseSingleResponse(

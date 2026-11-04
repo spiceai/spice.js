@@ -50,6 +50,32 @@ describe.each([
     expect(row.small).toBe(42);
   });
 
+  test('matches JSON.parse on edge cases', () => {
+    for (const doc of [
+      '{"a":1,"a":12345678901234567}',
+      '{"__proto__":{"x":1},"n":12345678901234567}',
+      '[-0,12345678901234567,"\\ud83d\\ude00"]',
+    ]) {
+      const expected = JSON.parse(doc, (_k, v) =>
+        typeof v === 'number' && !Number.isSafeInteger(v) && Number.isInteger(v)
+          ? 'X'
+          : v,
+      );
+      const actual = JSON.parse(
+        JSON.stringify(parse(doc), (_k, v) =>
+          typeof v === 'bigint' ? 'X' : v,
+        ),
+      );
+      expect(actual).toEqual(JSON.parse(JSON.stringify(expected)));
+    }
+    expect(Object.is(parse('[-0,12345678901234567]')[0], -0)).toBe(true);
+    expect(
+      Object.getPrototypeOf(
+        parse('{"__proto__":{"x":1},"n":12345678901234567}'),
+      ),
+    ).toBe(Object.prototype);
+  });
+
   test('matches JSON.parse on ordinary documents', () => {
     const doc =
       '{"a":[1,2.5,-0.25e-3,true,false,null,"x\\"\\u00e9\\n"],"b":{},"c":[],"d":"1234567890123456789"}';
@@ -103,17 +129,68 @@ describe('jsonToArrowTable with lossless rows', () => {
     expect(table.schema.fields[0].type.toString()).toBe('Uint64');
   });
 
-  test('keeps nested unsafe integers exact', () => {
-    const rows = parseJsonLossless(
-      '[{"arr":[9007199254740993,1]},{"arr":[2]}]',
+  const build = (text: string) => {
+    const sqlV1 = convertToSqlV1Format(parseJsonLossless(text));
+    return jsonToArrowTable(sqlV1.schema.fields, sqlV1.data);
+  };
+  const typeOf = (table: any, name: string) =>
+    table.schema.fields.find((f: any) => f.name === name).type.toString();
+
+  test('keeps nested unsafe integers exact as JSON text, incl. UInt64 max', () => {
+    const table = build(
+      '[{"arr":[9007199254740993,1],"u":[18446744073709551615],"s":{"id":9007199254740993,"f":1.5}},' +
+        '{"arr":[2],"u":null,"s":{"id":1,"f":1}}]',
     );
-    const sqlV1 = convertToSqlV1Format(rows);
-    const table = jsonToArrowTable(sqlV1.schema.fields, sqlV1.data);
-    expect(table.schema.fields[0].type.toString()).toBe('List<Int64>');
-    expect(Array.from(table.get(0)!.arr)).toEqual([
-      BigInt('9007199254740993'),
-      BigInt(1),
-    ]);
+    expect(typeOf(table, 'arr')).toBe('Dictionary<Int32, Utf8>');
+    const rows = table.toArray();
+    expect(rows[0].arr).toBe('[9007199254740993,1]');
+    expect(rows[0].u).toBe('[18446744073709551615]');
+    expect(rows[0].s).toBe('{"id":9007199254740993,"f":1.5}');
+    expect(rows[1].arr).toBe('[2]');
+    expect(rows[1].u).toBeNull();
+  });
+
+  test('nested values without unsafe integers are inferred as before', () => {
+    const table = build('[{"arr":[1,2],"s":{"a":1.5}}]');
+    expect(typeOf(table, 'arr')).toBe('List<Float64>');
+    expect(typeOf(table, 's')).toBe('Struct<{a:Float64}>');
+  });
+
+  test('keeps a UInt64 vector when another column falls back to inference', () => {
+    const table = build(
+      '[{"u":18446744073709551615,"s":{"x":1}},{"u":1,"s":null},{"u":2,"s":[1,"a"]}]',
+    );
+    expect(typeOf(table, 'u')).toBe('Uint64');
+    expect(table.get(0)!.u).toBe(BigInt('18446744073709551615'));
+  });
+
+  test('honors declared non-integer types as before', () => {
+    const table = jsonToArrowTable(
+      [
+        { name: 'f', data_type: 'Float64' },
+        { name: 'd', data_type: 'Decimal128(38, 0)' },
+      ],
+      parseJsonLossless(
+        '[{"f":9007199254740992,"d":123456789012345678901234567890},{"f":1.5,"d":1}]',
+      ),
+    );
+    expect(typeOf(table, 'f')).toBe('Float64');
+    expect(table.get(0)!.f).toBe(9007199254740992);
+    expect(table.get(1)!.f).toBe(1.5);
+    expect(typeOf(table, 'd')).toBe('Float64');
+  });
+
+  test('integers outside every 64-bit range stay exact as text', () => {
+    const table = build('[{"x":123456789012345678901234567890}]');
+    expect(table.get(0)!.x).toBe('123456789012345678901234567890');
+  });
+
+  test('a declared Int64 column of safe values is unchanged', () => {
+    const table = jsonToArrowTable(
+      [{ name: 'i', data_type: 'Int64' }],
+      parseJsonLossless('[{"i":1},{"i":2}]'),
+    );
+    expect(typeOf(table, 'i')).toBe('Float64');
   });
 });
 
@@ -152,6 +229,21 @@ describe('SpiceClient HTTP results keep Int64 precision', () => {
     expect(row.neg).toBe(BigInt('-9007199254740995'));
     expect(row.id17).toBe(BigInt('12345678901234567'));
     expect(row.small).toBe(42);
+  });
+
+  test('streamed chunks share one Int64 schema', async () => {
+    body = '[{"x":1}]\n[{"x":9007199254740993}]';
+    const client = new SpiceClient({ httpUrl: 'http://localhost:8090' });
+    const chunks: any[] = [];
+    const table = await client.sql('SELECT 1', (t) => chunks.push(t));
+    expect(chunks.map((t) => t.schema.fields[0].type.toString())).toEqual([
+      'Int64',
+      'Int64',
+    ]);
+    expect(table.toArray().map((r: any) => r.x)).toEqual([
+      BigInt(1),
+      BigInt('9007199254740993'),
+    ]);
   });
 
   test('sqlJson() returns exact decimal strings, like the Flight path', async () => {

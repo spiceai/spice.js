@@ -119,7 +119,9 @@ export function convertToSqlV1Format(
   };
 }
 
-const INT64_MAX = BigInt('9223372036854775807');
+const INT64_MIN = -(BigInt(1) << BigInt(63));
+const INT64_MAX = (BigInt(1) << BigInt(63)) - BigInt(1);
+const UINT64_MAX = (BigInt(1) << BigInt(64)) - BigInt(1);
 
 function containsBigInt(value: any): boolean {
   if (typeof value === 'bigint') return true;
@@ -130,49 +132,105 @@ function containsBigInt(value: any): boolean {
   return false;
 }
 
-/** Turns every integer `number` inside `value` into a `bigint`, deeply. */
-function integersToBigInt(value: any): any {
-  if (typeof value === 'number' && Number.isInteger(value)) {
-    return BigInt(value);
-  }
-  if (Array.isArray(value)) return value.map(integersToBigInt);
-  if (value !== null && typeof value === 'object' && !(value instanceof Date)) {
-    const result: any = {};
-    for (const key of Object.keys(value)) {
-      result[key] = integersToBigInt(value[key]);
-    }
-    return result;
-  }
-  return value;
+/** JSON.stringify that writes `bigint`s as exact (unquoted) integer literals. */
+function stringifyValue(value: any): string {
+  const marker = '\u0000bigint:';
+  return JSON.stringify(value, (_key, v) =>
+    typeof v === 'bigint' ? marker + v.toString() : v,
+  ).replace(/"\\u0000bigint:(-?\d+)"/g, '$1');
 }
 
 /**
- * Builds the columns of an HTTP result table, keeping 64-bit integers exact.
- *
- * The HTTP response is parsed with {@link parseJsonLossless}, so an integer
- * outside the safe range arrives as a `bigint`. A column that holds one is
- * typed Int64 (UInt64 when the server declares UInt64 or a value exceeds the
- * Int64 range), with its safe-range integers widened to `bigint` too, the same
- * values the Arrow Flight path returns. Columns without such a value are left
- * to inference exactly as before.
+ * How a column of an HTTP result holding integers outside ±(2^53 - 1) (parsed
+ * as `bigint` by {@link parseJsonLossless}) is built:
+ * - `int64` / `uint64`: a scalar integer column, typed Int64/UInt64 with every
+ *   value widened to `bigint`, the same values the Arrow Flight path returns
+ * - `json`: nested (List/Struct) values, kept as exact JSON text
+ * - `number`: a column the server declares as a non-integer type (e.g.
+ *   Float64), where the value is a double anyway; converted as before
  */
-function buildColumn(col: any, values: any[]): any {
-  if (!values.some(containsBigInt)) {
-    return values;
+export type Int64ColumnPlan = 'int64' | 'uint64' | 'json' | 'number';
+
+function isIntegerDeclared(dataType: string): boolean {
+  return /^(?:u?int(?:8|16|32|64)?|uint\d+)$/i.test(dataType);
+}
+
+/**
+ * Decides, once per result, how each column holding unsafe integers is built,
+ * so streamed chunks of one result all share one schema. Columns without such
+ * values get no plan and are inferred exactly as before.
+ */
+export function planInt64Columns(
+  schema: any[],
+  rows: any[],
+): Map<string, Int64ColumnPlan> {
+  const plan = new Map<string, Int64ColumnPlan>();
+  schema.forEach((col: any, idx: number) => {
+    const values = rows.map((row: any) =>
+      Array.isArray(row) ? row[idx] : row?.[col.name],
+    );
+    if (!values.some(containsBigInt)) return;
+
+    const declared = typeof col.data_type === 'string' ? col.data_type : '';
+    const scalarIntegers = values.every(
+      (v) =>
+        v === null ||
+        v === undefined ||
+        typeof v === 'bigint' ||
+        (typeof v === 'number' && Number.isInteger(v)),
+    );
+    if (!scalarIntegers) {
+      const nested = values.some(
+        (v) => v !== null && typeof v === 'object' && containsBigInt(v),
+      );
+      plan.set(col.name, nested ? 'json' : 'number');
+      return;
+    }
+    if (declared && !isIntegerDeclared(declared)) {
+      // e.g. Float64 / Decimal: not an Int64 column, keep prior behavior.
+      plan.set(col.name, 'number');
+      return;
+    }
+    const bigints = values.filter((v): v is bigint => typeof v === 'bigint');
+    const fitsInt64 = bigints.every((v) => v >= INT64_MIN && v <= INT64_MAX);
+    const fitsUint64 = bigints.every((v) => v >= 0 && v <= UINT64_MAX);
+    if (/^u/i.test(declared) ? fitsUint64 : fitsInt64) {
+      plan.set(col.name, /^u/i.test(declared) ? 'uint64' : 'int64');
+    } else if (fitsUint64) {
+      plan.set(col.name, 'uint64');
+    } else {
+      // Outside every 64-bit range: keep the exact digits as text.
+      plan.set(col.name, 'json');
+    }
+  });
+  return plan;
+}
+
+function buildPlannedColumn(
+  plan: Int64ColumnPlan | undefined,
+  values: any[],
+): any {
+  switch (plan) {
+    case undefined:
+      return values;
+    case 'number':
+      return values.map((v) => (typeof v === 'bigint' ? Number(v) : v));
+    case 'json':
+      return values.map((v) =>
+        v === null || v === undefined
+          ? null
+          : typeof v === 'string'
+            ? v
+            : stringifyValue(v),
+      );
+    default:
+      return vectorFromArray(
+        values.map((v) =>
+          v === null || v === undefined ? null : BigInt(v as number | bigint),
+        ),
+        plan === 'uint64' ? new Uint64() : new Int64(),
+      );
   }
-  const widened = values.map(integersToBigInt);
-  const scalar = widened.every(
-    (v) => v === null || v === undefined || typeof v === 'bigint',
-  );
-  if (!scalar) {
-    // Nested (List/Struct) values: let Arrow infer from the widened values.
-    return widened;
-  }
-  const declared = typeof col.data_type === 'string' ? col.data_type : '';
-  const unsigned =
-    /^u(?:int)?64$/i.test(declared) ||
-    widened.some((v) => typeof v === 'bigint' && v > INT64_MAX);
-  return vectorFromArray(widened, unsigned ? new Uint64() : new Int64());
 }
 
 /** tableFromArrays that also accepts already-typed Vector columns. */
@@ -186,18 +244,13 @@ function tableFromColumns(columns: { [key: string]: any }): Table {
 }
 
 /**
- * JSON.stringify that writes `bigint`s as their decimal string.
- */
-function stringifyValue(value: any): string {
-  return JSON.stringify(value, (_key, v) =>
-    typeof v === 'bigint' ? v.toString() : v,
-  );
-}
-
-/**
  * Converts JSON data to Arrow Table using schema-aware conversion
  */
-export function jsonToArrowTable(schema: any[], rows: any[]): Table {
+export function jsonToArrowTable(
+  schema: any[],
+  rows: any[],
+  int64Plan: Map<string, Int64ColumnPlan> = planInt64Columns(schema, rows),
+): Table {
   // Handle empty results
   if (rows.length === 0) {
     const columns: { [key: string]: any[] } = {};
@@ -237,7 +290,10 @@ export function jsonToArrowTable(schema: any[], rows: any[]): Table {
 
   // Keep 64-bit integers exact; other columns are inferred as before.
   schema.forEach((col: any) => {
-    columns[col.name] = buildColumn(col, columns[col.name]);
+    columns[col.name] = buildPlannedColumn(
+      int64Plan.get(col.name),
+      columns[col.name],
+    );
   });
 
   // Use tableFromArrays - it will infer types from the data
@@ -252,12 +308,15 @@ export function jsonToArrowTable(schema: any[], rows: any[]): Table {
     return table;
   } catch (error) {
     // If tableFromArrays fails, try converting problematic values
-    const simpleColumns: { [key: string]: any[] } = {};
+    // Typed 64-bit integer vectors already built are kept as they are.
+    const simpleColumns: { [key: string]: any } = {};
 
     schema.forEach((col: any) => {
-      simpleColumns[col.name] = Array.from(
-        columns[col.name] as ArrayLike<any>,
-      ).map((val: any) => {
+      if (columns[col.name] instanceof Vector) {
+        simpleColumns[col.name] = columns[col.name];
+        return;
+      }
+      simpleColumns[col.name] = columns[col.name].map((val: any) => {
         if (val === null || val === undefined) return null;
 
         // Handle arrays - keep as-is, Arrow will try to infer the type
@@ -276,21 +335,25 @@ export function jsonToArrowTable(schema: any[], rows: any[]): Table {
 
     // Try again with simplified columns
     try {
-      const table = tableFromArrays(simpleColumns);
+      const table = tableFromColumns(simpleColumns);
       // Attach original schema metadata for type conversion
       (table as any)._originalSchema = schema;
       return table;
     } catch (secondError) {
       // Last resort: convert everything to strings
-      const stringColumns: { [key: string]: any[] } = {};
+      const stringColumns: { [key: string]: any } = {};
       schema.forEach((col: any) => {
+        if (simpleColumns[col.name] instanceof Vector) {
+          stringColumns[col.name] = simpleColumns[col.name];
+          return;
+        }
         stringColumns[col.name] = simpleColumns[col.name].map((val: any) => {
           if (val === null || val === undefined) return null;
           if (typeof val === 'string') return val;
           return stringifyValue(val);
         });
       });
-      const table = tableFromArrays(stringColumns);
+      const table = tableFromColumns(stringColumns);
       // Attach original schema metadata for type conversion
       (table as any)._originalSchema = schema;
       return table;
