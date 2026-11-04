@@ -119,7 +119,6 @@ export function convertToSqlV1Format(
   };
 }
 
-
 const INT64_MAX = BigInt('9223372036854775807');
 
 function containsBigInt(value: any): boolean {

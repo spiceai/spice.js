@@ -1342,21 +1342,18 @@ export class SpiceClient {
 
     const requestHeaders = options?.headers ?? headers;
 
-    return this._retry.retryWithExponentialBackoff<Table>(
-      () => {
-        // Checked per attempt: a retry scheduled before the abort must not
-        // start new work after it.
-        options?.signal?.throwIfAborted();
-        return this.doQueryRequest(
-          queryText,
-          options?.parameters,
-          callback,
-          requestHeaders,
-          options?.signal,
-        );
-      },
-      this._maxRetries,
-    );
+    return this._retry.retryWithExponentialBackoff<Table>(() => {
+      // Checked per attempt: a retry scheduled before the abort must not
+      // start new work after it.
+      options?.signal?.throwIfAborted();
+      return this.doQueryRequest(
+        queryText,
+        options?.parameters,
+        callback,
+        requestHeaders,
+        options?.signal,
+      );
+    }, this._maxRetries);
   }
 
   /**
@@ -2183,9 +2180,7 @@ export class SpiceClient {
    * @param queryId - The id of the query to cancel
    * @returns Promise resolving to the cancellation response
    */
-  async cancelActiveQuery(
-    queryId: string,
-  ): Promise<CancelActiveQueryResponse> {
+  async cancelActiveQuery(queryId: string): Promise<CancelActiveQueryResponse> {
     if (!this._httpUrl) {
       throw new Error('HTTP URL is required for cancelling a query');
     }
