@@ -248,14 +248,11 @@ function buildPlannedColumn(
       return values.map((v) => (typeof v === 'bigint' ? Number(v) : v));
     case 'json':
       // Explicitly Utf8, so every chunk of a result (all-null ones included)
-      // has the same schema.
+      // has the same schema. Strings are quoted JSON so Flight→HTTP sqlJson()
+      // can parseJsonLossless every non-null cell.
       return vectorFromArray(
         values.map((v) =>
-          v === null || v === undefined
-            ? null
-            : typeof v === 'string'
-              ? v
-              : stringifyValue(v),
+          v === null || v === undefined ? null : stringifyValue(v),
         ),
         new Utf8(),
       );
@@ -311,39 +308,89 @@ export function jsonTextColumnsOf(table: Table): Set<string> {
  * including those nested in List/Struct values, becomes its exact decimal
  * string. Rows may be arrays or objects; they are updated in place.
  */
-export function normalizeUnsafeIntegers(fields: any[], rows: any[]): any[] {
-  const numericByName = new Map<string, boolean>();
-  fields.forEach((f: any) =>
-    numericByName.set(
-      f?.name,
-      typeof f?.data_type === 'string' &&
-        isNonIntegerNumericDeclared(f.data_type),
-    ),
-  );
-  const toExact = (v: any): any => {
-    if (typeof v === 'bigint') return v.toString();
-    if (Array.isArray(v)) return v.map(toExact);
-    if (v !== null && typeof v === 'object') {
-      const out: any = {};
-      for (const k of Object.keys(v)) out[k] = toExact(v[k]);
-      return out;
+/** Declared data type of a schema field (object or legacy array form). */
+function fieldDataType(field: any): any {
+  if (!field) return undefined;
+  if (field.data_type !== undefined) return field.data_type;
+  // Legacy array-schema fields: { name, type: { name: 'Float64' } }
+  if (field.type && typeof field.type === 'object' && field.type.name) {
+    return field.type.name;
+  }
+  if (typeof field.type === 'string') return field.type;
+  return undefined;
+}
+
+function convertUnsafeInteger(value: any, dataType: any): any {
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'bigint') {
+    if (
+      typeof dataType === 'string' &&
+      isNonIntegerNumericDeclared(dataType)
+    ) {
+      return Number(value);
     }
-    return v;
-  };
-  const convert = (v: any, numeric: boolean): any =>
-    numeric && typeof v === 'bigint'
-      ? Number(v)
-      : containsBigInt(v)
-        ? toExact(v)
-        : v;
+    return value.toString();
+  }
+  if (Array.isArray(value)) {
+    const childType =
+      dataType && typeof dataType === 'object' && dataType.List
+        ? dataType.List.data_type
+        : undefined;
+    return value.map((item) => convertUnsafeInteger(item, childType));
+  }
+  if (typeof value === 'object') {
+    const structFields =
+      dataType && typeof dataType === 'object' && Array.isArray(dataType.Struct)
+        ? dataType.Struct
+        : null;
+    const byName = structFields
+      ? new Map(structFields.map((f: any) => [f.name, f]))
+      : null;
+    const out: any = {};
+    for (const key of Object.keys(value)) {
+      const child = byName?.get(key);
+      // Own property even for "__proto__", matching parseJsonLossless.
+      Object.defineProperty(out, key, {
+        value: convertUnsafeInteger(value[key], fieldDataType(child)),
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
+ * Schema-aware normalization of a losslessly parsed HTTP JSON result (unsafe
+ * integers as `bigint`): a leaf the server declares as a non-integer type
+ * (Float64, Decimal, ...), including nested List/Struct children, keeps a
+ * number; any other unsafe integer becomes its exact decimal string. Rows may
+ * be arrays or objects; they are updated in place. `fields` may come from a
+ * `{fields:[...]}` schema or a bare array schema, and may declare types via
+ * `data_type` or legacy `type.name`.
+ */
+export function normalizeUnsafeIntegers(fields: any[], rows: any[]): any[] {
+  const normalized = (fields || []).map((f: any) => ({
+    name: f?.name,
+    data_type: fieldDataType(f),
+  }));
   rows.forEach((row: any, i: number) => {
     if (Array.isArray(row)) {
       rows[i] = row.map((v: any, idx: number) =>
-        convert(v, numericByName.get(fields[idx]?.name) ?? false),
+        convertUnsafeInteger(v, normalized[idx]?.data_type),
       );
     } else if (row !== null && typeof row === 'object') {
       for (const k of Object.keys(row)) {
-        row[k] = convert(row[k], numericByName.get(k) ?? false);
+        const field = normalized.find((f) => f.name === k);
+        // Own property write so a "__proto__" column name cannot invoke the setter.
+        Object.defineProperty(row, k, {
+          value: convertUnsafeInteger(row[k], field?.data_type),
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
       }
     }
   });

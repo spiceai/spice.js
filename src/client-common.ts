@@ -1840,9 +1840,10 @@ export class SpiceClient {
       // Process timestamps in the data to match sql() behavior
       const schema = jsonData.schema || { fields: [] };
       // Declared Float/Decimal fields keep numbers; other unsafe integers
-      // become exact strings.
+      // become exact strings. normalizeSchema accepts {fields} and bare
+      // array schemas (incl. legacy type.name declarations).
       const data = normalizeUnsafeIntegers(
-        schema.fields || [],
+        normalizeSchema(schema),
         jsonData.data || jsonData.rows || [],
       ); // Find timestamp and date fields in the schema
       const timestampFields = (schema.fields || []).filter((f: any) => {

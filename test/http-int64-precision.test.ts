@@ -6,7 +6,7 @@
 
 import { SpiceClient } from '../src/index.browser';
 import { parseJsonLossless } from '../src/json-lossless';
-import { jsonToArrowTable, convertToSqlV1Format } from '../src/arrow-utils';
+import { jsonToArrowTable, convertToSqlV1Format, normalizeUnsafeIntegers } from '../src/arrow-utils';
 
 const BODY =
   '[{"big":9007199254740993,"neg":-9007199254740995,"id17":12345678901234567,' +
@@ -338,5 +338,93 @@ describe('SpiceClient HTTP results keep Int64 precision', () => {
       s: { id: '9007199254740993', n: 1 },
       l: ['9007199254740993', 2],
     });
+  });
+
+  test('sqlJson() Flight fallback round-trips mixed string cells in a JSON-text column', async () => {
+    body = '[{"s":{"id":9007199254740993}},{"s":"hello"}]';
+    const client = new SpiceClient({
+      httpUrl: 'http://localhost:8090',
+      logging: false,
+    });
+    client.setMaxRetries(0);
+    (client as any)._grpcClient = {
+      ensureInitialized: jest.fn().mockResolvedValue(true),
+      executeQuery: jest.fn().mockRejectedValue(
+        Object.assign(new Error('14 UNAVAILABLE: connection refused'), {
+          code: 14,
+        }),
+      ),
+    };
+    const result = await client.sqlJson('SELECT 1');
+    expect(result.data).toEqual([
+      { s: { id: '9007199254740993' } },
+      { s: 'hello' },
+    ]);
+  });
+
+  test('sqlJson() keeps nested Float64 leaves as numbers via child schema', async () => {
+    body =
+      '{"row_count":1,"schema":{"fields":[{"name":"s","data_type":{"Struct":[' +
+      '{"name":"id","data_type":"Float64","nullable":true},' +
+      '{"name":"tag","data_type":"Utf8","nullable":true}]}},' +
+      '{"name":"l","data_type":{"List":{"name":"item","data_type":"Float64",' +
+      '"nullable":true,"dict_id":0,"dict_is_ordered":false,"metadata":{}}}}]},' +
+      '"data":[{"s":{"id":9007199254740992,"tag":"x"},"l":[9007199254740992,1]}]}';
+    const client = new SpiceClient({ httpUrl: 'http://localhost:8090' });
+    const result = await client.sqlJson('SELECT 1');
+    expect(result.data[0]).toEqual({
+      s: { id: 9007199254740992, tag: 'x' },
+      l: [9007199254740992, 1],
+    });
+  });
+
+  test('sqlJson() preserves nested __proto__ as an own property', async () => {
+    body =
+      '{"row_count":1,"schema":{"fields":[{"name":"s","data_type":{"Struct":[' +
+      '{"name":"__proto__","data_type":{"Struct":[{"name":"tag","data_type":"Utf8"}]},' +
+      '"nullable":true},{"name":"id","data_type":"Int64","nullable":true}]}}]},' +
+      '"data":[{"s":{"__proto__":{"tag":"query-data"},"id":9007199254740993}}]}';
+    const client = new SpiceClient({ httpUrl: 'http://localhost:8090' });
+    const result = await client.sqlJson('SELECT 1');
+    const s = result.data[0].s;
+    expect(Object.prototype.hasOwnProperty.call(s, '__proto__')).toBe(true);
+    expect(s.__proto__).toEqual({ tag: 'query-data' });
+    expect(Object.getPrototypeOf(s)).toBe(Object.prototype);
+    expect(s.id).toBe('9007199254740993');
+    expect((s as any).tag).toBeUndefined();
+  });
+
+  test('sqlJson() honours array-schema Float64 via type.name', async () => {
+    body =
+      '{"schema":[{"name":"f","type":{"name":"Float64"}},{"name":"big","type":{"name":"Int64"}}],' +
+      '"rows":[[9007199254740992,9007199254740993]]}';
+    const client = new SpiceClient({ httpUrl: 'http://localhost:8090' });
+    const result = await client.sqlJson('SELECT 1');
+    expect(result.data[0]).toEqual([9007199254740992, '9007199254740993']);
+  });
+});
+
+describe('normalizeUnsafeIntegers', () => {
+  test('nested Float64 child keeps a number; Int64 child becomes a string', () => {
+    const rows = [
+      {
+        s: { f: BigInt('9007199254740992'), i: BigInt('9007199254740993') },
+      },
+    ];
+    normalizeUnsafeIntegers(
+      [
+        {
+          name: 's',
+          data_type: {
+            Struct: [
+              { name: 'f', data_type: 'Float64' },
+              { name: 'i', data_type: 'Int64' },
+            ],
+          },
+        },
+      ],
+      rows,
+    );
+    expect(rows[0].s).toEqual({ f: 9007199254740992, i: '9007199254740993' });
   });
 });
