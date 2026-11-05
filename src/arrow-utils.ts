@@ -4,6 +4,7 @@ import {
   Uint64,
   Vector,
   tableFromArrays,
+  Utf8,
   vectorFromArray,
 } from 'apache-arrow';
 import { SqlV1JsonResponse } from './interfaces';
@@ -176,7 +177,7 @@ export function stringifyValue(value: any): string {
 export type Int64ColumnPlan = 'int64' | 'uint64' | 'json' | 'number';
 
 /** Declared non-integer numeric types, where values are doubles anyway. */
-function isNonIntegerNumericDeclared(dataType: string): boolean {
+export function isNonIntegerNumericDeclared(dataType: string): boolean {
   return /^(?:float|double|decimal|numeric|real)/i.test(dataType.trim());
 }
 
@@ -246,12 +247,17 @@ function buildPlannedColumn(
     case 'number':
       return values.map((v) => (typeof v === 'bigint' ? Number(v) : v));
     case 'json':
-      return values.map((v) =>
-        v === null || v === undefined
-          ? null
-          : typeof v === 'string'
-            ? v
-            : stringifyValue(v),
+      // Explicitly Utf8, so every chunk of a result (all-null ones included)
+      // has the same schema.
+      return vectorFromArray(
+        values.map((v) =>
+          v === null || v === undefined
+            ? null
+            : typeof v === 'string'
+              ? v
+              : stringifyValue(v),
+        ),
+        new Utf8(),
       );
     default:
       return vectorFromArray(
@@ -280,6 +286,74 @@ export function jsonToArrowTable(
   schema: any[],
   rows: any[],
   int64Plan: Map<string, Int64ColumnPlan> = planInt64Columns(schema, rows),
+): Table {
+  const table = buildJsonArrowTable(schema, rows, int64Plan);
+  // Columns holding exact JSON text (see Int64ColumnPlan), so consumers such
+  // as sqlJson() can restore their nested values.
+  (table as any)[JSON_TEXT_COLUMNS] = new Set(
+    [...int64Plan].filter(([, p]) => p === 'json').map(([name]) => name),
+  );
+  return table;
+}
+
+/** Table property listing the column names kept as exact JSON text. */
+export const JSON_TEXT_COLUMNS = '_jsonTextColumns';
+
+/** Names of the columns of a table from jsonToArrowTable kept as JSON text. */
+export function jsonTextColumnsOf(table: Table): Set<string> {
+  return (table as any)?.[JSON_TEXT_COLUMNS] ?? new Set<string>();
+}
+
+/**
+ * Schema-aware normalization of a losslessly parsed HTTP JSON result (unsafe
+ * integers as `bigint`): a column the server declares as a non-integer type
+ * (Float64, Decimal, ...) keeps a number, as before; any other unsafe integer,
+ * including those nested in List/Struct values, becomes its exact decimal
+ * string. Rows may be arrays or objects; they are updated in place.
+ */
+export function normalizeUnsafeIntegers(fields: any[], rows: any[]): any[] {
+  const numericByName = new Map<string, boolean>();
+  fields.forEach((f: any) =>
+    numericByName.set(
+      f?.name,
+      typeof f?.data_type === 'string' &&
+        isNonIntegerNumericDeclared(f.data_type),
+    ),
+  );
+  const toExact = (v: any): any => {
+    if (typeof v === 'bigint') return v.toString();
+    if (Array.isArray(v)) return v.map(toExact);
+    if (v !== null && typeof v === 'object') {
+      const out: any = {};
+      for (const k of Object.keys(v)) out[k] = toExact(v[k]);
+      return out;
+    }
+    return v;
+  };
+  const convert = (v: any, numeric: boolean): any =>
+    numeric && typeof v === 'bigint'
+      ? Number(v)
+      : containsBigInt(v)
+        ? toExact(v)
+        : v;
+  rows.forEach((row: any, i: number) => {
+    if (Array.isArray(row)) {
+      rows[i] = row.map((v: any, idx: number) =>
+        convert(v, numericByName.get(fields[idx]?.name) ?? false),
+      );
+    } else if (row !== null && typeof row === 'object') {
+      for (const k of Object.keys(row)) {
+        row[k] = convert(row[k], numericByName.get(k) ?? false);
+      }
+    }
+  });
+  return rows;
+}
+
+function buildJsonArrowTable(
+  schema: any[],
+  rows: any[],
+  int64Plan: Map<string, Int64ColumnPlan>,
 ): Table {
   // Handle empty results
   if (rows.length === 0) {

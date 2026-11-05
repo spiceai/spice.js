@@ -141,7 +141,7 @@ describe('jsonToArrowTable with lossless rows', () => {
       '[{"arr":[9007199254740993,1],"u":[18446744073709551615],"s":{"id":9007199254740993,"f":1.5}},' +
         '{"arr":[2],"u":null,"s":{"id":1,"f":1}}]',
     );
-    expect(typeOf(table, 'arr')).toBe('Dictionary<Int32, Utf8>');
+    expect(typeOf(table, 'arr')).toBe('Utf8');
     const rows = table.toArray();
     expect(rows[0].arr).toBe('[9007199254740993,1]');
     expect(rows[0].u).toBe('[18446744073709551615]');
@@ -286,6 +286,57 @@ describe('SpiceClient HTTP results keep Int64 precision', () => {
       neg: '-9007199254740995',
       id17: '12345678901234567',
       small: 42,
+    });
+  });
+
+  test('streamed JSON-text chunks share one Utf8 schema, incl. all-null chunks', async () => {
+    body = '[{"x":null}]\n[{"x":[9007199254740993]}]';
+    const client = new SpiceClient({ httpUrl: 'http://localhost:8090' });
+    const chunks: any[] = [];
+    await client.sql('SELECT 1', (t) => chunks.push(t));
+    expect(chunks.map((t) => t.schema.fields[0].type.toString())).toEqual([
+      'Utf8',
+      'Utf8',
+    ]);
+    expect(chunks[1].toArray()[0].x).toBe('[9007199254740993]');
+  });
+
+  test('sqlJson() keeps numbers for declared Float64/Decimal fields', async () => {
+    body =
+      '{"row_count":1,"schema":{"fields":[{"name":"f","data_type":"Float64"},' +
+      '{"name":"d","data_type":"Decimal128(20, 0)"},{"name":"big","data_type":"Int64"},' +
+      '{"name":"s","data_type":"Struct"}]},' +
+      '"data":[{"f":9007199254740992,"d":12345678901234567,"big":9007199254740993,' +
+      '"s":{"id":9007199254740993,"n":1}}]}';
+    const client = new SpiceClient({ httpUrl: 'http://localhost:8090' });
+    const result = await client.sqlJson('SELECT 1');
+    expect(result.data[0]).toEqual({
+      f: 9007199254740992,
+      d: 12345678901234567,
+      big: '9007199254740993',
+      s: { id: '9007199254740993', n: 1 },
+    });
+  });
+
+  test('sqlJson() after a Flight-to-HTTP fallback returns nested values, not JSON text', async () => {
+    body = '[{"s":{"id":9007199254740993,"n":1},"l":[9007199254740993,2]}]';
+    const client = new SpiceClient({
+      httpUrl: 'http://localhost:8090',
+      logging: false,
+    });
+    client.setMaxRetries(0);
+    (client as any)._grpcClient = {
+      ensureInitialized: jest.fn().mockResolvedValue(true),
+      executeQuery: jest.fn().mockRejectedValue(
+        Object.assign(new Error('14 UNAVAILABLE: connection refused'), {
+          code: 14,
+        }),
+      ),
+    };
+    const result = await client.sqlJson('SELECT 1');
+    expect(result.data[0]).toEqual({
+      s: { id: '9007199254740993', n: 1 },
+      l: ['9007199254740993', 2],
     });
   });
 });

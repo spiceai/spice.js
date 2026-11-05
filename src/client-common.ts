@@ -44,6 +44,8 @@ import type { GrpcFlightClient } from './grpc/client.node';
 import {
   jsonToArrowTable,
   planInt64Columns,
+  jsonTextColumnsOf,
+  normalizeUnsafeIntegers,
   stringifyValue,
   convertToSqlV1Format,
   normalizeSchema,
@@ -1757,6 +1759,9 @@ export class SpiceClient {
           // Use toArray() to properly convert Arrow values to JavaScript objects
           // This handles Decimal types and other special Arrow representations correctly
           const rows = table.toArray();
+          // Columns an HTTP fallback kept as exact JSON text: restore their
+          // values, with exact string leaves, as direct HTTP sqlJson() does.
+          const jsonTextColumns = jsonTextColumnsOf(table);
 
           // Optimize: Create a field map once per chunk instead of per row
           const fieldMap = new Map(fields.map((field) => [field.name, field]));
@@ -1768,7 +1773,13 @@ export class SpiceClient {
             for (const columnName in row) {
               if (Object.prototype.hasOwnProperty.call(row, columnName)) {
                 const field = fieldMap.get(columnName);
-                if (field) {
+                const raw = row[columnName];
+                if (
+                  jsonTextColumns.has(columnName) &&
+                  typeof raw === 'string'
+                ) {
+                  convertedRow[columnName] = parseJsonLossless(raw, 'string');
+                } else if (field) {
                   convertedRow[columnName] = convertValue(
                     row[columnName],
                     field,
@@ -1823,12 +1834,17 @@ export class SpiceClient {
 
       // Integers outside ±(2^53-1) come back as exact decimal strings, the
       // same values the Arrow Flight branch above returns.
-      const jsonData = parseJsonLossless(await response.text(), 'string');
+      const jsonData = parseJsonLossless(await response.text());
       const executionTime = Date.now() - startTime;
 
       // Process timestamps in the data to match sql() behavior
       const schema = jsonData.schema || { fields: [] };
-      const data = jsonData.data || jsonData.rows || []; // Find timestamp and date fields in the schema
+      // Declared Float/Decimal fields keep numbers; other unsafe integers
+      // become exact strings.
+      const data = normalizeUnsafeIntegers(
+        schema.fields || [],
+        jsonData.data || jsonData.rows || [],
+      ); // Find timestamp and date fields in the schema
       const timestampFields = (schema.fields || []).filter((f: any) => {
         const dataType = f.data_type;
         if (typeof dataType === 'string') {
