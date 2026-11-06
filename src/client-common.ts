@@ -43,11 +43,16 @@ interface SubmitQueryResponse {
 import type { GrpcFlightClient } from './grpc/client.node';
 import {
   jsonToArrowTable,
+  planInt64Columns,
+  jsonTextColumnsOf,
+  normalizeUnsafeIntegers,
+  stringifyValue,
   convertToSqlV1Format,
   normalizeSchema,
   serializeArrowField,
 } from './arrow-utils';
 import { normalizeSearchResponse } from './search-utils';
+import { parseJsonLossless } from './json-lossless';
 import { Logger } from './logger';
 import { Param } from './param';
 
@@ -484,14 +489,16 @@ function wrapTableForDecimalConversion(table: Table): Table {
           // If value is a JSON string, parse it first, convert timestamps, then stringify back
           if (typeof value === 'string') {
             try {
-              const parsed = JSON.parse(value);
+              // Lossless parse/serialize: Int64 values kept as JSON text
+              // must not be rounded by this round trip.
+              const parsed = parseJsonLossless(value);
               const converted = convertTimestampsInValue(parsed, originalField);
               // Always update if we successfully parsed and converted
               const shouldUpdate =
-                JSON.stringify(converted) !== JSON.stringify(parsed);
+                stringifyValue(converted) !== stringifyValue(parsed);
               if (shouldUpdate) {
                 ensureConvertedRow();
-                convertedRow[field.name] = JSON.stringify(converted);
+                convertedRow[field.name] = stringifyValue(converted);
               }
             } catch (e) {
               // Not valid JSON, keep as-is
@@ -1227,12 +1234,16 @@ export class SpiceClient {
     onData: ((data: Table) => void) | undefined,
     isSpiceAI: boolean,
   ): Table {
-    const allRows: any[] = [];
+    // The body is already buffered, so parse every chunk first: the column
+    // types (e.g. Int64 for integers outside ±(2^53-1)) are then decided once
+    // for the whole result, and every streamed chunk shares one schema.
+    const chunks: any[][] = [];
     let schema: any[] = [];
 
     for (const line of lines) {
       try {
-        const jsonData = JSON.parse(line);
+        // Lossless: Int64 values outside ±(2^53-1) stay exact (bigint).
+        const jsonData = parseJsonLossless(line);
         const sqlV1 = convertToSqlV1Format(jsonData, isSpiceAI);
 
         // Extract schema from first response
@@ -1240,17 +1251,8 @@ export class SpiceClient {
           schema = normalizeSchema(sqlV1.schema);
         }
 
-        // Accumulate rows
         if (sqlV1.data.length > 0) {
-          allRows.push(...sqlV1.data);
-
-          // Send partial results if callback provided
-          if (onData) {
-            const partialTable = wrapTableForDecimalConversion(
-              jsonToArrowTable(schema, sqlV1.data),
-            );
-            onData(partialTable);
-          }
+          chunks.push(sqlV1.data);
         }
       } catch (parseError) {
         this._logger.warn(
@@ -1259,7 +1261,23 @@ export class SpiceClient {
       }
     }
 
-    return wrapTableForDecimalConversion(jsonToArrowTable(schema, allRows));
+    const allRows = chunks.flat();
+    const int64Plan = planInt64Columns(schema, allRows);
+
+    // Send partial results if callback provided
+    if (onData) {
+      for (const rows of chunks) {
+        onData(
+          wrapTableForDecimalConversion(
+            jsonToArrowTable(schema, rows, int64Plan),
+          ),
+        );
+      }
+    }
+
+    return wrapTableForDecimalConversion(
+      jsonToArrowTable(schema, allRows, int64Plan),
+    );
   }
 
   private parseSingleResponse(
@@ -1268,7 +1286,8 @@ export class SpiceClient {
     isSpiceAI: boolean,
   ): Table {
     try {
-      const jsonData = JSON.parse(body);
+      // Lossless: Int64 values outside ±(2^53-1) stay exact (bigint).
+      const jsonData = parseJsonLossless(body);
       const sqlV1 = convertToSqlV1Format(jsonData, isSpiceAI);
       const schema = normalizeSchema(sqlV1.schema);
       const rows = sqlV1.data;
@@ -1339,21 +1358,18 @@ export class SpiceClient {
 
     const requestHeaders = options?.headers ?? headers;
 
-    return this._retry.retryWithExponentialBackoff<Table>(
-      () => {
-        // Checked per attempt: a retry scheduled before the abort must not
-        // start new work after it.
-        options?.signal?.throwIfAborted();
-        return this.doQueryRequest(
-          queryText,
-          options?.parameters,
-          callback,
-          requestHeaders,
-          options?.signal,
-        );
-      },
-      this._maxRetries,
-    );
+    return this._retry.retryWithExponentialBackoff<Table>(() => {
+      // Checked per attempt: a retry scheduled before the abort must not
+      // start new work after it.
+      options?.signal?.throwIfAborted();
+      return this.doQueryRequest(
+        queryText,
+        options?.parameters,
+        callback,
+        requestHeaders,
+        options?.signal,
+      );
+    }, this._maxRetries);
   }
 
   /**
@@ -1620,6 +1636,9 @@ export class SpiceClient {
       const allRows: any[] = [];
       let schema: any = null;
       let fields: any[] = [];
+      // From HTTP→Arrow tables (Flight→HTTP fallback); used to normalize
+      // restored JSON-text columns the same way direct HTTP sqlJson() does.
+      let originalSchema: any[] | undefined;
 
       await this.sql(
         queryText,
@@ -1633,6 +1652,9 @@ export class SpiceClient {
               ),
             };
             fields = table.schema.fields;
+          }
+          if (originalSchema === undefined && (table as any)._originalSchema) {
+            originalSchema = (table as any)._originalSchema;
           }
 
           // Helper function to recursively convert values, handling nested structures
@@ -1743,6 +1765,9 @@ export class SpiceClient {
           // Use toArray() to properly convert Arrow values to JavaScript objects
           // This handles Decimal types and other special Arrow representations correctly
           const rows = table.toArray();
+          // Columns an HTTP fallback kept as exact JSON text: restore them
+          // (bigint leaves) then normalize with _originalSchema below.
+          const jsonTextColumns = jsonTextColumnsOf(table);
 
           // Optimize: Create a field map once per chunk instead of per row
           const fieldMap = new Map(fields.map((field) => [field.name, field]));
@@ -1754,7 +1779,15 @@ export class SpiceClient {
             for (const columnName in row) {
               if (Object.prototype.hasOwnProperty.call(row, columnName)) {
                 const field = fieldMap.get(columnName);
-                if (field) {
+                const raw = row[columnName];
+                if (
+                  jsonTextColumns.has(columnName) &&
+                  typeof raw === 'string'
+                ) {
+                  // Bigint first; normalizeUnsafeIntegers (below) applies the
+                  // table's original schema so Float/Decimal leaves stay numbers.
+                  convertedRow[columnName] = parseJsonLossless(raw);
+                } else if (field) {
                   convertedRow[columnName] = convertValue(
                     row[columnName],
                     field,
@@ -1772,11 +1805,19 @@ export class SpiceClient {
         headers,
       );
 
+      // HTTP-specific: only when the Flight→HTTP fallback left an
+      // _originalSchema (JSON-text restore may have bigints). True Flight
+      // rows must stay unchanged — convertUnsafeInteger copies every object,
+      // turning Binary Uint8Array into a numeric-keyed plain object.
+      const data = originalSchema
+        ? normalizeUnsafeIntegers(normalizeSchema(originalSchema), allRows)
+        : allRows;
+
       const executionTime = Date.now() - startTime;
       return {
-        row_count: allRows.length,
+        row_count: data.length,
         schema: schema || { fields: [] },
-        data: allRows,
+        data,
         execution_time_ms: executionTime,
       };
     } else {
@@ -1807,12 +1848,20 @@ export class SpiceClient {
         );
       }
 
-      const jsonData = await response.json();
+      // Integers outside ±(2^53-1) come back as exact decimal strings, the
+      // same values the Arrow Flight branch above returns.
+      const jsonData = parseJsonLossless(await response.text());
       const executionTime = Date.now() - startTime;
 
       // Process timestamps in the data to match sql() behavior
       const schema = jsonData.schema || { fields: [] };
-      const data = jsonData.data || jsonData.rows || []; // Find timestamp and date fields in the schema
+      // Declared Float/Decimal fields keep numbers; other unsafe integers
+      // become exact strings. normalizeSchema accepts {fields} and bare
+      // array schemas (incl. legacy type.name declarations).
+      const data = normalizeUnsafeIntegers(
+        normalizeSchema(schema),
+        jsonData.data || jsonData.rows || [],
+      ); // Find timestamp and date fields in the schema
       const timestampFields = (schema.fields || []).filter((f: any) => {
         const dataType = f.data_type;
         if (typeof dataType === 'string') {
@@ -2178,9 +2227,7 @@ export class SpiceClient {
    * @param queryId - The id of the query to cancel
    * @returns Promise resolving to the cancellation response
    */
-  async cancelActiveQuery(
-    queryId: string,
-  ): Promise<CancelActiveQueryResponse> {
+  async cancelActiveQuery(queryId: string): Promise<CancelActiveQueryResponse> {
     if (!this._httpUrl) {
       throw new Error('HTTP URL is required for cancelling a query');
     }
