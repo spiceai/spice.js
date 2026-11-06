@@ -376,6 +376,13 @@ export function normalizeUnsafeIntegers(fields: any[], rows: any[]): any[] {
     name: f?.name,
     data_type: fieldDataType(f),
   }));
+  // O(1) name lookup; set-once so duplicate names keep first-match (.find) behavior.
+  const byName = new Map<string, any>();
+  for (const f of normalized) {
+    if (f.name != null && !byName.has(f.name)) {
+      byName.set(f.name, f.data_type);
+    }
+  }
   rows.forEach((row: any, i: number) => {
     if (Array.isArray(row)) {
       rows[i] = row.map((v: any, idx: number) =>
@@ -383,10 +390,9 @@ export function normalizeUnsafeIntegers(fields: any[], rows: any[]): any[] {
       );
     } else if (row !== null && typeof row === 'object') {
       for (const k of Object.keys(row)) {
-        const field = normalized.find((f) => f.name === k);
         // Own property write so a "__proto__" column name cannot invoke the setter.
         Object.defineProperty(row, k, {
-          value: convertUnsafeInteger(row[k], field?.data_type),
+          value: convertUnsafeInteger(row[k], byName.get(k)),
           writable: true,
           enumerable: true,
           configurable: true,

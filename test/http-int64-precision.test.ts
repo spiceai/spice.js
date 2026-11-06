@@ -362,6 +362,36 @@ describe('SpiceClient HTTP results keep Int64 precision', () => {
     ]);
   });
 
+  test('sqlJson() Flight fallback keeps nested Float64 leaves as numbers', async () => {
+    body =
+      '{"row_count":1,"schema":{"fields":[{"name":"s","data_type":{"Struct":[' +
+      '{"name":"id","data_type":"Float64","nullable":true},' +
+      '{"name":"tag","data_type":"Utf8","nullable":true}]}},' +
+      '{"name":"l","data_type":{"List":{"name":"item","data_type":"Float64",' +
+      '"nullable":true,"dict_id":0,"dict_is_ordered":false,"metadata":{}}}}]},' +
+      '"data":[{"s":{"id":9007199254740992,"tag":"x"},"l":[9007199254740992,1]}]}';
+    const client = new SpiceClient({
+      httpUrl: 'http://localhost:8090',
+      logging: false,
+    });
+    client.setMaxRetries(0);
+    (client as any)._grpcClient = {
+      ensureInitialized: jest.fn().mockResolvedValue(true),
+      executeQuery: jest.fn().mockRejectedValue(
+        Object.assign(new Error('14 UNAVAILABLE: connection refused'), {
+          code: 14,
+        }),
+      ),
+    };
+    const result = await client.sqlJson('SELECT 1');
+    expect(result.data[0]).toEqual({
+      s: { id: 9007199254740992, tag: 'x' },
+      l: [9007199254740992, 1],
+    });
+    expect(typeof result.data[0].s.id).toBe('number');
+    expect(typeof result.data[0].l[0]).toBe('number');
+  });
+
   test('sqlJson() keeps nested Float64 leaves as numbers via child schema', async () => {
     body =
       '{"row_count":1,"schema":{"fields":[{"name":"s","data_type":{"Struct":[' +
@@ -426,5 +456,29 @@ describe('normalizeUnsafeIntegers', () => {
       rows,
     );
     expect(rows[0].s).toEqual({ f: 9007199254740992, i: '9007199254740993' });
+  });
+
+  test('duplicate field names keep first-match data_type via Map lookup', () => {
+    const rows = [{ a: BigInt('9007199254740992') }];
+    normalizeUnsafeIntegers(
+      [
+        { name: 'a', data_type: 'Float64' },
+        { name: 'a', data_type: 'Int64' },
+      ],
+      rows,
+    );
+    // .find first-match was Float64 → number, not Int64 → string
+    expect(rows[0].a).toBe(9007199254740992);
+    expect(typeof rows[0].a).toBe('number');
+
+    const rows2 = [{ a: BigInt('9007199254740992') }];
+    normalizeUnsafeIntegers(
+      [
+        { name: 'a', data_type: 'Int64' },
+        { name: 'a', data_type: 'Float64' },
+      ],
+      rows2,
+    );
+    expect(rows2[0].a).toBe('9007199254740992');
   });
 });

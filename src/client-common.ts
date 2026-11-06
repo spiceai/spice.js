@@ -1636,6 +1636,9 @@ export class SpiceClient {
       const allRows: any[] = [];
       let schema: any = null;
       let fields: any[] = [];
+      // From HTTP→Arrow tables (Flight→HTTP fallback); used to normalize
+      // restored JSON-text columns the same way direct HTTP sqlJson() does.
+      let originalSchema: any[] | undefined;
 
       await this.sql(
         queryText,
@@ -1649,6 +1652,9 @@ export class SpiceClient {
               ),
             };
             fields = table.schema.fields;
+          }
+          if (originalSchema === undefined && (table as any)._originalSchema) {
+            originalSchema = (table as any)._originalSchema;
           }
 
           // Helper function to recursively convert values, handling nested structures
@@ -1759,8 +1765,8 @@ export class SpiceClient {
           // Use toArray() to properly convert Arrow values to JavaScript objects
           // This handles Decimal types and other special Arrow representations correctly
           const rows = table.toArray();
-          // Columns an HTTP fallback kept as exact JSON text: restore their
-          // values, with exact string leaves, as direct HTTP sqlJson() does.
+          // Columns an HTTP fallback kept as exact JSON text: restore them
+          // (bigint leaves) then normalize with _originalSchema below.
           const jsonTextColumns = jsonTextColumnsOf(table);
 
           // Optimize: Create a field map once per chunk instead of per row
@@ -1778,7 +1784,9 @@ export class SpiceClient {
                   jsonTextColumns.has(columnName) &&
                   typeof raw === 'string'
                 ) {
-                  convertedRow[columnName] = parseJsonLossless(raw, 'string');
+                  // Bigint first; normalizeUnsafeIntegers (below) applies the
+                  // table's original schema so Float/Decimal leaves stay numbers.
+                  convertedRow[columnName] = parseJsonLossless(raw);
                 } else if (field) {
                   convertedRow[columnName] = convertValue(
                     row[columnName],
@@ -1797,11 +1805,19 @@ export class SpiceClient {
         headers,
       );
 
+      // Mirror HTTP sqlJson(): declared Float/Decimal (incl. nested) keep
+      // numbers; other unsafe integers become exact strings. No-op when the
+      // query was true Flight (no JSON-text restore / no bigints left).
+      const data = normalizeUnsafeIntegers(
+        originalSchema ? normalizeSchema(originalSchema) : [],
+        allRows,
+      );
+
       const executionTime = Date.now() - startTime;
       return {
-        row_count: allRows.length,
+        row_count: data.length,
         schema: schema || { fields: [] },
-        data: allRows,
+        data,
         execution_time_ms: executionTime,
       };
     } else {
