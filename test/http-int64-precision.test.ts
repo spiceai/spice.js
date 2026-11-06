@@ -4,6 +4,7 @@
  * path parses losslessly and types such columns Int64/UInt64, matching Flight.
  */
 
+import * as arrow from 'apache-arrow';
 import { SpiceClient } from '../src/index.browser';
 import { parseJsonLossless } from '../src/json-lossless';
 import { jsonToArrowTable, convertToSqlV1Format, normalizeUnsafeIntegers } from '../src/arrow-utils';
@@ -390,6 +391,37 @@ describe('SpiceClient HTTP results keep Int64 precision', () => {
     });
     expect(typeof result.data[0].s.id).toBe('number');
     expect(typeof result.data[0].l[0]).toBe('number');
+  });
+
+  test('sqlJson() true Flight path keeps Binary as Uint8Array', async () => {
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+    const table = new arrow.Table({
+      bin: arrow.vectorFromArray([bytes], new arrow.Binary()),
+      n: arrow.vectorFromArray([1], new arrow.Int32()),
+    });
+    // True Flight tables have no HTTP _originalSchema.
+    expect((table as any)._originalSchema).toBeUndefined();
+
+    const client = new SpiceClient({
+      httpUrl: 'http://localhost:8090',
+      logging: false,
+    });
+    (client as any)._grpcClient = {
+      ensureInitialized: jest.fn().mockResolvedValue(true),
+    };
+    jest.spyOn(client, 'sql').mockImplementation(
+      async (_q: string, _opts?: any, onData?: (t: any) => void) => {
+        onData?.(table);
+        return table;
+      },
+    );
+
+    const result = await client.sqlJson('SELECT 1');
+    expect(result.data[0].bin).toBeInstanceOf(Uint8Array);
+    expect(Array.from(result.data[0].bin)).toEqual([1, 2, 3, 4]);
+    // Typed-array methods must remain (plain-object copy would lose them).
+    expect(typeof result.data[0].bin.subarray).toBe('function');
+    expect(result.data[0].n).toBe(1);
   });
 
   test('sqlJson() keeps nested Float64 leaves as numbers via child schema', async () => {

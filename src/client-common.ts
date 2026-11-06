@@ -1805,13 +1805,13 @@ export class SpiceClient {
         headers,
       );
 
-      // Mirror HTTP sqlJson(): declared Float/Decimal (incl. nested) keep
-      // numbers; other unsafe integers become exact strings. No-op when the
-      // query was true Flight (no JSON-text restore / no bigints left).
-      const data = normalizeUnsafeIntegers(
-        originalSchema ? normalizeSchema(originalSchema) : [],
-        allRows,
-      );
+      // HTTP-specific: only when the Flight→HTTP fallback left an
+      // _originalSchema (JSON-text restore may have bigints). True Flight
+      // rows must stay unchanged — convertUnsafeInteger copies every object,
+      // turning Binary Uint8Array into a numeric-keyed plain object.
+      const data = originalSchema
+        ? normalizeUnsafeIntegers(normalizeSchema(originalSchema), allRows)
+        : allRows;
 
       const executionTime = Date.now() - startTime;
       return {
