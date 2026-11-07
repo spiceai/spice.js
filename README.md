@@ -818,6 +818,7 @@ const client = new SpiceClient({
 });
 ```
 
+- `tlsRootCertFile` replaces the system certificate store for both the gRPC and HTTP transports, so `isSpiceReady()`, `refreshDataset()`, `runtimeStatus()` and the other HTTP calls trust the same private CA as queries.
 - `tlsClientCertFile` and `tlsClientKeyFile` must be provided together; the client certificate is presented during the TLS handshake on both the gRPC and HTTP transports.
 - The Spice runtime must be configured with `client_auth_mode: request` or `required`. See the [mTLS cookbook recipe](https://github.com/spiceai/cookbook/tree/trunk/mtls) for a complete walkthrough.
 
