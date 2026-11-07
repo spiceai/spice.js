@@ -29,6 +29,17 @@ export interface FetchOptions {
   headers: Record<string, string>;
   body?: string;
   signal?: AbortSignal;
+  /**
+   * PEM file paths for a private CA and an mTLS client certificate.
+   * Honored by the Node.js adapter; browsers manage TLS themselves.
+   */
+  tls?: HttpTlsFiles;
+}
+
+export interface HttpTlsFiles {
+  rootCertFile?: string;
+  clientCertFile?: string;
+  clientKeyFile?: string;
 }
 
 export interface FetchResponse {
