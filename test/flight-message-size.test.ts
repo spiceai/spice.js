@@ -7,7 +7,14 @@
 import * as path from 'path';
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
-import { Int64, makeVector, Table, tableToIPC, Utf8, vectorFromArray } from 'apache-arrow';
+import {
+  Int64,
+  makeVector,
+  Table,
+  tableToIPC,
+  Utf8,
+  vectorFromArray,
+} from 'apache-arrow';
 import { SpiceClient } from '../src/index.node';
 import {
   MAX_RECEIVE_MESSAGE_LENGTH,
@@ -46,7 +53,10 @@ describe('Flight message size limit', () => {
     const svc = pkg.arrow.flight.protocol.FlightService.service;
     server = new grpc.Server();
     const unimplemented = (call: any, cb?: any) => {
-      const err = { code: grpc.status.UNIMPLEMENTED, details: 'not in this test' };
+      const err = {
+        code: grpc.status.UNIMPLEMENTED,
+        details: 'not in this test',
+      };
       if (cb) cb(err);
       else call.emit('error', err);
     };
