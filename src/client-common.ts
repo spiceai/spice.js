@@ -2,7 +2,7 @@
  * Common SpiceClient implementation supporting both Node.js and Browser environments
  */
 
-import { Table, tableFromIPC } from 'apache-arrow';
+import { Table, Vector, tableFromIPC } from 'apache-arrow';
 import type { HttpTlsFiles, PlatformAdapter } from './platform/types';
 import { FlightData, FlightStatus, getIpcMessage } from './flight';
 import {
@@ -45,6 +45,7 @@ import {
   jsonToArrowTable,
   planInt64Columns,
   jsonTextColumnsOf,
+  jsonResponseFields,
   normalizeUnsafeIntegers,
   stringifyValue,
   convertToSqlV1Format,
@@ -1654,10 +1655,10 @@ export class SpiceClient {
         (table) => {
           // Capture schema from first chunk
           if (!schema) {
+            // HTTP-fallback JSON-text columns advertise their declared
+            // List/Struct type again, matching the restored nested values.
             schema = {
-              fields: table.schema.fields.map((field) =>
-                serializeArrowField(field),
-              ),
+              fields: jsonResponseFields(table, serializeArrowField),
             };
             fields = table.schema.fields;
           }
@@ -1742,14 +1743,21 @@ export class SpiceClient {
               return value.toString();
             }
 
-            // Handle arrays (from List types) - recursively process elements
+            // Handle arrays (from List types) - recursively process elements.
+            // An unwrapped table (e.g. an HTTP fallback chunk) yields List
+            // cells as Arrow Vectors rather than arrays.
+            const isListVector =
+              value instanceof Vector && typeStr.startsWith('List');
             if (
-              Array.isArray(value) &&
+              (Array.isArray(value) || isListVector) &&
               field.type.children &&
               field.type.children.length > 0
             ) {
               const childField = field.type.children[0];
-              return value.map((item) => convertValue(item, childField));
+              const items: any[] = isListVector
+                ? Array.from(value.toArray())
+                : (value as any[]);
+              return items.map((item) => convertValue(item, childField));
             }
 
             // Handle objects (from Struct types) - recursively process fields

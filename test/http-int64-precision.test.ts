@@ -466,6 +466,192 @@ describe('SpiceClient HTTP results keep Int64 precision', () => {
   });
 });
 
+describe('declared types survive lossless HTTP decoding', () => {
+  let body: string;
+
+  beforeEach(() => {
+    global.fetch = jest.fn().mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve(JSON.parse(body)),
+      }),
+    );
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  const fallbackClient = () => {
+    const client = new SpiceClient({
+      httpUrl: 'http://localhost:8090',
+      logging: false,
+    });
+    client.setMaxRetries(0);
+    (client as any)._grpcClient = {
+      ensureInitialized: jest.fn().mockResolvedValue(true),
+      executeQuery: jest.fn().mockRejectedValue(
+        Object.assign(new Error('14 UNAVAILABLE: connection refused'), {
+          code: 14,
+        }),
+      ),
+    };
+    return client;
+  };
+  const typeOfField = (table: arrow.Table, name: string) =>
+    table.schema.fields.find((f) => f.name === name)!.type.toString();
+
+  const bareArraySchemaBody =
+    '{"schema":[{"name":"f","data_type":"Float64"},' +
+    '{"name":"d","data_type":"Decimal128(38, 0)"},{"name":"big","data_type":"Int64"}],' +
+    '"data":[{"f":9007199254740992,"d":12345678901234567,"big":9007199254740993}]}';
+
+  test('convertToSqlV1Format keeps data_type from bare-array schemas', () => {
+    const v1 = convertToSqlV1Format(parseJsonLossless(bareArraySchemaBody));
+    expect(v1.schema.fields.map((f: any) => f.data_type)).toEqual([
+      'Float64',
+      'Decimal128(38, 0)',
+      'Int64',
+    ]);
+    const legacy = convertToSqlV1Format(
+      JSON.parse(
+        '{"schema":[{"name":"f","type":{"name":"Float64"}},{"name":"x"}],"rows":[]}',
+      ),
+    );
+    expect(legacy.schema.fields.map((f: any) => f.data_type)).toEqual([
+      'Float64',
+      'utf8',
+    ]);
+  });
+
+  test('sql() honours bare-array data_type: Float64/Decimal stay numbers', async () => {
+    body = bareArraySchemaBody;
+    const client = new SpiceClient({ httpUrl: 'http://localhost:8090' });
+    const table = await client.sql('SELECT 1');
+    expect(typeOfField(table, 'f')).toBe('Float64');
+    expect(typeOfField(table, 'd')).toBe('Float64');
+    expect(typeOfField(table, 'big')).toBe('Int64');
+    const row: any = table.toArray()[0];
+    expect(row.f).toBe(9007199254740992);
+    expect(row.d).toBe(12345678901234567);
+    expect(row.big).toBe(BigInt('9007199254740993'));
+  });
+
+  test('sqlJson() Flight fallback honours bare-array data_type like direct HTTP', async () => {
+    body = bareArraySchemaBody;
+    const expected = {
+      f: 9007199254740992,
+      d: 12345678901234567,
+      big: '9007199254740993',
+    };
+    const direct = await new SpiceClient({
+      httpUrl: 'http://localhost:8090',
+    }).sqlJson('SELECT 1');
+    expect(direct.data[0]).toEqual(expected);
+    const fallback = await fallbackClient().sqlJson('SELECT 1');
+    expect(fallback.data[0]).toEqual(expected);
+    expect(typeof fallback.data[0].f).toBe('number');
+    expect(typeof fallback.data[0].d).toBe('number');
+  });
+
+  const floatNestedBody =
+    '{"row_count":2,"schema":{"fields":[' +
+    '{"name":"l","data_type":{"List":{"name":"item","data_type":"Float64","nullable":true,' +
+    '"dict_id":0,"dict_is_ordered":false,"metadata":{}}}},' +
+    '{"name":"s","data_type":{"Struct":[{"name":"x","data_type":"Float64","nullable":true},' +
+    '{"name":"y","data_type":"Decimal128(38, 0)","nullable":true}]}}]},' +
+    '"data":[{"l":[9007199254740992,1.5],"s":{"x":9007199254740992,"y":12345678901234567}},' +
+    '{"l":[2.5],"s":{"x":1.5,"y":1}}]}';
+
+  test('sql() keeps declared List<Float64> and Float/Decimal structs nested, not JSON text', async () => {
+    body = floatNestedBody;
+    const client = new SpiceClient({ httpUrl: 'http://localhost:8090' });
+    const table = await client.sql('SELECT 1');
+    expect(typeOfField(table, 'l')).toBe('List<Float64>');
+    expect(typeOfField(table, 's').startsWith('Struct<')).toBe(true);
+    const rows: any[] = table.toArray();
+    expect(Array.from(rows[0].l)).toEqual([9007199254740992, 1.5]);
+    expect(rows[0].s.x).toBe(9007199254740992);
+    expect(rows[0].s.y).toBe(12345678901234567);
+  });
+
+  test('jsonToArrowTable still uses JSON text when a nested leaf is a real unsafe integer', () => {
+    const table = jsonToArrowTable(
+      [
+        {
+          name: 's',
+          data_type: {
+            Struct: [
+              { name: 'f', data_type: 'Float64' },
+              { name: 'i', data_type: 'Int64' },
+            ],
+          },
+        },
+      ],
+      parseJsonLossless('[{"s":{"f":9007199254740992,"i":9007199254740993}}]'),
+    );
+    expect(typeOfField(table, 's')).toBe('Utf8');
+    expect(table.get(0)!.s).toContain('"i":9007199254740993');
+  });
+
+  test('sqlJson() Flight fallback advertises declared List/Struct fields for JSON-text columns', async () => {
+    const listType = {
+      List: {
+        name: 'item',
+        data_type: 'Int64',
+        nullable: true,
+        dict_id: 0,
+        dict_is_ordered: false,
+        metadata: {},
+      },
+    };
+    const structType = {
+      Struct: [
+        { name: 'id', data_type: 'Int64', nullable: true },
+        { name: 'n', data_type: 'Int32', nullable: true },
+      ],
+    };
+    body = JSON.stringify({
+      row_count: 1,
+      schema: {
+        fields: [
+          { name: 'l', data_type: listType, nullable: true },
+          { name: 's', data_type: structType, nullable: false },
+          { name: 'big', data_type: 'Int64', nullable: true },
+        ],
+      },
+      data: [{ l: ['@L'], s: { id: '@S', n: 1 }, big: '@B' }],
+    })
+      .replace('"@L"', '9007199254740993')
+      .replace('"@S"', '9007199254740993')
+      .replace('"@B"', '9007199254740993');
+
+    const client = fallbackClient();
+    const table = await client.sql('SELECT 1');
+    // sql() keeps the exact JSON text as Utf8.
+    expect(typeOfField(table, 'l')).toBe('Utf8');
+    expect(typeOfField(table, 's')).toBe('Utf8');
+
+    const result = await fallbackClient().sqlJson('SELECT 1');
+    expect(result.data[0]).toEqual({
+      l: ['9007199254740993'],
+      s: { id: '9007199254740993', n: 1 },
+      big: '9007199254740993',
+    });
+    const fields = result.schema.fields;
+    expect(fields[0]).toMatchObject({ name: 'l', data_type: listType });
+    expect(fields[1]).toMatchObject({
+      name: 's',
+      data_type: structType,
+      nullable: false,
+    });
+    expect(fields[2]).toMatchObject({ name: 'big', data_type: 'Int64' });
+  });
+});
+
 describe('normalizeUnsafeIntegers', () => {
   test('nested Float64 child keeps a number; Int64 child becomes a string', () => {
     const rows = [

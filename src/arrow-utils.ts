@@ -49,7 +49,8 @@ export function convertToSqlV1Format(
     // Convert schema array to fields format
     const fields = jsonData.schema.map((field: any) => ({
       name: field.name,
-      data_type: field.type?.name || 'utf8',
+      // Bare-array schemas may declare `data_type` directly or legacy `type.name`.
+      data_type: fieldDataType(field) ?? 'utf8',
       nullable: true,
       dict_id: 0,
       dict_is_ordered: false,
@@ -206,8 +207,14 @@ export function planInt64Columns(
         (typeof v === 'number' && Number.isInteger(v)),
     );
     if (!scalarIntegers) {
+      // Only unsafe integer leaves the schema does not declare as a
+      // non-integer type (Float64, Decimal, ...) need exact JSON text; e.g. a
+      // declared List<Float64> or Struct of Float64 stays a number column.
       const nested = values.some(
-        (v) => v !== null && typeof v === 'object' && containsBigInt(v),
+        (v) =>
+          v !== null &&
+          typeof v === 'object' &&
+          hasUnsafeIntegerLeaf(v, col.data_type),
       );
       plan.set(col.name, nested ? 'json' : 'number');
       return;
@@ -237,6 +244,71 @@ export function planInt64Columns(
   return plan;
 }
 
+/** Child data type of a declared List / LargeList / FixedSizeList type. */
+function listChildType(dataType: any): any {
+  if (!dataType || typeof dataType !== 'object') return undefined;
+  const list = dataType.List ?? dataType.LargeList;
+  if (list) return fieldDataType(list);
+  if (Array.isArray(dataType.FixedSizeList)) {
+    return fieldDataType(dataType.FixedSizeList[0]);
+  }
+  return undefined;
+}
+
+/** Child fields of a declared Struct type, by name (first match wins). */
+function structChildTypes(dataType: any): Map<string, any> | null {
+  if (!dataType || typeof dataType !== 'object') return null;
+  if (!Array.isArray(dataType.Struct)) return null;
+  const byName = new Map<string, any>();
+  for (const f of dataType.Struct) {
+    if (f?.name != null && !byName.has(f.name)) {
+      byName.set(f.name, fieldDataType(f));
+    }
+  }
+  return byName;
+}
+
+/**
+ * Whether a value holds a `bigint` leaf that is not declared as a
+ * non-integer numeric type, i.e. a real unsafe integer.
+ */
+function hasUnsafeIntegerLeaf(value: any, dataType: any): boolean {
+  if (typeof value === 'bigint') {
+    return !(
+      typeof dataType === 'string' && isNonIntegerNumericDeclared(dataType)
+    );
+  }
+  if (Array.isArray(value)) {
+    const childType = listChildType(dataType);
+    return value.some((item) => hasUnsafeIntegerLeaf(item, childType));
+  }
+  if (value !== null && typeof value === 'object' && !(value instanceof Date)) {
+    const children = structChildTypes(dataType);
+    return Object.keys(value).some((key) =>
+      hasUnsafeIntegerLeaf(value[key], children?.get(key)),
+    );
+  }
+  return false;
+}
+
+/** Deep copy with every `bigint` turned back into a number. */
+function bigintsToNumbers(value: any): any {
+  if (typeof value === 'bigint') return Number(value);
+  if (!containsBigInt(value)) return value;
+  if (Array.isArray(value)) return value.map(bigintsToNumbers);
+  const out: any = {};
+  for (const key of Object.keys(value)) {
+    // Own property even for "__proto__", matching parseJsonLossless.
+    Object.defineProperty(out, key, {
+      value: bigintsToNumbers(value[key]),
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+  return out;
+}
+
 function buildPlannedColumn(
   plan: Int64ColumnPlan | undefined,
   values: any[],
@@ -245,7 +317,9 @@ function buildPlannedColumn(
     case undefined:
       return values;
     case 'number':
-      return values.map((v) => (typeof v === 'bigint' ? Number(v) : v));
+      // Every bigint left here is a double anyway (declared non-integer leaf,
+      // or a scalar column mixing them with floats): restore plain numbers.
+      return values.map(bigintsToNumbers);
     case 'json':
       // Explicitly Utf8, so every chunk of a result (all-null ones included)
       // has the same schema. Strings are quoted JSON so Flight→HTTP sqlJson()
@@ -302,12 +376,36 @@ export function jsonTextColumnsOf(table: Table): Set<string> {
 }
 
 /**
- * Schema-aware normalization of a losslessly parsed HTTP JSON result (unsafe
- * integers as `bigint`): a column the server declares as a non-integer type
- * (Float64, Decimal, ...) keeps a number, as before; any other unsafe integer,
- * including those nested in List/Struct values, becomes its exact decimal
- * string. Rows may be arrays or objects; they are updated in place.
+ * JSON-response schema fields for a table from jsonToArrowTable: columns kept
+ * as exact JSON text only for sql() (temporarily Utf8) advertise the server's
+ * declared List/Struct/... field again, since sqlJson() restores their nested
+ * values. Other fields use `serialize` on the Arrow field.
  */
+export function jsonResponseFields(
+  table: Table,
+  serialize: (field: any) => any,
+): any[] {
+  const jsonText = jsonTextColumnsOf(table);
+  const original = normalizeSchema((table as any)?._originalSchema);
+  return table.schema.fields.map((field) => {
+    if (jsonText.has(field.name)) {
+      const declared = original.find((f: any) => f?.name === field.name);
+      const dataType = fieldDataType(declared);
+      if (dataType && typeof dataType === 'object') {
+        return {
+          name: field.name,
+          data_type: dataType,
+          nullable: declared.nullable ?? true,
+          dict_id: declared.dict_id ?? 0,
+          dict_is_ordered: declared.dict_is_ordered ?? false,
+          metadata: declared.metadata ?? {},
+        };
+      }
+    }
+    return serialize(field);
+  });
+}
+
 /** Declared data type of a schema field (object or legacy array form). */
 function fieldDataType(field: any): any {
   if (!field) return undefined;
@@ -323,35 +421,22 @@ function fieldDataType(field: any): any {
 function convertUnsafeInteger(value: any, dataType: any): any {
   if (value === null || value === undefined) return value;
   if (typeof value === 'bigint') {
-    if (
-      typeof dataType === 'string' &&
-      isNonIntegerNumericDeclared(dataType)
-    ) {
+    if (typeof dataType === 'string' && isNonIntegerNumericDeclared(dataType)) {
       return Number(value);
     }
     return value.toString();
   }
   if (Array.isArray(value)) {
-    const childType =
-      dataType && typeof dataType === 'object' && dataType.List
-        ? dataType.List.data_type
-        : undefined;
+    const childType = listChildType(dataType);
     return value.map((item) => convertUnsafeInteger(item, childType));
   }
   if (typeof value === 'object') {
-    const structFields =
-      dataType && typeof dataType === 'object' && Array.isArray(dataType.Struct)
-        ? dataType.Struct
-        : null;
-    const byName = structFields
-      ? new Map(structFields.map((f: any) => [f.name, f]))
-      : null;
+    const byName = structChildTypes(dataType);
     const out: any = {};
     for (const key of Object.keys(value)) {
-      const child = byName?.get(key);
       // Own property even for "__proto__", matching parseJsonLossless.
       Object.defineProperty(out, key, {
-        value: convertUnsafeInteger(value[key], fieldDataType(child)),
+        value: convertUnsafeInteger(value[key], byName?.get(key)),
         writable: true,
         enumerable: true,
         configurable: true,
