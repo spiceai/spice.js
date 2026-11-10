@@ -26,6 +26,14 @@ import {
 const IPC_CONTINUATION_MARKER = 0xffffffff;
 
 /**
+ * The largest Flight message the client accepts: 100 MiB, the limit the runtime
+ * applies to Flight messages it receives. The runtime sends each record batch as
+ * one message, so a batch of wide rows can exceed grpc-js's default of 4 MiB and
+ * fail with RESOURCE_EXHAUSTED.
+ */
+export const MAX_RECEIVE_MESSAGE_LENGTH = 100 * 1024 * 1024;
+
+/**
  * Splits an Arrow IPC stream into the header/body pairs Flight expects.
  *
  * An IPC stream frames each message as
@@ -275,7 +283,9 @@ export class GrpcFlightClient {
     }
 
     // gRPC channel options
-    const channelOptions = {};
+    const channelOptions: grpc.ChannelOptions = {
+      'grpc.max_receive_message_length': MAX_RECEIVE_MESSAGE_LENGTH,
+    };
 
     if (!this.flightTlsEnabled) {
       // grpc-js refuses to send call credentials over an insecure channel, so the

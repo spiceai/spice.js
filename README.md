@@ -97,6 +97,9 @@ const table = await client.sql(
 
 The SDK handles all protocol negotiation automatically - you just write standard SQL with parameters.
 
+The Flight client accepts messages of up to 100 MiB, the same limit the runtime applies to messages it receives.
+The runtime sends each record batch as one message, so a batch of wide rows (nested columns, long strings) can be larger than gRPC's default of 4 MiB.
+
 ### Cancelling a query
 
 Pass an `AbortSignal` to cancel a query. Over HTTP the request is aborted; over
