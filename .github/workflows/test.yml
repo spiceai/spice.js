@@ -157,7 +157,6 @@ jobs:
         uses: ./.github/actions/setup-vercel-endpoint
         with:
           vercel-endpoint-override: ${{ secrets.VERCEL_ENDPOINT }}
-          vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           branch-name: ${{ github.head_ref || github.ref_name }}
 
   cloud-tests:
@@ -200,7 +199,6 @@ jobs:
           HTTP_URL: ${{ secrets.HTTP_URL || 'https://data.spiceai.io' }}
           FLIGHT_URL: ${{ secrets.FLIGHT_URL || 'flight.spiceai.io:443' }}
           VERCEL_ENDPOINT: ${{ needs.vercel-setup.outputs.vercel-api-endpoint }}
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
   tpch-tests:
     name: TPCH Integration Tests
