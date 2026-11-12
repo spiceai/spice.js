@@ -19,8 +19,8 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         nodever: [22, 24, 26]
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v5.1.0
+      - uses: actions/setup-node@v5.0.0
         with:
           node-version: ${{ matrix.nodever }}
           cache: 'npm'
@@ -54,8 +54,8 @@ jobs:
     environment: npm
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v5.1.0
+      - uses: actions/setup-node@v5.0.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org/
