@@ -9,3 +9,17 @@ updates:
     directory: '/' # Location of package manifests
     schedule:
       interval: 'weekly'
+
+  # Bumps actions and regenerates their .github/workflows/actions.lock entries.
+  - package-ecosystem: 'github-actions'
+    directories:
+      - '/'
+      - '/.github/actions/*'
+    schedule:
+      interval: 'weekly'
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns:
+          - '*'
