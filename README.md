@@ -97,6 +97,13 @@ const table = await client.sql(
 
 The SDK handles all protocol negotiation automatically - you just write standard SQL with parameters.
 
+#### 64-bit integers over HTTP
+
+Int64/UInt64 values outside JavaScript's safe integer range (±(2^53 - 1)) are returned exactly on every transport, including `httpOnly` mode and the HTTP fallback:
+
+- `sql()` returns them as `bigint` in an `Int64` (or `Uint64`) column, as Arrow Flight does. Over HTTP, a column is typed `Int64` only when it holds such a value; integer columns that fit the safe range keep their previous `Float64`/`number` type. A List or Struct value holding such an integer is returned as exact JSON text.
+- `sqlJson()` returns them as exact decimal strings (for example `"9007199254740993"`); safe-range integers stay `number`s.
+
 ### Cancelling a query
 
 Pass an `AbortSignal` to cancel a query. Over HTTP the request is aborted; over
@@ -509,7 +516,7 @@ The response includes:
 
 - `row_count`: Number of rows returned
 - `schema`: Schema information with field names and types
-- `data`: Array of row objects
+- `data`: Array of row objects (integers outside ±(2^53 - 1) are exact decimal strings)
 - `execution_time_ms`: Query execution time in milliseconds
 
 #### Custom Headers

@@ -41,6 +41,7 @@ describe('sqlJson() Type Preservation', () => {
       ok: true,
       status: 200,
       json: jest.fn().mockResolvedValue(mockResponse),
+      text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
     });
 
     const result = await client.sqlJson('SELECT * FROM test');
@@ -69,6 +70,7 @@ describe('sqlJson() Type Preservation', () => {
       ok: true,
       status: 200,
       json: jest.fn().mockResolvedValue(mockResponse),
+      text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
     });
 
     const result = await client.sqlJson('SELECT active FROM test');
@@ -98,6 +100,7 @@ describe('sqlJson() Type Preservation', () => {
       ok: true,
       status: 200,
       json: jest.fn().mockResolvedValue(mockResponse),
+      text: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
     });
 
     const result = await client.sqlJson('SELECT * FROM test');
