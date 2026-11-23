@@ -38,6 +38,20 @@ export interface SpiceClientConfig {
    * Must be used together with `tlsClientCertFile`.
    */
   tlsClientKeyFile?: string;
+  /**
+   * HTTP/2 flow-control window, in bytes, for Arrow Flight channels (Node.js only).
+   * A larger window lets the server stream more data per round trip, which
+   * matters on high-latency links such as Spice Cloud. Must be from 65535 to
+   * 2147483647.
+   * @default 16777216 (16 MiB)
+   */
+  flightFlowControlWindow?: number;
+  /**
+   * Extra `@grpc/grpc-js` channel options for Arrow Flight channels (Node.js only),
+   * for example `{ 'grpc.keepalive_time_ms': 30000 }`. Applied after the client's
+   * defaults, so they override them.
+   */
+  flightChannelOptions?: { [key: string]: string | number };
 }
 
 export interface SchemaField {

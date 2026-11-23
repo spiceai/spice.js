@@ -100,6 +100,18 @@ The SDK handles all protocol negotiation automatically - you just write standard
 The Flight client accepts messages of up to 100 MiB, the same limit the runtime applies to messages it receives.
 The runtime sends each record batch as one message, so a batch of wide rows (nested columns, long strings) can be larger than gRPC's default of 4 MiB.
 
+On Node.js, the Flight client opens each channel with a 16 MiB HTTP/2 flow-control window.
+gRPC's default window is 64 KiB, which on a high-latency link (for example, to Spice Cloud) limits a streamed result to about 64 KiB per round trip.
+Set `flightFlowControlWindow` to change the window, or pass other `@grpc/grpc-js` channel options with `flightChannelOptions`; these override the client's defaults:
+
+```js
+const client = new SpiceClient({
+  apiKey: 'API_KEY',
+  flightFlowControlWindow: 32 * 1024 * 1024, // bytes, 65535 to 2147483647 (default 16 MiB)
+  flightChannelOptions: { 'grpc.keepalive_time_ms': 30000 },
+});
+```
+
 ### Cancelling a query
 
 Pass an `AbortSignal` to cancel a query. Over HTTP the request is aborted; over
