@@ -34,6 +34,61 @@ const IPC_CONTINUATION_MARKER = 0xffffffff;
 export const MAX_RECEIVE_MESSAGE_LENGTH = 100 * 1024 * 1024;
 
 /**
+ * The default HTTP/2 flow-control window for Flight channels: 16 MiB.
+ *
+ * grpc-js otherwise advertises HTTP/2's 65,535-byte initial window and never
+ * grows it, so the server can have at most 64 KiB in flight before it waits for
+ * a WINDOW_UPDATE. Over a WAN link that caps a streamed result at about
+ * window / RTT (roughly 1 MiB/s at 60 ms), which made large Flight results from
+ * Spice Cloud about 100x slower than other Spice SDKs.
+ */
+export const DEFAULT_FLOW_CONTROL_WINDOW = 16 * 1024 * 1024;
+
+/** The largest HTTP/2 flow-control window (RFC 9113 section 6.9.1): 2^31 - 1. */
+const MAX_FLOW_CONTROL_WINDOW = 2 ** 31 - 1;
+
+/** Channel settings for the Node.js Flight client. */
+export interface FlightChannelConfig {
+  /**
+   * HTTP/2 flow-control window in bytes, applied to the connection and to each
+   * stream. Defaults to {@link DEFAULT_FLOW_CONTROL_WINDOW}.
+   */
+  flowControlWindow?: number;
+  /**
+   * Extra grpc-js channel options. They are applied last, so they override the
+   * client's defaults, including `grpc-node.flow_control_window` and
+   * `grpc.max_receive_message_length`.
+   */
+  channelOptions?: grpc.ChannelOptions;
+}
+
+/**
+ * Builds the grpc-js channel options for a Flight channel. Both the TLS and the
+ * plaintext channel use these options.
+ */
+export function buildFlightChannelOptions(
+  config: FlightChannelConfig = {},
+): grpc.ChannelOptions {
+  const { flowControlWindow, channelOptions } = config;
+  if (
+    flowControlWindow !== undefined &&
+    (!Number.isInteger(flowControlWindow) ||
+      flowControlWindow < 65535 ||
+      flowControlWindow > MAX_FLOW_CONTROL_WINDOW)
+  ) {
+    throw new Error(
+      `flightFlowControlWindow must be an integer from 65535 to ${MAX_FLOW_CONTROL_WINDOW} bytes, got ${flowControlWindow}`,
+    );
+  }
+  return {
+    'grpc.max_receive_message_length': MAX_RECEIVE_MESSAGE_LENGTH,
+    'grpc-node.flow_control_window':
+      flowControlWindow ?? DEFAULT_FLOW_CONTROL_WINDOW,
+    ...channelOptions,
+  };
+}
+
+/**
  * Splits an Arrow IPC stream into the header/body pairs Flight expects.
  *
  * An IPC stream frames each message as
@@ -208,6 +263,7 @@ export class GrpcFlightClient {
   private tlsClientKeyFile?: string;
 
   private tlsRootCertFile?: string;
+  private channelOptions: grpc.ChannelOptions;
 
   constructor(
     apiKey: string | undefined,
@@ -218,6 +274,7 @@ export class GrpcFlightClient {
     tlsClientCertFile?: string,
     tlsClientKeyFile?: string,
     tlsRootCertFile?: string,
+    channelConfig?: FlightChannelConfig,
   ) {
     this.apiKey = apiKey;
     this.flightUrl = flightUrl;
@@ -227,6 +284,9 @@ export class GrpcFlightClient {
     this.tlsClientCertFile = tlsClientCertFile;
     this.tlsClientKeyFile = tlsClientKeyFile;
     this.tlsRootCertFile = tlsRootCertFile;
+    // Built before initialization starts, so an invalid setting throws from the
+    // constructor rather than failing the first query.
+    this.channelOptions = buildFlightChannelOptions(channelConfig);
     this.initPromise = this.initialize();
   }
 
@@ -277,15 +337,17 @@ export class GrpcFlightClient {
     return this.useGrpc && grpcAvailable && flightProto !== null;
   }
 
+  /** The grpc-js channel options this client opens Flight channels with. */
+  getChannelOptions(): grpc.ChannelOptions {
+    return { ...this.channelOptions };
+  }
+
   private createClient(meta: grpc.Metadata): FlightClient {
     if (!flightProto?.FlightService) {
       throw new Error('gRPC Flight protocol not initialized');
     }
 
-    // gRPC channel options
-    const channelOptions: grpc.ChannelOptions = {
-      'grpc.max_receive_message_length': MAX_RECEIVE_MESSAGE_LENGTH,
-    };
+    const channelOptions = this.channelOptions;
 
     if (!this.flightTlsEnabled) {
       // grpc-js refuses to send call credentials over an insecure channel, so the

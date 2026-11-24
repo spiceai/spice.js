@@ -536,6 +536,8 @@ export class SpiceClient {
   private _tlsClientCertFile?: string;
   private _tlsClientKeyFile?: string;
   private _tlsRootCertFile?: string;
+  private _flightFlowControlWindow?: number;
+  private _flightChannelOptions?: { [key: string]: string | number };
   private _httpTls?: HttpTlsFiles;
   private _maxRetries: number;
   private _customHeaders?: { [key: string]: string };
@@ -699,6 +701,8 @@ export class SpiceClient {
         tlsClientCertFile,
         tlsClientKeyFile,
         tlsRootCertFile,
+        flightFlowControlWindow,
+        flightChannelOptions,
       } = params;
 
       // Initialize logger (default: enabled)
@@ -767,6 +771,8 @@ export class SpiceClient {
       this._tlsClientCertFile = tlsClientCertFile;
       this._tlsClientKeyFile = tlsClientKeyFile;
       this._tlsRootCertFile = tlsRootCertFile;
+      this._flightFlowControlWindow = flightFlowControlWindow;
+      this._flightChannelOptions = flightChannelOptions;
       if (tlsRootCertFile || tlsClientCertFile || tlsClientKeyFile) {
         this._httpTls = {
           rootCertFile: tlsRootCertFile,
@@ -796,6 +802,10 @@ export class SpiceClient {
         this._tlsClientCertFile,
         this._tlsClientKeyFile,
         this._tlsRootCertFile,
+        {
+          flowControlWindow: this._flightFlowControlWindow,
+          channelOptions: this._flightChannelOptions,
+        },
       );
     }
 
